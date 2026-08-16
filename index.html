@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>الروضة · Amīratu al-ʿUlūm</title>
+<style>
+@font-face{font-family:'Sch';src:url('assets/ScheherazadeNew-Regular.ttf') format('truetype');font-display:swap}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#0a0916;touch-action:none;overscroll-behavior:none}
+canvas{display:block;touch-action:none}
+.ar{font-family:'Sch','Traditional Arabic',serif}
+body{font-family:Georgia,'Times New Roman',serif;color:#fff;-webkit-user-select:none;user-select:none}
+.hud{position:fixed;display:flex;align-items:center;gap:10px;z-index:5;pointer-events:none}
+.tl{top:14px;left:16px}.tr{top:14px;right:16px}.bl{bottom:16px;left:16px}
+.chip{background:rgba(8,9,22,.66);border:1px solid rgba(255,255,255,.34);border-radius:12px;padding:6px 15px 8px;text-align:center;color:#fff}
+.chip .ar{display:block;font-size:17px;line-height:1.3}
+.chip small{font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.82)}
+.chip.on{border-color:#f4dfa2;box-shadow:0 0 0 1px rgba(244,223,162,.4)}
+#cWalk,#cFly,#cJump{pointer-events:auto;cursor:pointer}
+#stick{position:fixed;z-index:4;width:110px;height:110px;border:1px solid rgba(255,255,255,.32);border-radius:50%;background:rgba(8,10,26,.28);display:none;pointer-events:none}
+#stick i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(255,255,255,.32)}
+#act{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:6;opacity:0;transition:opacity .3s}
+#act.on{opacity:1}
+#act .chip{border-color:#f4dfa2;background:rgba(22,17,6,.6);pointer-events:auto;cursor:pointer}
+#start{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(6,7,18,.64);cursor:pointer;transition:opacity .7s,visibility .7s}
+#start.off{opacity:0;pointer-events:none;visibility:hidden}
+#start .big{font-size:46px;color:#fbf1d8;text-shadow:0 2px 34px rgba(0,0,0,.65)}
+#start .sub{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.7)}
+#start .chip{pointer-events:none;max-width:92vw}
+#resume{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:8;opacity:0;transition:opacity .5s;pointer-events:none;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.5);background:rgba(8,9,22,.5);border-radius:10px;padding:5px 14px}
+#resume.on{opacity:1}
+#diag{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:99;max-width:94vw;background:rgba(90,10,10,.86);color:#ffe;border:1px solid #f88;border-radius:8px;padding:5px 12px;font:12px monospace;display:none}
+#hb{position:fixed;right:8px;bottom:6px;z-index:98;color:rgba(255,255,255,.32);font:10px monospace}
+#load{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10;color:rgba(255,255,255,.75);font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div id="load">Building the world…</div>
+
+<div id="start" style="display:none">
+  <span class="big ar">الرَّوْضَة</span>
+  <span class="sub">The Garden · A Night World</span>
+  <span class="chip"><span class="ar">ادخلي</span><small>Click To Enter · Drag Right To Look · Drag Left Or WASD To Walk · Space Jump · E Open · F Fly</small></span>
+</div>
+
+<div class="hud tl"><span class="chip"><span class="ar">الرَّوْضَة</span><small>Amīratu al-ʿUlūm</small></span></div>
+<div class="hud bl">
+  <span class="chip" id="cWalk"><span class="ar">امشي</span><small>Walk</small></span>
+  <span class="chip" id="cFly"><span class="ar">طيري</span><small>Fly · F</small></span>
+  <span class="chip" id="cJump"><span class="ar">اقفزي</span><small>Jump · Space</small></span>
+</div>
+<div id="act"><span class="chip" id="actChip"><span class="ar" id="actAr">افتحي</span><small id="actEn">Open · E</small></span></div>
+<div id="stick"><i id="stickn"></i></div>
+<div id="resume">Tap or move to continue</div>
+<div id="diag"></div>
+<div id="hb"></div>
+
+<script src="js/three.min.js"></script>
+<script src="js/GLTFLoader.js"></script>
+<script src="js/world.js"></script>
+<script src="js/build.js"></script>
+<script>
+(function () {
+  function go() {
+    var l = document.getElementById('load');
+    if (l) l.style.display = 'none';
+    var s = document.getElementById('start');
+    if (s) s.style.display = '';
+    try { W.start(); } catch (e) { W.diag('start failed: ' + e.message); }
+  }
+  if (document.readyState === 'complete') go();
+  else addEventListener('load', go);
+})();
+</script>
+</body>
+</html>
