@@ -665,7 +665,6 @@
         var face = Math.atan2(sq.x - sx, sq.z - sz);      /* face the square */
         var y = W.heightAt(sx, sz);
         placeBuilt(hashU(sd ^ 0x9) > 0.45 ? 'p_stall' : 'p_awning', sx, y, sz, face, 1);
-        var g = MODELS.p_stall ? null : null;
         /* the goods behind the stall, and one thing set out in front */
         for (var k = 0; k < 3; k++) {
           var gd = (sd ^ (k * 7919)) | 0;
