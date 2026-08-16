@@ -760,7 +760,8 @@
             /* every house is rendered a slightly different mud */
             var tint = new T.Color(0xc8a582);
             var hv = hashU((idx * 2246822519) | 0);
-            tint.offsetHSL((hv - 0.5) * 0.035, (hv - 0.5) * 0.12, (hv - 0.5) * 0.10);
+            var hv2 = hashU((idx * 668265263) ^ 0x5bd1);
+            tint.offsetHSL((hv - 0.5) * 0.055, (hv2 - 0.5) * 0.34, (hv - 0.5) * 0.22);
             g.traverse(function (o) {
               if (o.isMesh && o.material) {
                 o.material = o.material.clone();
