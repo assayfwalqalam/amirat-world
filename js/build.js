@@ -710,12 +710,12 @@
     var m = firstMesh(src);
     if (!m) return null;
     var g = m.geometry.clone();
-    /* normalise so instances stand on the ground at unit height */
+    /* these are modelled at real size · keep their proportions, just plant them */
+    m.updateWorldMatrix(true, false);
+    g.applyMatrix4(m.matrixWorld);
     g.computeBoundingBox();
-    var bb = g.boundingBox, sz = new T.Vector3(); bb.getSize(sz);
-    var s = 1 / Math.max(0.0001, sz.y);
+    var bb = g.boundingBox;
     g.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
-    g.scale(s, s, s);
     var mm = m.material.clone();
     mm.side = T.DoubleSide;
     if (mm.map) mm.map.anisotropy = 4;
@@ -780,7 +780,7 @@
         var h = W.heightAt(rx, rz);
         if (!pick(rx, rz, h)) continue;
         var s = scaleMin + hashU(sd ^ 0x85ebca6b) * (scaleMax - scaleMin);
-        dummy.position.set(rx, h - 0.04, rz);
+        dummy.position.set(rx, h - 0.16, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
         dummy.scale.set(s, s, s);
         dummy.updateMatrix();
@@ -797,7 +797,7 @@
     var cb = W.biomeAt(ox + CH / 2, oz + CH / 2);
     var lush = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.25 && w.g > 0.45 && w.r < 0.4;
+      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5;
     };
     var dry = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
@@ -808,14 +808,14 @@
       return h > W.WATER_Y + 0.4 && w.r > 0.35;
     };
 
-    sow('grass_a', Math.round(120 * (0.25 + cb.grass)), lush, 0.5, 1.15);
-    sow('grass_b', Math.round(90 * (0.2 + cb.grass)), lush, 0.4, 0.9);
-    sow('fl_orange', Math.round(26 * cb.grass), lush, 0.35, 0.7);
-    sow('fl_yellow', Math.round(24 * cb.grass), lush, 0.3, 0.6);
-    sow('fl_purple', Math.round(18 * cb.grass), lush, 0.3, 0.6);
-    sow('fl_white', Math.round(16 * cb.grass), lush, 0.3, 0.6);
-    sow('bush_dry', Math.round(10 * (1 - cb.grass)), dry, 0.9, 2.0);
-    sow('rock_d', Math.round(7 * (0.3 + cb.rock)), stony, 1.0, 3.2);
+    sow('grass_a', Math.round(320 * (0.35 + cb.grass)), lush, 0.8, 1.6);
+    sow('grass_b', Math.round(240 * (0.3 + cb.grass)), lush, 0.7, 1.4);
+    sow('fl_orange', Math.round(90 * (0.15 + cb.grass)), lush, 0.8, 1.5);
+    sow('fl_yellow', Math.round(80 * (0.15 + cb.grass)), lush, 0.8, 1.5);
+    sow('fl_purple', Math.round(70 * (0.12 + cb.grass)), lush, 0.8, 1.5);
+    sow('fl_white', Math.round(60 * (0.12 + cb.grass)), lush, 0.8, 1.5);
+    sow('bush_dry', Math.round(22 * (1 - cb.grass)), dry, 0.8, 1.7);
+    sow('rock_d', Math.round(7 * (0.3 + cb.rock)), stony, 0.8, 2.2);
 
     /* trees and palms, sparse and deliberate */
     var treeN = Math.max(1, Math.round((3 * cb.grass + 1) * (W.vegScale || 1)));
