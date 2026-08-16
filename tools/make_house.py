@@ -225,6 +225,9 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
             if b - a > 0.04:
                 COLLIDERS.append({"c": [round((a + b) / 2, 3), round(z0 + h / 2, 3), round(-fy, 3)],
                                   "h": [round((b - a) / 2, 3), round(h / 2, 3), round(T / 2, 3)]})
+        # where the leaf hangs, so the game can put a door that opens here
+        SPOTS.append({"c": [round(dx - dw / 2, 3), round(z0, 3), round(-fy, 3)],
+                      "r": [round(dw, 3), round(dh, 3)], "k": "door"})
         lintel_z0 = z0 + dh
         if h - dh > 0.04:
             COLLIDERS.append({"c": [round(dx, 3), round(lintel_z0 + (h - dh) / 2, 3), round(-fy, 3)],

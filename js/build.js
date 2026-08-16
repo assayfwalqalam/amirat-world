@@ -382,7 +382,8 @@
     W.scene.add(pivot);
     var cx = x + Math.cos(rot) * w / 2, cz = z + Math.sin(rot) * w / 2;
     var col = W.addBox(cx, y + h / 2, cz, w / 2, h / 2, 0.1, rot);
-    var d = { pivot: pivot, col: col, open: false, ang: 0, x: x, z: z, y0: col.y0, y1: col.y1 };
+    var d = { pivot: pivot, col: col, open: false, ang: 0, x: x, z: z,
+              hw: w / 2, y0: col.y0, y1: col.y1 };
     doors.push(d);
     return d;
   }
@@ -610,6 +611,14 @@
     var c = Math.cos(brot), s2 = Math.sin(brot);
     for (var i = 0; i < spots.length; i++) {
       var sp = spots[i];
+      if (sp.k === 'door') {
+        /* a leaf on its hinge, so the doorway can actually be opened */
+        var hx = (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
+        var hz = (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
+        door(bx + hx, by + sp.c[1] * scale, bz + hz,
+             sp.r[0] * scale * 0.97, sp.r[1] * scale * 0.97, brot, M.wood);
+        continue;
+      }
       var n = sp.k === 'room' ? 3 : (sp.k === 'balcony' ? 2 : 4);
       for (var j = 0; j < n; j++) {
         var sd = (seedBase * 2654435761) ^ ((i * 40503 + j * 7919) | 0);
@@ -1602,7 +1611,8 @@
       var dr = doors[d2];
       var target = dr.open ? -1.95 : 0;
       dr.ang += (target - dr.ang) * Math.min(1, dt * 4.6);
-      dr.pivot.rotation.y = dr.rot0 === undefined ? (dr.rot0 = dr.pivot.rotation.y) + dr.ang : dr.rot0 + dr.ang;
+      if (dr.rot0 === undefined) dr.rot0 = dr.pivot.rotation.y;
+      dr.pivot.rotation.y = dr.rot0 + dr.ang;
     }
   };
 
