@@ -693,6 +693,7 @@
       }
       var so = document.getElementById('start');
       if (so) so.classList.add('off');
+      W.SHOT_MODE = true;
       W.setIdle(1e9);
     }
 
@@ -892,10 +893,19 @@
     lastRaf = performance.now();
     rafId = requestAnimationFrame(loop);
     try { frame(); } catch (e) { running = false; W.diag('frame error: ' + e.message); }
+    /* A fixed viewpoint stops itself once the world has settled. Headless
+       capture drives virtual time, so a loop that never stops renders
+       thousands of frames and the screenshot never arrives. */
+    if (W.SHOT_MODE) {
+      if (W.MODELS_IN) shotFrames++;
+      if (shotFrames > 45) { running = false; document.title = 'settled'; }
+      return;
+    }
     var moving = keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD'] || movePid !== null;
     if (moving) idleAt = performance.now();
     if (performance.now() - idleAt > IDLE_MS) { running = false; hint(true); }
   }
+  var shotFrames = 0;
   function startLoop() {
     hbEl = document.getElementById('hb');
     running = true;

@@ -499,6 +499,7 @@
       if (--left === 0) {
         if (loadEl) loadEl.style.display = 'none';
         done();
+        W.MODELS_IN = true;      /* fixed-viewpoint capture waits for this */
       } else if (loadEl && loadEl.style.display !== 'none') {
         loadEl.textContent = 'Building the world… ' + Math.round((1 - left / list.length) * 100) + '%';
       }
