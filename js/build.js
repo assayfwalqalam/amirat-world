@@ -760,8 +760,47 @@
     return hashU(n | 0);
   }
 
+  /* grass cards: three crossed blades, eight triangles, thousands of them */
+  var cardGeo = null, cardMat = null, reedGeo = null, reedMat = null;
+  function makeCard(texUrl, w, h, tint) {
+    var g = new T.PlaneGeometry(w, h);
+    g.translate(0, h / 2, 0);
+    var parts = [];
+    for (var i = 0; i < 3; i++) {
+      var q = g.clone();
+      q.rotateY((i / 3) * Math.PI);
+      parts.push(q);
+    }
+    var geo = mergeGeos(parts);
+    var m = windify(new T.MeshStandardMaterial({
+      map: W.tex(texUrl, true), alphaTest: 0.45, side: T.DoubleSide,
+      roughness: 1, metalness: 0, color: tint
+    }), '0.075');
+    return { g: geo, m: m };
+  }
+  function mergeGeos(list) {
+    var pos = [], uv = [], nrm = [], idx = [], off = 0;
+    list.forEach(function (g) {
+      var p = g.attributes.position, u = g.attributes.uv, n = g.attributes.normal;
+      for (var i = 0; i < p.count; i++) {
+        pos.push(p.getX(i), p.getY(i), p.getZ(i));
+        uv.push(u.getX(i), u.getY(i));
+        nrm.push(n.getX(i), n.getY(i), n.getZ(i));
+      }
+      var ix = g.index;
+      for (var k = 0; k < ix.count; k++) idx.push(ix.getX(k) + off);
+      off += p.count;
+    });
+    var out = new T.BufferGeometry();
+    out.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    out.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+    out.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3));
+    out.setIndex(idx);
+    return out;
+  }
+
   /* what grows in one chunk */
-  W.scatter = function (W, ci, cj, CH) {
+  W.scatter = function (W, ci, cj, CH, seg) {
     var out = [];
     var ox = ci * CH, oz = cj * CH;
     var dummy = new T.Object3D();
@@ -794,6 +833,37 @@
       out.push(im);
     }
 
+    /* the thick carpet of grass */
+    if (!cardGeo) {
+      var c1 = makeCard('assets/grass_card.png', 0.62, 0.46, 0xdfe9cf);
+      cardGeo = c1.g; cardMat = c1.m;
+      var c2 = makeCard('assets/reed_card.png', 0.5, 1.15, 0xd8e6c6);
+      reedGeo = c2.g; reedMat = c2.m;
+    }
+    function sowCards(geo, m, count, sMin, sMax) {
+      if (!count) return;
+      var im = new T.InstancedMesh(geo, m, count);
+      var n = 0;
+      for (var i = 0; i < count; i++) {
+        var sd = (ci * 73856093) ^ (cj * 19349663) ^ ((i + 5501) * 83492791);
+        var rx = ox + hashU(sd) * CH, rz = oz + hashU(sd ^ 0x9e3779b9) * CH;
+        var h = W.heightAt(rx, rz);
+        var w = W.groundWeights(rx, rz, h);
+        if (h < W.WATER_Y + 0.15 || w.g < 0.30 || w.r > 0.55) continue;
+        var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.6 + 0.7 * w.g);
+        dummy.position.set(rx, h - 0.06, rz);
+        dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
+        dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        im.setMatrixAt(n++, dummy.matrix);
+      }
+      if (!n) { im.dispose(); return; }
+      im.count = n;
+      im.instanceMatrix.needsUpdate = true;
+      W.scene.add(im);
+      out.push(im);
+    }
+
     var cb = W.biomeAt(ox + CH / 2, oz + CH / 2);
     var lush = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
@@ -808,14 +878,20 @@
       return h > W.WATER_Y + 0.4 && w.r > 0.35;
     };
 
-    sow('grass_a', Math.round(320 * (0.35 + cb.grass)), lush, 0.8, 1.6);
-    sow('grass_b', Math.round(240 * (0.3 + cb.grass)), lush, 0.7, 1.4);
-    sow('fl_orange', Math.round(90 * (0.15 + cb.grass)), lush, 0.8, 1.5);
-    sow('fl_yellow', Math.round(80 * (0.15 + cb.grass)), lush, 0.8, 1.5);
-    sow('fl_purple', Math.round(70 * (0.12 + cb.grass)), lush, 0.8, 1.5);
-    sow('fl_white', Math.round(60 * (0.12 + cb.grass)), lush, 0.8, 1.5);
-    sow('bush_dry', Math.round(22 * (1 - cb.grass)), dry, 0.8, 1.7);
-    sow('rock_d', Math.round(7 * (0.3 + cb.rock)), stony, 0.8, 2.2);
+    /* blades first, then the modelled clumps on top of them */
+    sowCards(cardGeo, cardMat, Math.round(2600 * (0.25 + cb.grass) * (W.vegScale || 1)), 0.7, 1.9);
+    sowCards(reedGeo, reedMat, Math.round(500 * (0.2 + cb.grass) * (W.vegScale || 1)), 0.7, 1.7);
+    var near = (seg === undefined) || seg >= 32;
+    if (near) {
+      sow('grass_a', Math.round(40 * (0.35 + cb.grass)), lush, 0.8, 1.6);
+      sow('grass_b', Math.round(46 * (0.3 + cb.grass)), lush, 0.7, 1.4);
+      sow('fl_orange', Math.round(52 * (0.15 + cb.grass)), lush, 0.8, 1.5);
+      sow('fl_yellow', Math.round(34 * (0.15 + cb.grass)), lush, 0.8, 1.5);
+      sow('fl_purple', Math.round(14 * (0.12 + cb.grass)), lush, 0.8, 1.5);
+      sow('fl_white', Math.round(6 * (0.12 + cb.grass)), lush, 0.8, 1.5);
+    }
+    sow('bush_dry', Math.round(14 * (1 - cb.grass)), dry, 0.8, 1.7);
+    sow('rock_d', Math.round(6 * (0.3 + cb.rock)), stony, 0.8, 2.2);
 
     /* trees and palms, sparse and deliberate */
     var treeN = Math.max(1, Math.round((3 * cb.grass + 1) * (W.vegScale || 1)));

@@ -408,7 +408,7 @@
     m.frustumCulled = true;
     scene.add(m);
     var rec = { mesh: m, seg: seg, veg: null, ci: ci, cj: cj };
-    if (seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, ci, cj, CH);
+    if (seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, ci, cj, CH, seg);
     return rec;
   }
 
@@ -437,7 +437,7 @@
         }
         rec.veg = null;
       }
-      if (rec.seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH);
+      if (rec.seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH, rec.seg);
     });
   };
 
