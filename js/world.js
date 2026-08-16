@@ -73,7 +73,7 @@
   W.biomeAt = function (x, z) {
     var moist = fbm(x * 0.00040 + 91.3, z * 0.00040 - 17.7, 3);
     var rocky = fbm(x * 0.00066 - 33.1, z * 0.00066 + 55.9, 3);
-    var g = sstep(0.44, 0.62, moist);
+    var g = sstep(0.38, 0.58, moist);
     var r = sstep(0.56, 0.73, rocky) * (1 - g * 0.8);
     return { grass: g, rock: r };
   };
@@ -127,7 +127,7 @@
   /* wetness/greenery weights used by the ground shader and the scatterer */
   W.groundWeights = function (x, z, h) {
     var b = W.biomeAt(x, z);
-    var wet = sstep(16.0, 0.2, h - WATER_Y);
+    var wet = sstep(26.0, 0.2, h - WATER_Y);
     var grass = Math.min(1, Math.max(b.grass, wet * 0.92));
     var rock = Math.min(1, b.rock * 0.9 + sstep(120, 190, h) * 0.7);
     return { g: grass, r: rock, w: wet };

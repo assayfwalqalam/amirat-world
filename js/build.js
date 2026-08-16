@@ -379,55 +379,91 @@
   function buildTown() {
     var R = TOWN.R, Y = TOWN.y;
     var N = 72;
-    var segW = (2 * Math.PI * R) / N * 1.12;
+    var segW = (2 * Math.PI * R) / N * 1.14;
     var gateA = Math.PI / 2;               /* south gate */
+    var WH = 13.5, WD = 6.4;               /* a wall you cannot see over */
+
     for (var i = 0; i < N; i++) {
       var a = (i / N) * Math.PI * 2;
       var da = Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA)));
-      if (da < 0.075) continue;            /* the gateway gap */
+      if (da < 0.085) continue;            /* the gateway gap */
       var x = TOWN.x + Math.cos(a) * R, z = TOWN.z + Math.sin(a) * R;
-      box(segW, 9.5, 4.6, x, Y + 4.75, z, M.stone, -(a + Math.PI / 2));
-      /* crenellations */
+      var yaw = -(a + Math.PI / 2);
+      /* battered base: the foot is wider than the head, as old walls are built */
+      box(segW, 3.2, WD + 1.7, x, Y + 1.6, z, M.stone2, yaw);
+      box(segW, WH - 3.2, WD, x, Y + 3.2 + (WH - 3.2) / 2, z, M.stone, yaw);
+      /* a shadow course marking the walkway line */
+      box(segW, 0.5, WD + 0.5, x, Y + WH + 0.25, z, M.stone2, yaw);
+      /* merlons: big square teeth with gaps between, like cut stone */
       for (var k = -1; k <= 1; k++) {
-        var cx = x - Math.sin(a) * (k * segW * 0.34);
-        var cz = z + Math.cos(a) * (k * segW * 0.34);
-        box(segW * 0.26, 1.25, 1.1, cx + Math.cos(a) * 1.5, Y + 10.2, cz + Math.sin(a) * 1.5, M.stone, -(a + Math.PI / 2), false);
+        var mx = x - Math.sin(a) * (k * segW * 0.34);
+        var mz = z + Math.cos(a) * (k * segW * 0.34);
+        box(segW * 0.30, 1.9, 1.5, mx + Math.cos(a) * (WD / 2 - 0.8), Y + WH + 1.4,
+            mz + Math.sin(a) * (WD / 2 - 0.8), M.stone, yaw, false);
       }
     }
-    /* towers */
-    for (var t = 0; t < 8; t++) {
-      var ta = (t / 8) * Math.PI * 2 + 0.4;
+
+    /* square towers, taller than the wall, with their own crowns */
+    for (var t = 0; t < 10; t++) {
+      var ta = (t / 10) * Math.PI * 2 + 0.32;
+      var tda = Math.abs(Math.atan2(Math.sin(ta - gateA), Math.cos(ta - gateA)));
+      if (tda < 0.28) continue;
       var tx = TOWN.x + Math.cos(ta) * R, tz = TOWN.z + Math.sin(ta) * R;
-      cyl(6.4, 7.2, 15, 14, tx, Y + 7.5, tz, M.stone2);
-      dome(6.6, tx, Y + 15, tz, M.stone, 18);
-      finial(tx, Y + 19.6, tz, 1.1);
-      torch(tx + Math.cos(ta) * 7.0, Y + 11.4, tz + Math.sin(ta) * 7.0, ta);
-    }
-    /* the great gate */
-    var gx = TOWN.x + Math.cos(gateA) * R, gz = TOWN.z + Math.sin(gateA) * R;
-    var gw = 9;
-    cyl(5.2, 6.0, 19, 12, gx - 8.6, Y + 9.5, gz, M.stone2);
-    cyl(5.2, 6.0, 19, 12, gx + 8.6, Y + 9.5, gz, M.stone2);
-    dome(5.4, gx - 8.6, Y + 19, gz, M.stone, 16);
-    dome(5.4, gx + 8.6, Y + 19, gz, M.stone, 16);
-    finial(gx - 8.6, Y + 22.9, gz, 1); finial(gx + 8.6, Y + 22.9, gz, 1);
-    box(gw + 7, 3.2, 5.0, gx, Y + 12.4, gz, M.stone);          /* lintel over the gate */
-    arch(gw, 7.2, 5.2, gx, Y + 7.2, gz, M.stone2, 0);
-    torch(gx - 5.4, Y + 3.4, gz + 2.7, 0);
-    torch(gx + 5.4, Y + 3.4, gz + 2.7, 0);
-    /* stairs to the rampart, both sides of the gate */
-    [-1, 1].forEach(function (sgn) {
-      var sx = gx + sgn * 17, sz = gz - 6;
-      for (var s = 0; s < 14; s++) {
-        box(3.4, 0.72, 1.5, sx + sgn * 0.0, Y + 0.36 + s * 0.68, sz - s * 1.42, M.stone2, 0);
+      var tyaw = -(ta + Math.PI / 2), TH = WH + 5.5;
+      box(11.5, 3.6, 11.5, tx, Y + 1.8, tz, M.stone2, tyaw);
+      box(10.2, TH - 3.6, 10.2, tx, Y + 3.6 + (TH - 3.6) / 2, tz, M.stone, tyaw);
+      box(11.4, 0.7, 11.4, tx, Y + TH + 0.35, tz, M.stone2, tyaw);
+      for (var m2 = 0; m2 < 4; m2++) {
+        for (var q = -1; q <= 1; q++) {
+          var ma = tyaw + m2 * Math.PI / 2;
+          var ox = Math.cos(ma) * 4.9 - Math.sin(ma) * (q * 3.3);
+          var oz = Math.sin(ma) * 4.9 + Math.cos(ma) * (q * 3.3);
+          box(2.4, 1.9, 1.3, tx + ox, Y + TH + 1.35, tz + oz, M.stone, ma + Math.PI / 2, false);
+        }
       }
-      box(3.4, 0.9, 3.0, sx, Y + 9.4, sz - 20.4, M.stone2, 0);
+      torch(tx + Math.cos(ta) * 5.6, Y + WH - 1.4, tz + Math.sin(ta) * 5.6, ta);
+    }
+
+    /* the gatehouse: two solid blocks and a tunnel between them */
+    var gx = TOWN.x + Math.cos(gateA) * R, gz = TOWN.z + Math.sin(gateA) * R;
+    var GH = WH + 7;
+    [-1, 1].forEach(function (sgn) {
+      var bx = gx + sgn * 10.5;
+      box(13, 4.0, 13, bx, Y + 2.0, gz, M.stone2, 0);
+      box(11.6, GH - 4.0, 11.6, bx, Y + 4.0 + (GH - 4.0) / 2, gz, M.stone, 0);
+      box(12.8, 0.8, 12.8, bx, Y + GH + 0.4, gz, M.stone2, 0);
+      for (var q2 = -1; q2 <= 1; q2++) {
+        box(2.6, 2.0, 1.4, bx + q2 * 3.9, Y + GH + 1.5, gz + 6.0, M.stone, 0, false);
+        box(2.6, 2.0, 1.4, bx + q2 * 3.9, Y + GH + 1.5, gz - 6.0, M.stone, 0, false);
+      }
+      torch(bx + sgn * 5.6, Y + 4.4, gz + 6.4, 0);
     });
-    /* rampart walkway ring, just inside the wall */
+    /* the span over the gateway, and its arch */
+    box(21, 5.0, 12.4, gx, Y + WH - 1.0, gz, M.stone, 0);
+    box(21.6, 0.7, 12.8, gx, Y + WH + 1.75, gz, M.stone2, 0);
+    for (var q3 = -2; q3 <= 2; q3++) {
+      box(2.6, 2.0, 1.4, gx + q3 * 4.0, Y + WH + 3.0, gz + 6.0, M.stone, 0, false);
+    }
+    arch(9.4, 8.2, 12.8, gx, Y + 8.0, gz, M.stone2, 0);
+    torch(gx - 6.0, Y + 3.6, gz + 6.6, 0);
+    torch(gx + 6.0, Y + 3.6, gz + 6.6, 0);
+
+    /* stairs up to the rampart, both sides of the gate */
+    [-1, 1].forEach(function (sgn) {
+      var sx = gx + sgn * 22, sz = gz - 7;
+      for (var st = 0; st < 19; st++) {
+        box(4.0, 0.76, 1.6, sx, Y + 0.38 + st * 0.72, sz - st * 1.5, M.stone2, 0);
+      }
+      box(4.0, 0.9, 3.4, sx, Y + 13.9, sz - 28.5, M.stone2, 0);
+    });
+    /* the rampart walkway, just inside the wall */
     for (var wI = 0; wI < N; wI++) {
       var wa = (wI / N) * Math.PI * 2;
-      var wx = TOWN.x + Math.cos(wa) * (R - 3.2), wz = TOWN.z + Math.sin(wa) * (R - 3.2);
-      box(segW, 0.7, 3.4, wx, Y + 9.2, wz, M.stone, -(wa + Math.PI / 2));
+      var wx = TOWN.x + Math.cos(wa) * (R - 4.4), wz = TOWN.z + Math.sin(wa) * (R - 4.4);
+      box(segW, 0.8, 3.6, wx, Y + WH - 0.4, wz, M.stone2, -(wa + Math.PI / 2));
+      /* inner parapet so you cannot walk off the town side */
+      box(segW, 1.4, 0.7, TOWN.x + Math.cos(wa) * (R - 6.2), Y + WH + 0.9,
+          TOWN.z + Math.sin(wa) * (R - 6.2), M.stone2, -(wa + Math.PI / 2), false);
     }
   }
 
@@ -992,22 +1028,22 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(700 * (0.25 + cb.grass) * (W.vegScale || 1)), 0.85, 1.7);
+    sowCards(cardGeo, cardMat, Math.round(1500 * (0.3 + cb.grass) * (W.vegScale || 1)), 0.85, 1.8);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
       sow('grass_a', Math.round(40 * (0.35 + cb.grass)), lush, 0.8, 1.6);
       sow('grass_b', Math.round(46 * (0.3 + cb.grass)), lush, 0.7, 1.4);
-      sow('fl_orange', Math.round(52 * (0.15 + cb.grass)), lush, 0.8, 1.5);
-      sow('fl_yellow', Math.round(34 * (0.15 + cb.grass)), lush, 0.8, 1.5);
-      sow('fl_purple', Math.round(14 * (0.12 + cb.grass)), lush, 0.8, 1.5);
-      sow('fl_white', Math.round(6 * (0.12 + cb.grass)), lush, 0.8, 1.5);
+      sow('fl_orange', Math.round(110 * (0.2 + cb.grass)), lush, 0.9, 1.7);
+      sow('fl_yellow', Math.round(80 * (0.2 + cb.grass)), lush, 0.9, 1.7);
+      sow('fl_purple', Math.round(26 * (0.15 + cb.grass)), lush, 0.9, 1.6);
+      sow('fl_white', Math.round(10 * (0.15 + cb.grass)), lush, 0.9, 1.6);
     }
     sow('bush_dry', Math.round(14 * (1 - cb.grass)), dry, 0.8, 1.7);
     sow('rock_d', Math.round(6 * (0.3 + cb.rock)), stony, 0.8, 2.2);
 
     /* trees and palms, sparse and deliberate */
-    var treeN = Math.max(1, Math.round((3 * cb.grass + 1) * (W.vegScale || 1)));
+    var treeN = Math.max(1, Math.round((6 * cb.grass + 2) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -1045,7 +1081,7 @@
   };
 
   /* a dense carpet of grass that travels with you · the only way a lawn reads */
-  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 34;
+  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 44;
   function initLawn() {
     if (!cardGeo) {
       var c1 = makeCard('assets/grass_card.png', 0.46, 0.42, 0xd7e3c6);
@@ -1053,7 +1089,7 @@
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
-    var n = W.TIER === 2 ? 13000 : (W.TIER === 1 ? 5000 : 1800);
+    var n = W.TIER === 2 ? 26000 : (W.TIER === 1 ? 9000 : 2600);
     lawn = new T.InstancedMesh(cardGeo, cardMat, n);
     lawn.name = 'lawn';
     lawn.frustumCulled = false;
@@ -1070,7 +1106,7 @@
       var gx = p.x + Math.cos(a) * r, gz = p.z + Math.sin(a) * r;
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
-      if (h < W.WATER_Y + 0.12 || w.g < 0.28 || w.r > 0.6) continue;
+      if (h < W.WATER_Y + 0.12 || w.g < 0.20 || w.r > 0.65) continue;
       if (W.flatAt(gx, gz) > 0.30) continue;
       var sc = (0.55 + hashU(sd ^ 0x85ebca6b) * 0.7) * (0.55 + 0.7 * w.g);
       dummy.position.set(gx, h - 0.07, gz);
