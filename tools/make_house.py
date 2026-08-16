@@ -132,6 +132,53 @@ def window(target, cx, cy, cz, w, h, axis, through):
         cut(target, cyl(w / 2, through, (cx, cy, cz + h / 2 - w / 2), rot=(0, math.pi / 2, 0)))
 
 
+def weather(wall, cx, cy, w, d, h, z0, face):
+    """Cracks, chipped corners and patched-up render. This is where one house
+       differs from the next, not in the colour of its mud."""
+    # cracks running down the face, thin and slightly leaning
+    for i in range(random.randint(2, 5)):
+        cw = random.uniform(0.045, 0.1)
+        cl = random.uniform(0.6, h * 0.62)
+        if face == 'y':
+            px = cx + random.uniform(-w * 0.42, w * 0.42)
+            pz = z0 + random.uniform(h * 0.25, h * 0.8)
+            c = solid(cw, T + 0.9, cl, (px, cy, pz), False)
+        else:
+            py = cy + random.uniform(-d * 0.38, d * 0.38)
+            pz = z0 + random.uniform(h * 0.25, h * 0.8)
+            c = solid(T + 0.9, cw, cl, (cx, py, pz), False)
+        c.rotation_euler[1] = random.uniform(-0.22, 0.22)
+        bpy.context.view_layer.objects.active = c
+        bpy.ops.object.transform_apply(rotation=True)
+        cut(wall, c)
+    # bites taken out of the top edge, where render has fallen away
+    for i in range(random.randint(1, 3)):
+        bw = random.uniform(0.4, 1.3)
+        if face == 'y':
+            px = cx + random.uniform(-w * 0.45, w * 0.45)
+            b = solid(bw, T + 0.9, random.uniform(0.18, 0.42), (px, cy, z0 + h), False)
+        else:
+            py = cy + random.uniform(-d * 0.4, d * 0.4)
+            b = solid(T + 0.9, bw, random.uniform(0.18, 0.42), (cx, py, z0 + h), False)
+        b.rotation_euler[1] = random.uniform(-0.3, 0.3)
+        bpy.context.view_layer.objects.active = b
+        bpy.ops.object.transform_apply(rotation=True)
+        cut(wall, b)
+
+
+def patch(cx, cy, cz, w, h, face, depth=0.09):
+    """A slab of newer render, laid over an old wall in a rough rectangle."""
+    if face == 'y':
+        o = solid(w, depth, h, (cx, cy, cz), False)
+    else:
+        o = solid(depth, w, h, (cx, cy, cz), False)
+    o.rotation_euler[1] = random.uniform(-0.05, 0.05)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.transform_apply(rotation=True)
+    erode(o, levels=1, fine=0.02, broad=0.03)
+    return o
+
+
 def storey(cx, cy, w, d, z0, h, front_door, n_win):
     """Four wall slabs, so the inside is a real room you can walk into."""
     back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
@@ -158,10 +205,27 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
     if random.random() < 0.5:
         bx = cx + random.uniform(-w * 0.3, w * 0.3)
         window(back, bx, cy + d / 2 - T / 2, z0 + h * random.uniform(0.52, 0.7), 0.7, 1.1, 'y', T + 1.2)
+    weather(front, cx, cy - d / 2 + T / 2, w, d, h, z0, 'y')
+    weather(back, cx, cy + d / 2 - T / 2, w, d, h, z0, 'y')
+    weather(left, cx - w / 2 + T / 2, cy, w, d, h, z0, 'x')
+    weather(right, cx + w / 2 - T / 2, cy, w, d, h, z0, 'x')
     out = []
     for wl in (back, left, right, front):
         weld(wl)
         out.append(wl)
+    # a patch or two of newer render, stuck on over the old
+    for i in range(random.randint(1, 3)):
+        if random.random() < 0.5:
+            out.append(patch(cx + random.uniform(-w * 0.32, w * 0.32),
+                             cy - d / 2 + T / 2 - 0.04,
+                             z0 + random.uniform(h * 0.2, h * 0.66),
+                             random.uniform(1.2, 2.8), random.uniform(0.9, 2.0), 'y'))
+        else:
+            sgn = 1 if random.random() < 0.5 else -1
+            out.append(patch(cx + sgn * (w / 2 - T / 2 + 0.04),
+                             cy + random.uniform(-d * 0.3, d * 0.3),
+                             z0 + random.uniform(h * 0.2, h * 0.66),
+                             random.uniform(1.0, 2.4), random.uniform(0.8, 1.8), 'x'))
     return out
 
 
@@ -199,6 +263,8 @@ def parapet(cx, cy, w, d, z, h, t, rail=True):
         for sy in (-1, 1):
             n = max(4, int(w / 0.62))
             for i in range(n):
+                if random.random() < 0.12:
+                    continue          # a post missing, as they are
                 bx = cx - w / 2 + (i + 0.5) * (w / n)
                 timber.append(solid(0.07, 0.07, 0.62, (bx, cy + sy * (d / 2 + t / 2), z + h + 0.31), False))
             timber.append(solid(w + t * 2, 0.09, 0.09, (cx, cy + sy * (d / 2 + t / 2), z + h + 0.63), False))

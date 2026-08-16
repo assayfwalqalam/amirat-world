@@ -376,6 +376,33 @@ elif KIND == "firewood":
             (random.uniform(-0.2, 0.2), random.uniform(-0.15, 0.15), 0.06 + (i % 3) * 0.1),
             rot=(0, math.pi / 2, random.uniform(0, 3.14)), verts=6)
 
+elif KIND == "torch":
+    # an iron bracket driven into a wall, holding a pitch-soaked head
+    box(0.16, 0.34, 0.16, (0, 0.1, 0), 0, True)                  # the wall plate
+    cyl(0.035, 0.03, 0.52, (0, -0.16, 0.14), rot=(1.05, 0, 0), verts=8)   # the arm
+    cyl(0.055, 0.05, 0.16, (0, -0.36, 0.36), rot=(0.25, 0, 0), verts=8)   # the collar
+    ring = torus(0.1, 0.018, (0, -0.38, 0.42), seg=12)
+    cyl(0.045, 0.055, 0.62, (0, -0.4, 0.7), rot=(0.12, 0, 0), verts=8)    # the shaft
+    head = sphere(0.11, (0, -0.44, 1.02))
+    head.scale = (1, 1, 1.3)
+    bpy.ops.object.transform_apply(scale=True)
+    jitter(head, 0.02)
+
+elif KIND == "torchpost":
+    # a free-standing torch, for courtyards and gateways
+    cyl(0.2, 0.26, 0.22, (0, 0, 0.11), verts=12, collide=True)
+    cyl(0.06, 0.075, 2.3, (0, 0, 1.2), verts=10, collide=True)
+    for k in range(3):
+        a = k * math.pi * 2 / 3
+        cyl(0.022, 0.02, 0.42, (math.cos(a) * 0.12, math.sin(a) * 0.12, 0.3),
+            rot=(0.5 * math.sin(a), -0.5 * math.cos(a), 0), verts=6)
+    cyl(0.16, 0.1, 0.2, (0, 0, 2.4), verts=12)
+    torus(0.15, 0.02, (0, 0, 2.48), seg=12)
+    hd = sphere(0.13, (0, 0, 2.6))
+    hd.scale = (1, 1, 1.2)
+    bpy.ops.object.transform_apply(scale=True)
+    jitter(hd, 0.02)
+
 elif KIND == "stones":
     for i in range(9):
         r = random.uniform(0.18, 0.42)
@@ -424,7 +451,8 @@ TINT = {
     "bowarrows": (0.35, 0.25, 0.15), "basket": (0.52, 0.40, 0.22),
     "brazier": (0.24, 0.20, 0.17), "oillamp": (0.46, 0.34, 0.20),
     "waterjug": (0.45, 0.28, 0.19), "ropecoil": (0.50, 0.42, 0.28),
-    "firewood": (0.32, 0.22, 0.14),
+    "firewood": (0.32, 0.22, 0.14), "torch": (0.20, 0.17, 0.15),
+    "torchpost": (0.24, 0.20, 0.16),
 }.get(KIND, (0.45, 0.36, 0.26))
 
 mat = bpy.data.materials.new(KIND)

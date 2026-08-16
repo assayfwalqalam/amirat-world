@@ -207,65 +207,165 @@
     }
   }
 
-  /* --------------------------------------------------------------- fire */
-  var flameTex = [];
+  /* ---------------------------------------------------------------- fire
+     A real flame is not one picture. It is a broad body, a brighter middle and
+     a small white core, each moving at its own pace, with embers torn off the
+     top and a pool of light on the ground beneath. Built here from three
+     billboards on one sheet, a handful of embers, and a light that breathes
+     with them. */
+  var flameSheets = [];
+  var emberTex = null, poolTex = null;
+  var FRAMES = 16;
+
   function initFire() {
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       var t = W.tex('assets/flame.png', true);
-      t.repeat.set(1, 1 / 8);
-      flameTex.push(t);
+      t.repeat.set(1, 1 / FRAMES);
+      flameSheets.push(t);
     }
+    emberTex = W.tex('assets/ember.png', true);
+    poolTex = W.tex('assets/firepool.png', true);
   }
-  /* a living flame: animated sheet, flickering light, tight glow, no blob */
+
+  function flamePlane(tex, w, h, col, op) {
+    return new T.Mesh(new T.PlaneGeometry(w, h),
+      new T.MeshBasicMaterial({ map: tex, color: col, transparent: true,
+        blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: op }));
+  }
+
   function fire(x, y, z, scale, power) {
-    scale = scale || 1; power = power === undefined ? 1 : power;
-    var tx = flameTex[fires.length % 3];
-    var m = new T.Mesh(new T.PlaneGeometry(0.78 * scale, 1.24 * scale),
-      new T.MeshBasicMaterial({ map: tx, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.96 }));
-    m.position.set(x, y + 0.56 * scale, z);
-    W.scene.add(m);
+    scale = scale || 1;
+    power = power === undefined ? 1 : power;
+    var g = new T.Group();
+    g.position.set(x, y, z);
+    W.scene.add(g);
 
-    var core = new T.Mesh(new T.PlaneGeometry(2.3 * scale, 2.3 * scale),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffb154, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.5 }));
-    core.position.set(x, y + 0.45 * scale, z);
-    W.scene.add(core);
+    /* three layers of the same sheet, each on its own frame and its own drift */
+    var layers = [];
+    var specs = [
+      { w: 1.15, h: 1.55, col: 0xff7a1e, op: 0.62, sp: 11 },
+      { w: 0.86, h: 1.24, col: 0xffab3e, op: 0.72, sp: 15 },
+      { w: 0.55, h: 0.86, col: 0xfff0c8, op: 0.85, sp: 19 }
+    ];
+    for (var i = 0; i < specs.length; i++) {
+      var sp = specs[i];
+      var tex = flameSheets[i].clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, 1 / FRAMES);
+      var m = flamePlane(tex, sp.w * scale, sp.h * scale, sp.col, sp.op);
+      m.position.y = sp.h * scale * 0.5;
+      g.add(m);
+      layers.push({ mesh: m, tex: tex, sp: sp.sp, off: i * 5 });
+    }
 
-    var f = { m: m, core: core, base: 3.0 * power, reach: 30 * Math.sqrt(power),
-              x: x, y: y + 0.55 * scale, z: z, col: 0xffa445,
-              ph: Math.random() * 10, sc: scale, frame: 0, lit: 1 };
+    /* the pool of light it throws on the ground */
+    var pool = new T.Mesh(new T.PlaneGeometry(5.2 * scale, 5.2 * scale),
+      new T.MeshBasicMaterial({ map: poolTex, color: 0xff9a48, transparent: true,
+        blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.34 }));
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = -y + W.heightAt(x, z) + 0.06;
+    g.add(pool);
+
+    /* embers, rising and dying */
+    var EN = 7;
+    var emberGeo = new T.PlaneGeometry(0.075 * scale, 0.075 * scale);
+    var emberMat = new T.MeshBasicMaterial({ map: emberTex, color: 0xffc070, transparent: true,
+      blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
+    var embers = new T.InstancedMesh(emberGeo, emberMat, EN);
+    embers.frustumCulled = false;
+    g.add(embers);
+    var eState = [];
+    for (var e = 0; e < EN; e++) {
+      eState.push({ t: Math.random(), sp: 0.5 + Math.random() * 0.7,
+                    dx: (Math.random() - 0.5) * 0.5, dz: (Math.random() - 0.5) * 0.5 });
+    }
+
+    var f = { g: g, layers: layers, pool: pool, embers: embers, eState: eState,
+              base: 2.9 * power, reach: 30 * Math.sqrt(power),
+              x: x, y: y + 0.5 * scale, z: z, col: 0xff9a45,
+              ph: Math.random() * 10, sc: scale, lit: 1, d2: 0 };
     fires.push(f);
     EMIT.push(f);
     return f;
   }
+
+  var eDummy = new T.Object3D();
+
+  function tickFires(t, dt, cp) {
+    for (var i = 0; i < fires.length; i++) {
+      var f = fires[i];
+      if (f.d2 > 30000) { f.g.visible = false; continue; }
+      f.g.visible = true;
+
+      /* each layer runs the sheet at its own speed, so the flame never loops
+         visibly and the core dances faster than the body */
+      for (var L = 0; L < f.layers.length; L++) {
+        var ly = f.layers[L];
+        var fr = Math.floor((t * ly.sp + ly.off) % FRAMES);
+        ly.tex.offset.y = 1 - (fr + 1) / FRAMES;
+        ly.mesh.lookAt(cp.x, ly.mesh.getWorldPosition(new T.Vector3()).y, cp.z);
+        var s = 0.93 + 0.14 * Math.sin(t * (5 + L * 2) + f.ph + L);
+        ly.mesh.scale.set(s, 0.92 + 0.16 * f.lit, 1);
+      }
+
+      f.pool.material.opacity = 0.24 + 0.18 * f.lit;
+      f.pool.scale.setScalar(0.94 + 0.1 * f.lit);
+
+      /* embers drift up, fade, and start again */
+      if (f.d2 < 9000) {
+        f.embers.visible = true;
+        for (var e = 0; e < f.eState.length; e++) {
+          var st = f.eState[e];
+          st.t += dt * st.sp * 0.5;
+          if (st.t > 1) { st.t -= 1; st.dx = (Math.random() - 0.5) * 0.5; st.dz = (Math.random() - 0.5) * 0.5; }
+          var rise = st.t * 2.4 * f.sc;
+          eDummy.position.set(st.dx * st.t * f.sc + Math.sin(t * 2 + e) * 0.08 * st.t,
+                              0.5 * f.sc + rise,
+                              st.dz * st.t * f.sc + Math.cos(t * 1.7 + e) * 0.08 * st.t);
+          eDummy.quaternion.copy(W.cam.quaternion);
+          var es = (1 - st.t) * (0.7 + 0.6 * Math.sin(t * 9 + e));
+          eDummy.scale.setScalar(Math.max(0.001, es));
+          eDummy.updateMatrix();
+          f.embers.setMatrixAt(e, eDummy.matrix);
+        }
+        f.embers.instanceMatrix.needsUpdate = true;
+      } else {
+        f.embers.visible = false;
+      }
+    }
+  }
+
   /* a hanging lamp: warm pool of light that fades at its reach */
   function lamp(x, y, z, power, model) {
-    var g = new T.Mesh(new T.PlaneGeometry(1.7, 1.7),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.85 }));
+    var g = new T.Mesh(new T.PlaneGeometry(1.5, 1.5),
+      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.7 }));
     g.position.set(x, y, z);
     W.scene.add(g);
-    var e = { g: g, base: (power || 1.5) * 2.1, reach: 28, x: x, y: y, z: z, col: 0xffb367,
+    var e = { g: g, base: (power || 1.5) * 1.9, reach: 26, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
     lamps.push(e);
     EMIT.push(e);
     if (model !== false) place('lantern', x, y - 0.34, z, 0.62, Math.random() * 3);
     return e;
   }
-  /* a torch on a wall: bracket, flame, and a shaft of light down the stone */
+
+  /* a torch: the iron bracket is a real model, the flame sits in its head */
   function torch(x, y, z, rot) {
-    var post = new T.Mesh(new T.CylinderGeometry(0.055, 0.07, 0.86, 6), M.wood);
-    post.position.set(x, y, z);
-    post.rotation.z = 0.36 * Math.cos(rot || 0);
-    post.rotation.x = -0.36 * Math.sin(rot || 0);
-    W.scene.add(post);
-    var cup = new T.Mesh(new T.CylinderGeometry(0.13, 0.08, 0.2, 8), M.metal);
-    cup.position.set(x, y + 0.44, z);
-    W.scene.add(cup);
-    fire(x, y + 0.52, z, 1.25, 1.5);
-    var ray = new T.Mesh(new T.PlaneGeometry(3.4, 4.6),
-      new T.MeshBasicMaterial({ map: W.tex('assets/ray.png', true), color: 0xffc57e, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.3 }));
-    ray.position.set(x, y - 1.4, z);
-    ray.rotation.y = rot || 0;
-    W.scene.add(ray);
+    if (MODELS.p_torch) {
+      placeBuilt('p_torch', x, y, z, (rot || 0) + Math.PI, 1.0);
+      fire(x - Math.sin(rot || 0) * 0.44, y + 1.02, z - Math.cos(rot || 0) * 0.44, 1.15, 1.35);
+    } else {
+      fire(x, y + 0.5, z, 1.15, 1.35);
+    }
+  }
+
+  function torchPost(x, y, z) {
+    if (MODELS.p_torchpost) {
+      placeBuilt('p_torchpost', x, y, z, Math.random() * 6.283, 1.0);
+      fire(x, y + 2.62, z, 1.3, 1.6);
+    } else {
+      fire(x, y + 2.4, z, 1.3, 1.6);
+    }
   }
 
   /* -------------------------------------------------------------- doors */
@@ -476,7 +576,8 @@
   var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
                       'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
-  var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET, ['p_brazier', 'p_well']);
+  var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET,
+                                    ['p_brazier', 'p_well', 'p_torch', 'p_torchpost']);
 
   function propOn(list, seed, x, y, z, rot, scale) {
     var key = list[Math.floor(hashU(seed) * list.length) % list.length];
@@ -570,21 +671,23 @@
     torch(-GATE_HALF - 1.0, Y + 3.8, S - 7.2, 0);
     torch(GATE_HALF + 1.0, Y + 3.8, S - 7.2, 0);
 
-    /* stairs up to the rampart, climbing along the wall and facing into the town */
+    /* Stairs against the inner face of the wall. They start out along the wall,
+       away from the gate, and climb toward it, topping out just short of the
+       gatehouse, the way a rampart stair is actually built. */
     [-1, 1].forEach(function (sgn) {
-      var sx = sgn * (GATE_HALF + 17);
-      var steps = 19, rise = 13.5 / steps, run = 1.5;
+      var steps = 24, rise = 13.5 / steps, run = 1.45;
+      var far = sgn * (GATE_HALF + 16 + steps * run);   /* the foot, away from the gate */
+      var zIn = S - 7.6;                                /* hard against the wall */
       for (var i = 0; i < steps; i++) {
-        /* each step is a solid block standing on the ground · a stair of this
-           size is a mass of masonry, not a shelf hanging in the air */
         var h = rise * (i + 1);
-        box(4.4, h, run + 0.12, sx, Y + h / 2,
-            S - 12 - (steps - 1 - i) * run, M.stone2, 0);
+        var x = far - sgn * i * run;
+        box(run + 0.1, h, 4.2, x, Y + h / 2, zIn, M.stone2, 0);
       }
-      /* the cheek wall along its open side */
-      box(0.8, 13.5, steps * run + 1.0, sx - 2.6, Y + 6.75,
-          S - 12 - (steps - 1) * run / 2, M.stone2, 0);
-      box(4.2, 0.9, 4.4, sx, Y + 13.5 - 0.45, S - 12 + 2.2, M.stone2, 0);
+      /* the cheek wall carrying its open side */
+      var midX = far - sgn * (steps - 1) * run / 2;
+      box(steps * run, 13.5, 0.85, midX, Y + 6.75, zIn - 2.3, M.stone2, 0);
+      /* the landing, just short of the gatehouse */
+      box(4.6, 0.9, 4.2, far - sgn * steps * run, Y + 13.5 - 0.45, zIn, M.stone2, 0);
     });
 
     /* torches along the rampart */
@@ -730,60 +833,170 @@
 
   /* Houses laid along streets inside the square, packed the way a desert town
      packs: rows facing the lanes, backs close together. */
+  /* HOW THE TOWN GROWS
+     Not rows, and not a few lanes drawn by hand. A desert town is built the
+     other way round: ways get worn between the places people go, houses are
+     packed into whatever ground is left, and the streets are the gaps that
+     survive. So here we first grow a network of ways from the gate to the
+     mosque, the well and the squares, branch smaller lanes off them until the
+     ground is served, then pack houses into every space that is left, letting
+     them crowd, share walls and turn to face whatever way runs past them.
+     Dead ends and narrow niches appear on their own, because they are what is
+     left over, which is exactly how they appear in a real town. */
+
+  var WAYS = [];          /* every segment of every street */
+
+  function way(ax, az, bx, bz, half) {
+    WAYS.push({ ax: ax, az: az, bx: bx, bz: bz, half: half });
+  }
+
+  /* a way between two places never runs straight · it wanders and settles */
+  function wander(ax, az, bx, bz, half, sway, depth, seed) {
+    if (depth <= 0) { way(ax, az, bx, bz, half); return; }
+    var mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    var dx = bx - ax, dz = bz - az;
+    var len = Math.hypot(dx, dz);
+    var nx = -dz / len, nz = dx / len;
+    var push = (hashU(seed) - 0.5) * sway;
+    mx += nx * push; mz += nz * push;
+    wander(ax, az, mx, mz, half, sway * 0.55, depth - 1, (seed * 1103515245 + 12345) | 0);
+    wander(mx, mz, bx, bz, half, sway * 0.55, depth - 1, (seed * 214013 + 2531011) | 0);
+  }
+
+  function distToWays(x, z) {
+    var best = 1e9, bestSeg = null;
+    for (var i = 0; i < WAYS.length; i++) {
+      var w = WAYS[i];
+      var dx = w.bx - w.ax, dz = w.bz - w.az;
+      var l2 = dx * dx + dz * dz;
+      var t = l2 > 0 ? Math.max(0, Math.min(1, ((x - w.ax) * dx + (z - w.az) * dz) / l2)) : 0;
+      var px = w.ax + dx * t, pz = w.az + dz * t;
+      var d = Math.hypot(x - px, z - pz) - w.half;
+      if (d < best) { best = d; bestSeg = { px: px, pz: pz }; }
+    }
+    return { d: best, at: bestSeg };
+  }
+
+  function growStreets(S) {
+    WAYS.length = 0;
+    var gate = [0, S - 12];
+    var mosque = [-40, -34];
+    var well = [6, 8];
+    var plazaA = [58, -58];
+    var plazaB = [-64, 52];
+    var plazaC = [70, 62];
+
+    /* the arteries: the ways everyone walks */
+    wander(gate[0], gate[1], well[0], well[1], 6.0, 26, 3, 1013);
+    wander(well[0], well[1], mosque[0], mosque[1], 5.2, 22, 3, 2027);
+    wander(well[0], well[1], plazaA[0], plazaA[1], 4.8, 30, 3, 3041);
+    wander(well[0], well[1], plazaB[0], plazaB[1], 4.8, 30, 3, 4057);
+    wander(plazaA[0], plazaA[1], plazaC[0], plazaC[1], 4.2, 26, 3, 5077);
+    wander(mosque[0], mosque[1], plazaB[0], plazaB[1], 4.2, 24, 3, 6091);
+    wander(gate[0], gate[1], plazaA[0], plazaA[1], 4.4, 34, 3, 7103);
+
+    /* lanes branching off, until the ground is served */
+    var arteries = WAYS.slice();
+    for (var b = 0; b < 26; b++) {
+      var sd = (b * 2654435761) | 0;
+      var src = arteries[Math.floor(hashU(sd) * arteries.length) % arteries.length];
+      var t = 0.2 + hashU(sd ^ 0x11) * 0.6;
+      var sx = src.ax + (src.bx - src.ax) * t;
+      var sz = src.az + (src.bz - src.az) * t;
+      var dx = src.bx - src.ax, dz = src.bz - src.az;
+      var len = Math.hypot(dx, dz) || 1;
+      var nx = -dz / len, nz = dx / len;
+      var side = hashU(sd ^ 0x22) > 0.5 ? 1 : -1;
+      var reach = 26 + hashU(sd ^ 0x33) * 54;
+      var ex = sx + nx * side * reach + (hashU(sd ^ 0x44) - 0.5) * 30;
+      var ez = sz + nz * side * reach + (hashU(sd ^ 0x55) - 0.5) * 30;
+      ex = Math.max(-S + 34, Math.min(S - 34, ex));
+      ez = Math.max(-S + 34, Math.min(S - 34, ez));
+      var half = hashU(sd ^ 0x66) > 0.72 ? 1.5 : (hashU(sd ^ 0x77) > 0.45 ? 2.4 : 3.4);
+      wander(sx, sz, ex, ez, half, 18, 2, sd ^ 0x88);
+    }
+  }
+
   function buildSculptedHouses() {
     var Y = TOWN.y, S = TOWNSQ, made = 0, idx = 0;
-    var LOT = 21.0, STREET = 13.5;
-    var block = LOT * 2 + STREET;          /* two rows back to back, then a street */
+    growStreets(S);
 
-    /* keep clear of the mosque, the well and the gate road */
-    function blocked(x, z) {
-      if (Math.abs(x) < 13 && z > -20) return true;             /* the gate road */
-      if (Math.hypot(x + 34, z + 30) < 30) return true;          /* the mosque */
-      if (Math.hypot(x - 6, z - 8) < 12) return true;            /* the well square */
-      if (Math.abs(x) > S - 26 || Math.abs(z) > S - 26) return true;  /* the wall lane */
+    var placed = [];
+    var RAD = 8.4 * HOUSE_SCALE * 0.62;    /* how much ground one house needs */
+
+    function keepOut(x, z) {
+      if (Math.hypot(x + 40, z + 34) < 36) return true;   /* the mosque */
+      if (Math.hypot(x + 40, z + 71) < 27) return true;   /* its courtyard */
+      if (Math.hypot(x - 6, z - 8) < 14) return true;     /* the well square */
+      if (Math.abs(x) > S - 30 || Math.abs(z) > S - 30) return true;
       return false;
     }
 
-    for (var bz = -S + 34; bz < S - 34; bz += block) {
-      for (var row = 0; row < 2; row++) {
-        var z = bz + row * LOT;
-        var facing = row === 0 ? Math.PI : 0;   /* rows face the street between them */
-        for (var x = -S + 34; x < S - 34; x += LOT) {
-          if (blocked(x, z)) continue;
-          var key = BUILT[idx % BUILT.length];
-          idx++;
-          if (!MODELS[key]) continue;
-          var j = ((idx * 37) % 9) / 9 - 0.5;
-          var px = x + j * 1.6, pz = z + j * 1.2, prot = facing + j * 0.10;
-          var g = placeBuilt(key, px, Y, pz, prot, HOUSE_SCALE);
-          if (g) {
-            /* every house is rendered a slightly different mud */
-            var tint = new T.Color(0xc8a582);
-            var hv = hashU((idx * 2246822519) | 0);
-            var hv2 = hashU((idx * 668265263) ^ 0x5bd1);
-            tint.offsetHSL((hv - 0.5) * 0.055, (hv2 - 0.5) * 0.34, (hv - 0.5) * 0.22);
-            g.traverse(function (o) {
-              if (o.isMesh && o.material) {
-                o.material = o.material.clone();
-                o.material.color.copy(tint);
-              }
-            });
-            made++;
-            dressBuilding(key, px, Y, pz, prot, HOUSE_SCALE, idx * 31 + 7);
-            if (idx % 4 === 0) torch(px + 6.4, Y + 2.9, pz + (facing ? -6.6 : 6.6), facing);
-            if (idx % 6 === 0) lamp(px - 5.8, Y + 3.3, pz + (facing ? -5.6 : 5.6), 1.0, false);
-            /* goods stacked against the house, out in the street */
-            for (var q = 0; q < 2; q++) {
-              var sd2 = (idx * 7919 + q * 104729) | 0;
-              if (hashU(sd2) < 0.45) continue;
-              var ax = px + (hashU(sd2 ^ 0x3) - 0.5) * 11;
-              var az = pz + (facing ? -1 : 1) * (7.6 + hashU(sd2 ^ 0x5) * 2.4);
-              propOn(PROPS_STREET, sd2, ax, Y, az, hashU(sd2 ^ 0x9) * 6.283, 1);
-            }
-          }
+    /* Scatter candidates over the whole town, keep the ones that fit. The
+       leftovers between them become the alleys and dead ends. */
+    var STEP = 5.0;
+    for (var gz = -S + 34; gz < S - 34; gz += STEP) {
+      for (var gx = -S + 34; gx < S - 34; gx += STEP) {
+        var sd = ((gx * 73856093) ^ (gz * 19349663)) | 0;
+        var x = gx + (hashU(sd) - 0.5) * STEP * 1.6;
+        var z = gz + (hashU(sd ^ 0x9e3) - 0.5) * STEP * 1.6;
+        if (keepOut(x, z)) continue;
+
+        var near = distToWays(x, z);
+        /* it must stand clear of the roadway, but close enough to be served */
+        if (near.d < RAD * 0.72) continue;
+        if (near.d > 26) continue;
+
+        var ok = true;
+        for (var i = 0; i < placed.length; i++) {
+          var pl = placed[i];
+          var need = (hashU(sd ^ (i * 7919)) > 0.80) ? RAD * 1.42 : RAD * 1.86;
+          if (Math.hypot(x - pl[0], z - pl[1]) < need) { ok = false; break; }
+        }
+        if (!ok) continue;
+
+        var key = BUILT[idx % BUILT.length];
+        idx++;
+        if (!MODELS[key]) continue;
+        /* turn to face whatever way runs nearest, but never squarely */
+        var facing = Math.atan2(near.at.px - x, near.at.pz - z) + (hashU(sd ^ 0xabc) - 0.5) * 0.5;
+        var g = placeBuilt(key, x, Y, z, facing, HOUSE_SCALE);
+        if (!g) continue;
+        placed.push([x, z]);
+        made++;
+        dressBuilding(key, x, Y, z, facing, HOUSE_SCALE, idx * 31 + 7);
+
+        var fx = Math.sin(facing), fz = Math.cos(facing);
+        if (idx % 4 === 0) torch(x + fx * 7.2, Y + 2.9, z + fz * 7.2, facing);
+        if (idx % 6 === 0) lamp(x + fx * 6.4, Y + 3.3, z + fz * 6.4, 1.0, false);
+        for (var q = 0; q < 2; q++) {
+          var sd2 = (idx * 7919 + q * 104729) | 0;
+          if (hashU(sd2) < 0.52) continue;
+          propOn(PROPS_STREET, sd2,
+                 x + fx * (8.2 + hashU(sd2 ^ 3) * 2.4) + fz * (hashU(sd2 ^ 7) - 0.5) * 7,
+                 Y,
+                 z + fz * (8.2 + hashU(sd2 ^ 3) * 2.4) - fx * (hashU(sd2 ^ 7) - 0.5) * 7,
+                 hashU(sd2 ^ 9) * 6.283, 1);
         }
       }
     }
+
+    /* lamps set where the ways meet, not on a grid */
+    for (var L = 0; L < WAYS.length; L += 3) {
+      var w2 = WAYS[L];
+      if (w2.half < 3) continue;
+      var lx = (w2.ax + w2.bx) / 2, lz = (w2.az + w2.bz) / 2;
+      if (keepOut(lx, lz)) continue;
+      if (hashU((L * 2654435761) | 0) > 0.45) {
+        torchPost(lx, TOWN.y, lz);
+      } else {
+        cyl(0.11, 0.15, 3.4, lx, TOWN.y + 1.7, lz, M.stone2);
+        cyl(0.22, 0.16, 0.24, lx, TOWN.y + 3.5, lz, M.metal, false);
+        lamp(lx, TOWN.y + 3.9, lz, 1.25);
+      }
+    }
+
+    W.WAYS = WAYS;
     if (!made) W.diag('no houses were placed');
   }
 
@@ -1259,17 +1472,7 @@
     driveLights(t, dt);
     var pp = W.getPos();
     if (lawn && (Math.abs(pp.x - lawnAt.x) > 11 || Math.abs(pp.z - lawnAt.z) > 11)) refreshLawn(pp);
-    var flameFrame = 1 - (Math.floor((t * 15) % 8) + 1) / 8;
-    for (var q = 0; q < flameTex.length; q++) flameTex[q].offset.y = 1 - (Math.floor((t * 15 + q * 2.7) % 8) + 1) / 8;
-    for (var f = 0; f < fires.length; f++) {
-      var fr = fires[f];
-      if (fr.d2 > 26000) { fr.m.visible = false; fr.core.visible = false; continue; }
-      fr.m.visible = true; fr.core.visible = true;
-      fr.m.lookAt(cp.x, fr.m.position.y, cp.z);
-      fr.core.lookAt(cp.x, fr.core.position.y, cp.z);
-      fr.core.material.opacity = 0.20 + 0.16 * fr.lit;
-      fr.m.scale.set(0.94 + 0.12 * fr.lit, 0.9 + 0.2 * fr.lit, 1);
-    }
+    tickFires(t, dt, cp);
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
       if (lp.d2 > 26000) { lp.g.visible = false; continue; }
@@ -1296,7 +1499,7 @@
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
     W.addFlat(TOWN.x, TOWN.z, TOWNSQ * 1.46, TOWN.y, 80);
 
-    W.addRoad(0, TOWNSQ - 6, 0, TOWNSQ + 240, 9.0);
+    W.addRoad(0, TOWNSQ - 10, 0, TOWNSQ + 240, 9.0);
     W.addRoad(0, TOWNSQ + 130, 220, TOWNSQ + 310, 7);
     W.SPAWN = { x: 0, z: TOWNSQ + 52 };
     W.SPAWN_YAW = 0;
@@ -1317,14 +1520,6 @@
     buildPalace(36, -34);
     buildLibrary(34, 36);
     buildHouses();
-
-    /* lamps down the lanes of the square town */
-    for (var lx = -TOWNSQ + 30; lx <= TOWNSQ - 30; lx += 34) {
-      for (var lz = -TOWNSQ + 68; lz <= TOWNSQ - 68; lz += 46) {
-        cyl(0.13, 0.17, 3.4, 8, lx, TOWN.y + 1.7, lz, M.dark);
-        lamp(lx, TOWN.y + 3.7, lz, 1.3);
-      }
-    }
 
     Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
     loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
