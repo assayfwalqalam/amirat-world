@@ -293,6 +293,11 @@
             }
           }
         });
+        if (name.indexOf('house_') === 0 || name === 'kasbah') {
+          g.scene.traverse(function (o) {
+            if (o.isMesh && o.material && o.material.color) o.material.color.multiplyScalar(1.0).lerp(new T.Color(0xd8b98d), 0.34);
+          });
+        }
         MODELS[name] = g.scene;
         finish();
       }, undefined, function () {
@@ -640,7 +645,7 @@
     for (var i = 0; i < N; i++) {
       var a = (i / N) * Math.PI * 2;
       var toMouth = Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2)));
-      if (toMouth < 0.34) continue;
+      if (toMouth < 0.50) continue;
       var key = ['rock_a', 'rock_b', 'rock_c'][i % 3];
       if (!MODELS[key]) continue;
       var rr = R + 1.0 + ((i * 31) % 5) * 0.4;
@@ -654,9 +659,9 @@
       if (MODELS[k2]) place(k2, cx + Math.cos(ba) * br, Y + H - 3.4 + (b % 3) * 0.7, cz + Math.sin(ba) * br, 7 + (b % 3) * 2.4, ba);
     }
     W.addBox(cx, Y + H + 2.2, cz, R * 0.8, 2.4, R * 0.8, 0);
-    if (MODELS.rock_c) place('rock_c', cx - 6.4, Y - 1.2, cz + R + 0.6, 9, 0.6);
-    if (MODELS.rock_a) place('rock_a', cx + 6.4, Y - 1.2, cz + R + 0.6, 8.5, 2.4);
-    if (MODELS.rock_b) place('rock_b', cx, Y + 4.6, cz + R + 1.2, 7, 1.1);
+    if (MODELS.rock_c) place('rock_c', cx - 10.5, Y - 1.2, cz + R - 1.5, 9, 0.6);
+    if (MODELS.rock_a) place('rock_a', cx + 10.5, Y - 1.2, cz + R - 1.5, 8.5, 2.4);
+    if (MODELS.rock_b) place('rock_b', cx, Y + 6.2, cz + R + 0.4, 7, 1.1);
 
     var fl = new T.Mesh(new T.CircleGeometry(R - 1.4, 24), M.floor);
     fl.rotation.x = -Math.PI / 2; fl.position.set(cx, Y + 0.05, cz);
@@ -913,7 +918,7 @@
       '3': { x: 0, z: -(TOWN.R - 3.2), yaw: 0, pitch: -0.20, h: 10.6 },
       '4': { x: 300, z: 400, yaw: 0, pitch: -0.03 },
       '5': { x: 430, z: -228, yaw: 0, pitch: -0.05 },
-      '6': { x: -360, z: 285, yaw: 0, pitch: -0.02 },
+      '6': { x: -360, z: 306, yaw: 0, pitch: 0.02 },
       '7': { x: -34, z: -6, yaw: 0, pitch: 0.06 },
       '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true }
     };
