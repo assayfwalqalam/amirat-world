@@ -624,6 +624,14 @@
         if (sp.k !== 'room' && j === 0 && hashU(sd ^ 0x1234) > 0.55) {
           lamp(wx, by + ly + 0.9, wz, 0.85, false);
         }
+        /* Rooms are lit from within, so a window reads as a lit window and not
+           a black hole punched in the wall. Most houses, not all -- some
+           people have gone to bed. */
+        if (sp.k === 'room' && j === 0 && hashU(sd ^ 0x2b1d) > 0.28) {
+          var rx = bx + (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
+          var rz = bz + (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
+          lamp(rx, by + ly + 1.35, rz, 0.72, false);
+        }
       }
     }
   }

@@ -94,8 +94,12 @@
     var moist = fbm(x * 0.00040 + 91.3, z * 0.00040 - 17.7, 3);
     var rocky = fbm(x * 0.00066 - 33.1, z * 0.00066 + 55.9, 3);
     var oa = oasisAt(x, z);
-    /* the edge of the green is ragged, not a drawn circle */
-    moist = lerp(moist, 0.94, oa * (0.72 + 0.28 * fbm(x * 0.0042 + 5.1, z * 0.0042 - 7.3, 2)));
+    /* Watered ground, not a lawn: the green comes in clumps with bare sand
+       between them, and the edge of the belt is ragged rather than a circle. */
+    if (oa > 0.002) {
+      var patch = fbm(x * 0.0042 + 5.1, z * 0.0042 - 7.3, 3);
+      moist = lerp(moist, 0.79, oa * (0.34 + 0.66 * patch));
+    }
     var g = sstep(0.38, 0.58, moist);
     var r = sstep(0.56, 0.73, rocky) * (1 - g * 0.8);
     return { grass: g, rock: r };
