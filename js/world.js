@@ -211,9 +211,9 @@
       composer.addPass(new THREE.RenderPass(scene, cam));
       var bloom = new THREE.UnrealBloomPass(
         new THREE.Vector2(innerWidth, innerHeight),
-        TIER === 2 ? 0.72 : 0.5,   /* strength */
+        TIER === 2 ? 0.40 : 0.28,  /* strength */
         0.85,                       /* radius */
-        0.62                        /* threshold: only bright things glow */
+        0.80                        /* threshold: only bright things glow */
       );
       composer.addPass(bloom);
       W.bloom = bloom;

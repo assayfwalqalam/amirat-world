@@ -190,11 +190,11 @@
     W.scene.add(m);
 
     var core = new T.Mesh(new T.PlaneGeometry(2.3 * scale, 2.3 * scale),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffb154, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.78 }));
+      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffb154, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.5 }));
     core.position.set(x, y + 0.45 * scale, z);
     W.scene.add(core);
 
-    var f = { m: m, core: core, base: 4.6 * power, reach: 34 * Math.sqrt(power),
+    var f = { m: m, core: core, base: 3.0 * power, reach: 30 * Math.sqrt(power),
               x: x, y: y + 0.55 * scale, z: z, col: 0xffa445,
               ph: Math.random() * 10, sc: scale, frame: 0, lit: 1 };
     fires.push(f);
@@ -627,56 +627,39 @@
   /* Houses laid along streets inside the square, packed the way a desert town
      packs: rows facing the lanes, backs close together. */
   function buildSculptedHouses() {
-    var Y = TOWN.y, S = TOWNSQ, made = 0;
-    var lanes = [-S + 46, -S + 92, S - 92, S - 46];
-    var idx = 0;
-    lanes.forEach(function (lz, li) {
-      var facing = (li < 2) ? 0 : Math.PI;      /* rows face the lane between them */
-      for (var x = -S + 40; x <= S - 40; x += 15.5) {
-        if (Math.abs(x) < 16 && li >= 2) continue;   /* keep the gate road clear */
-        if (Math.abs(x) < 12) continue;
-        var jitter = ((idx * 37) % 7) / 7 - 0.5;
-        var key = BUILT[idx % BUILT.length];
-        idx++;
-        if (!MODELS[key]) continue;
-        var px = x + jitter * 2.4;
-        var pz = lz + jitter * 2.0;
-        var g = placeBuilt(key, px, Y, pz, facing + jitter * 0.14, 1.0);
-        if (g) {
-          made++;
-          if (idx % 3 === 0) torch(px + 4.6, Y + 2.9, pz - 4.0, facing);
-          if (idx % 4 === 0) lamp(px - 4.4, Y + 3.2, pz + 3.6, 1.1, false);
+    var Y = TOWN.y, S = TOWNSQ, made = 0, idx = 0;
+    var LOT = 15.5, STREET = 11.0;
+    var block = LOT * 2 + STREET;          /* two rows back to back, then a street */
+
+    /* keep clear of the mosque, the well and the gate road */
+    function blocked(x, z) {
+      if (Math.abs(x) < 13 && z > -20) return true;             /* the gate road */
+      if (Math.hypot(x + 34, z + 30) < 30) return true;          /* the mosque */
+      if (Math.hypot(x - 6, z - 8) < 12) return true;            /* the well square */
+      if (Math.abs(x) > S - 26 || Math.abs(z) > S - 26) return true;  /* the wall lane */
+      return false;
+    }
+
+    for (var bz = -S + 34; bz < S - 34; bz += block) {
+      for (var row = 0; row < 2; row++) {
+        var z = bz + row * LOT;
+        var facing = row === 0 ? Math.PI : 0;   /* rows face the street between them */
+        for (var x = -S + 34; x < S - 34; x += LOT) {
+          if (blocked(x, z)) continue;
+          var key = BUILT[idx % BUILT.length];
+          idx++;
+          if (!MODELS[key]) continue;
+          var j = ((idx * 37) % 9) / 9 - 0.5;
+          var g = placeBuilt(key, x + j * 1.6, Y, z + j * 1.2, facing + j * 0.10, 1.0);
+          if (g) {
+            made++;
+            if (idx % 5 === 0) torch(x + 5.2, Y + 2.9, z + (facing ? -5.0 : 5.0), facing);
+            if (idx % 7 === 0) lamp(x - 4.6, Y + 3.3, z + (facing ? -4.4 : 4.4), 1.1, false);
+          }
         }
       }
-    });
-    /* a second rank along the side walls */
-    [-S + 46, S - 46].forEach(function (lx, li) {
-      for (var z = -S + 62; z <= S - 62; z += 15.5) {
-        var key = BUILT[idx % BUILT.length];
-        idx++;
-        if (!MODELS[key]) continue;
-        var g = placeBuilt(key, lx, Y, z, li ? -Math.PI / 2 : Math.PI / 2, 1.0);
-        if (g) made++;
-      }
-    });
-    if (!made) W.diag('no houses were placed');
-  }
-
-  /* protruding roof beams, the signature of the style */
-  function beamRow2(x, z, w, d, h, rot, m) {
-    var count = Math.max(3, Math.round(w / 0.9));
-    var c = Math.cos(rot), sn = Math.sin(rot);
-    for (var i = 0; i < count; i++) {
-      var bx = -w / 2 + (i + 0.5) * (w / count);
-      [-1, 1].forEach(function (sgn) {
-        var lx = bx, lz = sgn * (d / 2 + 0.16);
-        var beam = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.55, 6), M.wood);
-        beam.rotation.x = Math.PI / 2;
-        beam.rotation.z = rot;
-        beam.position.set(x + lx * c - lz * sn, h - 0.3 + TOWN.y, z + lx * sn + lz * c);
-        W.scene.add(beam);
-      });
     }
+    if (!made) W.diag('no houses were placed');
   }
 
   /* a desert camp: open tents around a fire */
@@ -1159,7 +1142,7 @@
       fr.m.visible = true; fr.core.visible = true;
       fr.m.lookAt(cp.x, fr.m.position.y, cp.z);
       fr.core.lookAt(cp.x, fr.core.position.y, cp.z);
-      fr.core.material.opacity = 0.30 + 0.22 * fr.lit;
+      fr.core.material.opacity = 0.20 + 0.16 * fr.lit;
       fr.m.scale.set(0.94 + 0.12 * fr.lit, 0.9 + 0.2 * fr.lit, 1);
     }
     for (var l = 0; l < lamps.length; l++) {
@@ -1186,7 +1169,7 @@
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
-    W.addFlat(TOWN.x, TOWN.z, TOWNSQ + 30, TOWN.y, 90);
+    W.addFlat(TOWN.x, TOWN.z, TOWNSQ * 1.46, TOWN.y, 80);
 
     W.addRoad(0, TOWNSQ - 6, 0, TOWNSQ + 240, 9.0);
     W.addRoad(0, TOWNSQ + 130, 220, TOWNSQ + 310, 7);
