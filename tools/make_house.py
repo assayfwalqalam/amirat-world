@@ -207,13 +207,28 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
     back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
     left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2))
     right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2))
-    front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2))
+    # The front wall carries the doorway, so it must NOT be recorded as one
+    # solid slab: the opening would be cut from the geometry while collision
+    # still sealed it, and the house could be seen into but never entered.
+    # It is recorded below as the pier either side plus the lintel over.
+    front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2), collide=not front_door)
     for wl in (back, left, right, front):
         erode(wl, levels=2)
     fy = cy - d / 2 + T / 2
     if front_door:
         cut(front, solid(dw, T + 1.2, dh - dw / 2, (dx, fy, z0 + (dh - dw / 2) / 2), False))
         cut(front, cyl(dw / 2, T + 1.2, (dx, fy, z0 + dh - dw / 2), rot=(math.pi / 2, 0, 0), verts=16))
+        # collision for the wall that remains around the opening
+        x0, x1 = cx - w / 2, cx + w / 2
+        gap0, gap1 = dx - dw / 2, dx + dw / 2
+        for a, b in ((x0, gap0), (gap1, x1)):
+            if b - a > 0.04:
+                COLLIDERS.append({"c": [round((a + b) / 2, 3), round(z0 + h / 2, 3), round(-fy, 3)],
+                                  "h": [round((b - a) / 2, 3), round(h / 2, 3), round(T / 2, 3)]})
+        lintel_z0 = z0 + dh
+        if h - dh > 0.04:
+            COLLIDERS.append({"c": [round(dx, 3), round(lintel_z0 + (h - dh) / 2, 3), round(-fy, 3)],
+                              "h": [round(dw / 2, 3), round((h - dh) / 2, 3), round(T / 2, 3)]})
     for i in range(n_win):
         wx = cx + random.uniform(-w * 0.34, w * 0.34)
         if front_door and abs(wx - dx) < 1.5:

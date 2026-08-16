@@ -158,7 +158,15 @@ HW, HD, HH, T = 26.0, 24.0, 11.5, 1.1
 back = box(HW, T, HH, (0, HD / 2 - T / 2, HH / 2))
 left = box(T, HD - T * 2, HH, (-HW / 2 + T / 2, 0, HH / 2))
 right = box(T, HD - T * 2, HH, (HW / 2 - T / 2, 0, HH / 2))
-front = box(HW, T, HH, (0, -HD / 2 + T / 2, HH / 2))
+# The front wall carries the great door, so it is not recorded as one slab:
+# collision would seal an opening the eye can see straight through. The piers
+# either side and the lintel over it are recorded instead.
+front = box(HW, T, HH, (0, -HD / 2 + T / 2, HH / 2), 0, False)
+DOOR_W, DOOR_H = 4.2, 6.4
+_fy = -HD / 2 + T / 2
+for _a, _b in ((-HW / 2, -DOOR_W / 2), (DOOR_W / 2, HW / 2)):
+    rec(((_a + _b) / 2, _fy, HH / 2), (_b - _a) / 2, T / 2, HH / 2)
+rec((0, _fy, DOOR_H + (HH - DOOR_H) / 2), DOOR_W / 2, T / 2, (HH - DOOR_H) / 2)
 for w in (back, left, right, front):
     erode(w)
 

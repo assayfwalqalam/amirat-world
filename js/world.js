@@ -165,7 +165,9 @@
     for (var i = 0; i < FLATS.length; i++) {
       var f = FLATS[i];
       var d = Math.sqrt((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z));
-      var v = 1 - sstep(f.r * 0.75, f.r + f.b * 0.5, d);
+      /* the packed ground reaches the full radius before it starts to give
+         way, or grass creeps back in at the corners of a square town */
+      var v = 1 - sstep(f.r * 0.96, f.r + f.b * 0.5, d);
       if (v > best) best = v;
     }
     return best;
@@ -354,9 +356,13 @@
   /* ------------------------------------------------------------- lights */
   function initLights() {
     /* moonlight from above, and the whole sky as a soft fill · nothing reads pure black */
-    scene.add(new THREE.HemisphereLight(0x6a6cb4, 0x2b2540, 0.85));
-    scene.add(new THREE.AmbientLight(0x3b3a63, 0.30));
-    var moon = new THREE.DirectionalLight(0xccd2ff, 0.88);
+    /* Night light. The sky lights the world faintly and blue; the moon gives
+       the only direction. Kept low on purpose, because every fire and lamp in
+       the town has to read as the brighter thing -- that is what makes a night
+       scene look like night rather than a dim afternoon. */
+    scene.add(new THREE.HemisphereLight(0x5b5ea6, 0x241f36, 0.36));
+    scene.add(new THREE.AmbientLight(0x33325a, 0.16));
+    var moon = new THREE.DirectionalLight(0xc6cdf5, 0.60);
     moon.position.copy(moonDir).multiplyScalar(900);
     if (TIER === 2) {
       moon.castShadow = true;
@@ -440,6 +446,11 @@
           '  float g = grain.r * 0.65 + grit.r * 0.35;',
           '  col *= mix(1.0, 0.58 + 0.86 * g, nearW * 0.62);',
           '}',
+          /* Moonlight is blue, and photographed daylight sand is far too bright
+             to stand in for ground at night: left alone it reads as lit
+             concrete and outshines the walls it should sit beneath. */
+          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.40);',
+          'col *= 0.46;',
           'diffuseColor.rgb *= col;'
         ].join('\n'));
     };

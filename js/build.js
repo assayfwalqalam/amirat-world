@@ -353,18 +353,18 @@
   function torch(x, y, z, rot) {
     if (MODELS.p_torch) {
       placeBuilt('p_torch', x, y, z, (rot || 0) + Math.PI, 1.0);
-      fire(x - Math.sin(rot || 0) * 0.44, y + 1.02, z - Math.cos(rot || 0) * 0.44, 1.15, 1.35);
+      fire(x - Math.sin(rot || 0) * 0.44, y + 1.02, z - Math.cos(rot || 0) * 0.44, 0.42, 1.25);
     } else {
-      fire(x, y + 0.5, z, 1.15, 1.35);
+      fire(x, y + 0.5, z, 0.42, 1.25);
     }
   }
 
   function torchPost(x, y, z) {
     if (MODELS.p_torchpost) {
       placeBuilt('p_torchpost', x, y, z, Math.random() * 6.283, 1.0);
-      fire(x, y + 2.62, z, 1.3, 1.6);
+      fire(x, y + 2.62, z, 0.50, 1.45);
     } else {
-      fire(x, y + 2.4, z, 1.3, 1.6);
+      fire(x, y + 2.4, z, 0.50, 1.45);
     }
   }
 
@@ -590,7 +590,8 @@
     p_carpet: 1, p_table: 1, p_chest: 1, p_awning: 1, p_stall: 1, p_cart: 1,
     p_bench: 1, p_barrel: 1, p_barrels: 1, p_crates: 1, p_sacks: 1, p_jars: 1,
     p_plantpot: 1, p_spears: 1, p_swordrack: 1, p_brazier: 1, p_well: 1,
-    p_torch: 1, p_torchpost: 1, p_firewood: 1, p_basket: 1, p_pot: 1
+    p_torch: 1, p_torchpost: 1, p_firewood: 1, p_basket: 1, p_pot: 1,
+    p_stones: 1
   };
   var SMALL = [];
 
@@ -633,6 +634,53 @@
           var rz = bz + (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
           lamp(rx, by + ly + 1.35, rz, 0.72, false);
         }
+      }
+    }
+  }
+
+  /* A market stands in every open place: stalls under awnings around the rim,
+     the goods stacked behind them, a brazier for the cold. Without this the
+     squares read as empty yards, which is the one thing a town square is not. */
+  function dressSquares() {
+    var GOODS = ['p_jars', 'p_crates', 'p_sacks', 'p_barrels', 'p_basket',
+                 'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood', 'p_stones'];
+    for (var q = 0; q < SQUARES.length; q++) {
+      var sq = SQUARES[q];
+      var stalls = 5 + Math.floor(hashU((q * 7717) | 0) * 4);
+      for (var i = 0; i < stalls; i++) {
+        var sd = (q * 92821 + i * 51203) | 0;
+        var a = (i / stalls) * 6.283 + hashU(sd) * 0.6;
+        var rr = sq.r * (0.72 + hashU(sd ^ 0x3) * 0.34);
+        var sx = sq.x + Math.cos(a) * rr, sz = sq.z + Math.sin(a) * rr;
+        if (W.roadAt && W.roadAt(sx, sz) > 0.55) continue;
+        var face = Math.atan2(sq.x - sx, sq.z - sz);      /* face the square */
+        var y = W.heightAt(sx, sz);
+        placeBuilt(hashU(sd ^ 0x9) > 0.45 ? 'p_stall' : 'p_awning', sx, y, sz, face, 1);
+        var g = MODELS.p_stall ? null : null;
+        /* the goods behind the stall, and one thing set out in front */
+        for (var k = 0; k < 3; k++) {
+          var gd = (sd ^ (k * 7919)) | 0;
+          var back = 1.9 + hashU(gd) * 1.5;
+          var side = (hashU(gd ^ 0x5) - 0.5) * 3.4;
+          propOn(GOODS, gd,
+                 sx - Math.sin(face) * (k === 2 ? -1.7 : back) + Math.cos(face) * side,
+                 y,
+                 sz - Math.cos(face) * (k === 2 ? -1.7 : back) - Math.sin(face) * side,
+                 hashU(gd ^ 0xb) * 6.283, 1);
+        }
+      }
+      /* something burning at the middle of the square */
+      var bx = sq.x + (hashU((q * 331) | 0) - 0.5) * 6;
+      var bz = sq.z + (hashU((q * 733) | 0) - 0.5) * 6;
+      var by = W.heightAt(bx, bz);
+      if (MODELS.p_brazier) placeBuilt('p_brazier', bx, by, bz, hashU(q) * 6.283, 1);
+      fire(bx, by + 0.62, bz, 0.66, 1.15);
+      /* and a cart left standing */
+      if (hashU((q * 1471) | 0) > 0.35) {
+        var cx2 = sq.x + Math.cos(q * 2.1) * sq.r * 0.55;
+        var cz2 = sq.z + Math.sin(q * 2.1) * sq.r * 0.55;
+        propOn(['p_cart', 'p_bench'], (q * 5501) | 0, cx2, W.heightAt(cx2, cz2), cz2,
+               hashU((q * 17) | 0) * 6.283, 1);
       }
     }
   }
@@ -719,6 +767,30 @@
       var a2 = w2 / 12;
       torch(-S + S * 2 * a2, Y + 12.2, S - 4.5, 0);
       torch(-S + S * 2 * a2, Y + 12.2, -S + 4.5, Math.PI);
+    }
+
+    /* Things stacked against the inside of the wall. A town wall is never a
+       clean skirting board -- stone left over from the building of it, cut
+       firewood, stores nobody has moved. It is what makes the base read as
+       lived in rather than as a wall meeting a floor. */
+    var LEAN = ['p_stones', 'p_firewood', 'p_crates', 'p_barrels', 'p_sacks',
+                'p_jars', 'p_ropecoil', 'p_basket', 'p_stones', 'p_crates'];
+    var IN = S - 8.6;
+    for (var side = 0; side < 4; side++) {
+      for (var n2 = 0; n2 < 16; n2++) {
+        var sd3 = (side * 91967 + n2 * 40597) | 0;
+        if (hashU(sd3) < 0.36) continue;                  /* leave gaps */
+        var along = -S + 12 + hashU(sd3 ^ 0x5a) * (S * 2 - 24);
+        /* the south run carries the gateway and both rampart stairs */
+        if (side === 0 && Math.abs(along) < 62) continue;
+        var jitter = hashU(sd3 ^ 0xa7) * 2.6;
+        var px, pz, face;
+        if (side === 0)      { px = along;      pz = IN - jitter;  face = 0; }
+        else if (side === 1) { px = along;      pz = -IN + jitter; face = Math.PI; }
+        else if (side === 2) { px = IN - jitter; pz = along;       face = -Math.PI / 2; }
+        else                 { px = -IN + jitter; pz = along;      face = Math.PI / 2; }
+        propOn(LEAN, sd3, px, Y, pz, face + (hashU(sd3 ^ 0xd1) - 0.5) * 0.7, 1);
+      }
     }
   }
 
@@ -901,6 +973,8 @@
     return { d: best, at: bestSeg };
   }
 
+  var SQUARES = [];       /* the open places · where a market stands */
+
   function growStreets(S) {
     WAYS.length = 0;
     var gate = [0, S - 12];
@@ -909,6 +983,14 @@
     var plazaA = [58, -58];
     var plazaB = [-64, 52];
     var plazaC = [70, 62];
+    SQUARES = [
+      { x: well[0], z: well[1], r: 15 },
+      { x: plazaA[0], z: plazaA[1], r: 13 },
+      { x: plazaB[0], z: plazaB[1], r: 13 },
+      { x: plazaC[0], z: plazaC[1], r: 12 },
+      { x: 0, z: S - 30, r: 16 },            /* inside the gate */
+      { x: mosque[0] + 22, z: mosque[1] + 20, r: 12 }
+    ];
 
     /* the arteries: the ways everyone walks */
     wander(gate[0], gate[1], well[0], well[1], 6.0, 26, 3, 1013);
@@ -1535,8 +1617,30 @@
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
     W.addFlat(TOWN.x, TOWN.z, TOWNSQ * 1.46, TOWN.y, 80);
 
-    W.addRoad(0, TOWNSQ - 10, 0, TOWNSQ + 240, 9.0);
-    W.addRoad(0, TOWNSQ + 130, 220, TOWNSQ + 310, 7);
+    /* The roads out of the gate. A road that leaves a gate in a dead straight
+       line for a quarter of a kilometre reads as a drawn line on a map, so
+       each one is laid as a chain of short legs that lean as they go. */
+    (function roadOut(x0, z0, ang, legs, legLen, sway, half, seed) {
+      var x = x0, z = z0, a = ang;
+      for (var i = 0; i < legs; i++) {
+        var sd = (seed + i * 40507) | 0;
+        a += (hashU(sd) - 0.5) * sway;
+        var nx = x + Math.sin(a) * legLen, nz = z + Math.cos(a) * legLen;
+        W.addRoad(x, z, nx, nz, half * (1 - i / (legs * 1.7)));
+        x = nx; z = nz;
+        if (i === Math.floor(legs / 2)) {          /* a track branches off */
+          var bA = a + (hashU(sd ^ 0x77) > 0.5 ? 0.9 : -0.9);
+          var bx = x, bz = z;
+          for (var k = 0; k < 4; k++) {
+            var bSd = (sd ^ (k * 9173)) | 0;
+            bA += (hashU(bSd) - 0.5) * 0.5;
+            var ex = bx + Math.sin(bA) * legLen * 0.9, ez = bz + Math.cos(bA) * legLen * 0.9;
+            W.addRoad(bx, bz, ex, ez, 4.6 - k * 0.6);
+            bx = ex; bz = ez;
+          }
+        }
+      }
+    })(0, TOWNSQ - 10, 0, 7, 42, 0.44, 9.0, 8641);
     W.SPAWN = { x: 0, z: TOWNSQ + 52 };
     W.SPAWN_YAW = 0;
     W.SHOTS = {
@@ -1549,7 +1653,11 @@
       '7': { x: -40, z: -76, yaw: 3.14159, pitch: 0.05, h: 2.2 },
       '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true },
       '9': { x: 0, z: -(TOWN.R + 34), yaw: 3.14, pitch: 0.02, h: 2.4 },
-      '10': { x: -72, z: 4, yaw: 1.6, pitch: 0.0, h: 2.2 }
+      '10': { x: -72, z: 4, yaw: 1.6, pitch: 0.0, h: 2.2 },
+      '11': { x: 6, z: 34, yaw: 0.0, pitch: -0.06, h: 2.3 },      /* the well market  */
+      '12': { x: 0, z: TOWNSQ - 6, yaw: 0.0, pitch: -0.04, h: 2.5 }, /* inside the gate */
+      '13': { x: 58, z: -32, yaw: 3.02, pitch: -0.04, h: 2.3 },   /* the east square  */
+      '14': { x: 0, z: 470, yaw: 0.0, pitch: -0.10, h: 120, fly: true } /* the oasis from above */
     };
 
     buildTown();
@@ -1566,6 +1674,7 @@
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();
+        dressSquares();
         /* the friday mosque, made in Blender: hall, dome, minaret, courtyard */
         if (MODELS.m_mosque) {
           var MX = -40, MZ = -34;

@@ -412,19 +412,37 @@ elif KIND == "torch":
     jitter(head, 0.02)
 
 elif KIND == "torchpost":
-    # a free-standing torch, for courtyards and gateways
-    cyl(0.2, 0.26, 0.22, (0, 0, 0.11), verts=12, collide=True)
-    cyl(0.06, 0.075, 2.3, (0, 0, 1.2), verts=10, collide=True)
-    for k in range(3):
-        a = k * math.pi * 2 / 3
-        cyl(0.022, 0.02, 0.42, (math.cos(a) * 0.12, math.sin(a) * 0.12, 0.3),
-            rot=(0.5 * math.sin(a), -0.5 * math.cos(a), 0), verts=6)
-    cyl(0.16, 0.1, 0.2, (0, 0, 2.4), verts=12)
-    torus(0.15, 0.02, (0, 0, 2.48), seg=12)
-    hd = sphere(0.13, (0, 0, 2.6))
-    hd.scale = (1, 1, 1.2)
-    bpy.ops.object.transform_apply(scale=True)
-    jitter(hd, 0.02)
+    # A cresset: a timber stake with an open iron basket on top holding the
+    # burning pitch. A smooth pole with a bulb on the end reads as a Victorian
+    # street lamp, which is the one thing this must not look like.
+    st = cyl(0.34, 0.40, 0.26, (0, 0, 0.13), verts=10, collide=True)   # stone footing
+    jitter(st, 0.02)
+    for k in range(4):                                                  # wedged packing stones
+        a = k * math.pi * 2 / 4 + 0.4
+        b = sphere(0.1, (math.cos(a) * 0.3, math.sin(a) * 0.3, 0.06))
+        b.scale = (1.3, 1.0, 0.6)
+        bpy.ops.object.transform_apply(scale=True)
+        jitter(b, 0.02)
+    post = cyl(0.085, 0.072, 2.05, (0, 0, 1.18), verts=8, collide=True)  # the stake
+    jitter(post, 0.012)
+    for z in (0.62, 1.34):                                              # iron bands
+        torus(0.088, 0.018, (0, 0, z), seg=10)
+    for k in range(3):                                                  # braced feet
+        a = k * math.pi * 2 / 3 + 0.7
+        cyl(0.03, 0.024, 0.56, (math.cos(a) * 0.17, math.sin(a) * 0.17, 0.34),
+            rot=(0.62 * math.sin(a), -0.62 * math.cos(a), 0), verts=5)
+    # the basket: a ring of upright bars closed by two hoops, open at the top
+    cyl(0.11, 0.16, 0.1, (0, 0, 2.25), verts=10)                        # collar
+    for k in range(8):
+        a = k * math.pi * 2 / 8
+        cyl(0.017, 0.015, 0.34, (math.cos(a) * 0.15, math.sin(a) * 0.15, 2.46),
+            rot=(-0.30 * math.sin(a), 0.30 * math.cos(a), 0), verts=4)
+    torus(0.155, 0.019, (0, 0, 2.34), seg=14)
+    torus(0.215, 0.019, (0, 0, 2.62), seg=14)
+    for k in range(4):                                                  # the fuel in it
+        a = k * 1.6
+        c = sphere(0.075, (math.cos(a) * 0.07, math.sin(a) * 0.07, 2.45))
+        jitter(c, 0.02)
 
 elif KIND == "stones":
     for i in range(9):
@@ -474,8 +492,10 @@ TINT = {
     "bowarrows": (0.35, 0.25, 0.15), "basket": (0.52, 0.40, 0.22),
     "brazier": (0.24, 0.20, 0.17), "oillamp": (0.46, 0.34, 0.20),
     "waterjug": (0.45, 0.28, 0.19), "ropecoil": (0.50, 0.42, 0.28),
-    "firewood": (0.32, 0.22, 0.14), "torch": (0.20, 0.17, 0.15),
-    "torchpost": (0.24, 0.20, 0.16),
+    "firewood": (0.32, 0.22, 0.14),
+    # iron stands right under a flame -- too dark a tint and it reads as a
+    # black modern lamp post rather than a lit bracket
+    "torch": (0.34, 0.28, 0.23), "torchpost": (0.38, 0.32, 0.26),
 }.get(KIND, (0.45, 0.36, 0.26))
 
 mat = bpy.data.materials.new(KIND)
