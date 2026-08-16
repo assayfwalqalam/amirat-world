@@ -251,6 +251,44 @@
     return d;
   }
 
+  /* Some models arrive with geometry but no surface. We paint them ourselves,
+     projecting a photographed wall from three directions and blending by normal,
+     so no unwrapping is needed and the stone never smears. */
+  function triplanar(base, color, scale, rough) {
+    var m = new T.MeshStandardMaterial({ color: color, roughness: rough === undefined ? 0.97 : rough, metalness: 0 });
+    var mapT = W.tex('assets/' + base + '_d.jpg', true, true);
+    m.map = mapT;
+    m.onBeforeCompile = function (sh) {
+      sh.uniforms.tTri = { value: mapT };
+      sh.uniforms.uScale = { value: scale || 0.34 };
+      sh.vertexShader = 'varying vec3 vTriP;\nvarying vec3 vTriN;\n' + sh.vertexShader.replace(
+        '#include <begin_vertex>',
+        ['#include <begin_vertex>',
+         'vTriP = (modelMatrix * vec4(transformed,1.0)).xyz;',
+         'vTriN = normalize(mat3(modelMatrix) * objectNormal);'].join('\n')
+      );
+      sh.fragmentShader = ['uniform sampler2D tTri;', 'uniform float uScale;',
+        'varying vec3 vTriP;', 'varying vec3 vTriN;', ''].join('\n') + sh.fragmentShader;
+      sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', [
+        'vec3 bw = pow(abs(vTriN), vec3(4.0));',
+        'bw /= max(0.0001, (bw.x + bw.y + bw.z));',
+        'vec3 tx = texture2D(tTri, vTriP.zy * uScale).rgb;',
+        'vec3 ty = texture2D(tTri, vTriP.xz * uScale).rgb;',
+        'vec3 tz = texture2D(tTri, vTriP.xy * uScale).rgb;',
+        'vec3 tri = tx * bw.x + ty * bw.y + tz * bw.z;',
+        'vec3 mx = texture2D(tTri, vTriP.zy * uScale * 0.19).rgb;',
+        'vec3 my = texture2D(tTri, vTriP.xz * uScale * 0.19).rgb;',
+        'vec3 mz = texture2D(tTri, vTriP.xy * uScale * 0.19).rgb;',
+        'vec3 mac = mx * bw.x + my * bw.y + mz * bw.z;',
+        'tri *= (0.62 + 0.78 * mac.r);',
+        'diffuseColor.rgb *= tri;'
+      ].join('\n'));
+    };
+    m.customProgramCacheKey = function () { return 'tri' + base + (scale || 0.34); };
+    return m;
+  }
+  W.triplanar = triplanar;
+
   /* ------------------------------------------------------------- models */
   /* size is the wanted height, unless axis is 'x' (flat things like rugs) */
   function place(key, x, y, z, size, rot, solid, axis) {
@@ -308,7 +346,13 @@
             }
           }
         });
-        if (name.indexOf('house_') === 0 || name === 'kasbah') {
+        if (name.indexOf('ah') === 0 && name.length === 3) {
+          if (!M.wallTri) M.wallTri = triplanar('t_adobe', 0xd9b78c, 0.34);
+          g.scene.traverse(function (o) { if (o.isMesh) o.material = M.wallTri; });
+        } else if (name === 'mosque_orn') {
+          if (!M.mosqueTri) M.mosqueTri = triplanar('t_ashlar', 0xe7d0a8, 0.20, 0.9);
+          g.scene.traverse(function (o) { if (o.isMesh) o.material = M.mosqueTri; });
+        } else if (name.indexOf('house_') === 0 || name === 'kasbah') {
           g.scene.traverse(function (o) {
             if (o.isMesh && o.material && o.material.color) o.material.color.multiplyScalar(1.0).lerp(new T.Color(0xd8b98d), 0.34);
           });
