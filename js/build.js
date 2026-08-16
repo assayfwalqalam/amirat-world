@@ -1016,6 +1016,7 @@
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
       if (h < W.WATER_Y + 0.12 || w.g < 0.28 || w.r > 0.6) continue;
+      if (W.flatAt(gx, gz) > 0.30) continue;
       var sc = (0.55 + hashU(sd ^ 0x85ebca6b) * 0.7) * (0.55 + 0.7 * w.g);
       dummy.position.set(gx, h - 0.07, gz);
       dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
