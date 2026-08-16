@@ -82,9 +82,25 @@
     M.floor = new T.MeshStandardMaterial({ color: 0x7d6647, roughness: 1 });
   }
 
+  /* every face gets the same brick size, whatever the wall's dimensions */
+  var TILE = 2.6;
+  function uvScaleBox(geo, w, h, d) {
+    var uv = geo.attributes.uv;
+    var pairs = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    for (var f = 0; f < 6; f++) {
+      var su = pairs[f][0] / TILE, sv = pairs[f][1] / TILE;
+      for (var i = 0; i < 4; i++) {
+        var k = f * 4 + i;
+        uv.setXY(k, uv.getX(k) * su, uv.getY(k) * sv);
+      }
+    }
+    uv.needsUpdate = true;
+    return geo;
+  }
+
   /* a solid box: drawn and collided */
   function box(w, h, d, x, y, z, m, rot, solid) {
-    var g = new T.Mesh(new T.BoxGeometry(w, h, d), m || M.brick);
+    var g = new T.Mesh(uvScaleBox(new T.BoxGeometry(w, h, d), w, h, d), m || M.brick);
     g.position.set(x, y, z);
     if (rot) g.rotation.y = rot;
     W.scene.add(g);
@@ -92,14 +108,26 @@
     return g;
   }
   function cyl(rt, rb, h, seg, x, y, z, m, solid) {
-    var g = new T.Mesh(new T.CylinderGeometry(rt, rb, h, seg), m || M.stone);
+    var cg = new T.CylinderGeometry(rt, rb, h, seg);
+    var cuv = cg.attributes.uv;
+    for (var ci = 0; ci < cuv.count; ci++) {
+      cuv.setXY(ci, cuv.getX(ci) * (2 * Math.PI * Math.max(rt, rb) / TILE), cuv.getY(ci) * (h / TILE));
+    }
+    cuv.needsUpdate = true;
+    var g = new T.Mesh(cg, m || M.stone);
     g.position.set(x, y, z);
     W.scene.add(g);
     if (solid !== false) W.addBox(x, y, z, Math.max(rt, rb) * 0.86, h / 2, Math.max(rt, rb) * 0.86, 0);
     return g;
   }
   function dome(r, x, y, z, m, seg) {
-    var g = new T.Mesh(new T.SphereGeometry(r, seg || 26, Math.max(10, (seg || 26) / 2), 0, Math.PI * 2, 0, Math.PI * 0.52), m || M.stone);
+    var dg = new T.SphereGeometry(r, seg || 26, Math.max(10, (seg || 26) / 2), 0, Math.PI * 2, 0, Math.PI * 0.52);
+    var duv = dg.attributes.uv;
+    for (var di = 0; di < duv.count; di++) {
+      duv.setXY(di, duv.getX(di) * (2 * Math.PI * r / TILE), duv.getY(di) * (Math.PI * r * 0.5 / TILE));
+    }
+    duv.needsUpdate = true;
+    var g = new T.Mesh(dg, m || M.stone);
     g.position.set(x, y, z);
     W.scene.add(g);
     return g;
@@ -708,18 +736,17 @@
       return h > W.WATER_Y + 0.4 && w.r > 0.35;
     };
 
-    sow('grass_a', Math.round(140 * (0.25 + cb.grass)), lush, 0.5, 1.15);
+    sow('grass_a', Math.round(120 * (0.25 + cb.grass)), lush, 0.5, 1.15);
     sow('grass_b', Math.round(90 * (0.2 + cb.grass)), lush, 0.4, 0.9);
-    sow('fl_orange', Math.round(34 * cb.grass), lush, 0.35, 0.7);
-    sow('fl_yellow', Math.round(30 * cb.grass), lush, 0.3, 0.6);
-    sow('fl_purple', Math.round(26 * cb.grass), lush, 0.3, 0.6);
-    sow('fl_white', Math.round(22 * cb.grass), lush, 0.3, 0.6);
-    sow('bush_dry', Math.round(16 * (1 - cb.grass)), dry, 0.9, 2.0);
-    sow('rock_small', 10, dry, 0.6, 1.8);
-    sow('rock_d', Math.round(9 * (0.3 + cb.rock)), stony, 1.0, 3.2);
+    sow('fl_orange', Math.round(26 * cb.grass), lush, 0.35, 0.7);
+    sow('fl_yellow', Math.round(24 * cb.grass), lush, 0.3, 0.6);
+    sow('fl_purple', Math.round(18 * cb.grass), lush, 0.3, 0.6);
+    sow('fl_white', Math.round(16 * cb.grass), lush, 0.3, 0.6);
+    sow('bush_dry', Math.round(10 * (1 - cb.grass)), dry, 0.9, 2.0);
+    sow('rock_d', Math.round(7 * (0.3 + cb.rock)), stony, 1.0, 3.2);
 
     /* trees and palms, sparse and deliberate */
-    var treeN = Math.round(5 * cb.grass + 1);
+    var treeN = Math.round(3 * cb.grass + 1);
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -740,7 +767,7 @@
       if (g) out.push(g);
     }
     /* boulders that you cannot walk through */
-    for (var b = 0; b < 3; b++) {
+    for (var b = 0; b < 2; b++) {
       var bx = ox + rng(ci + b * 3, cj, 2.6) * CH, bz = oz + rng(ci, cj + b * 5, 6.1) * CH;
       var bh = W.heightAt(bx, bz);
       var bw = W.groundWeights(bx, bz, bh);
@@ -806,14 +833,14 @@
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
-    W.addFlat(TOWN.x, TOWN.z, TOWN.R + 42, TOWN.y, 120);
+    W.addFlat(TOWN.x, TOWN.z, TOWN.R + 14, TOWN.y, 70);
 
     W.SPAWN = { x: 0, z: TOWN.R + 46 };
     W.SPAWN_YAW = 0;
     W.SHOTS = {
       '1': { x: 0, z: TOWN.R + 70, yaw: 0, pitch: -0.02, h: 2.4 },
       '2': { x: 2, z: 40, yaw: 0.62, pitch: -0.02 },
-      '3': { x: 0, z: TOWN.R - 4, yaw: 3.14, pitch: -0.12, h: 11.6 },
+      '3': { x: 0, z: -(TOWN.R - 3.2), yaw: 0, pitch: -0.20, h: 10.6 },
       '4': { x: 300, z: 396, yaw: 3.14, pitch: -0.03 },
       '5': { x: 430, z: -244, yaw: 3.14, pitch: -0.05 },
       '6': { x: -360, z: 268, yaw: 3.14, pitch: -0.02 },
@@ -826,6 +853,19 @@
     buildPalace(36, -34);
     buildLibrary(34, 36);
     buildHouses();
+
+    /* lamplight along the streets */
+    for (var sl = 0; sl < 10; sl++) {
+      var sa = (sl / 10) * Math.PI * 2 + 0.25;
+      var sr = 62 + (sl % 3) * 16;
+      var sx = Math.cos(sa) * sr, sz = Math.sin(sa) * sr;
+      cyl(0.12, 0.16, 3.2, 8, sx, TOWN.y + 1.6, sz, M.dark);
+      lamp(sx, TOWN.y + 3.5, sz, 1.35);
+    }
+    for (var wt = 0; wt < 10; wt++) {
+      var wa = (wt / 10) * Math.PI * 2 + 0.9;
+      torch(Math.cos(wa) * (TOWN.R - 6.4), TOWN.y + 2.9, Math.sin(wa) * (TOWN.R - 6.4), wa + Math.PI);
+    }
 
     loadModels(['palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',

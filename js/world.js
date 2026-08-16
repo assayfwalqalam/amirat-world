@@ -84,8 +84,12 @@
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
     var h = (cont - 0.28) * 175;
 
-    var dune = ridged(x * 0.0040 + 7.7, z * 0.0040 - 3.3, 3);
-    h += (dune - 0.5) * 34 * (1 - b.grass) * (1 - b.rock * 0.7);
+    /* dunes ride on a warped field so their crests wander instead of marching */
+    var wx = x + fbm(x * 0.0013 + 21.4, z * 0.0013 - 8.2, 2) * 260;
+    var wz = z + fbm(x * 0.0011 - 5.6, z * 0.0011 + 14.9, 2) * 260;
+    var dune = ridged(wx * 0.0040 + 7.7, wz * 0.0034 - 3.3, 3);
+    var dune2 = ridged(wx * 0.0011 - 2.2, wz * 0.0013 + 5.5, 2);
+    h += ((dune - 0.5) * 22 + (dune2 - 0.5) * 30) * (1 - b.grass) * (1 - b.rock * 0.7);
 
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
     h += Math.pow(Math.max(0, hill), 1.9) * 165 * b.rock;
@@ -251,7 +255,7 @@
 
     groundMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.97, metalness: 0.0,
-      vertexColors: true, side: THREE.DoubleSide
+      vertexColors: true, side: THREE.FrontSide
     });
     groundMat.onBeforeCompile = function (sh) {
       sh.uniforms.tSand = { value: tSand };
@@ -322,16 +326,30 @@
 
   function buildChunkGeo(ox, oz, size, seg) {
     var n = seg + 1;
-    var pos = [], col = [], idx = [];
-    var c = new THREE.Color();
+    var pos = [], col = [], idx = [], nrm = [];
+    var H = new Float32Array(n * n);
+    var q = size / seg;
     for (var j = 0; j < n; j++) {
       for (var i = 0; i < n; i++) {
         var x = ox + (i / seg) * size;
         var z = oz + (j / seg) * size;
         var y = W.heightAt(x, z);
+        H[j * n + i] = y;
         pos.push(x - ox, y, z - oz);
         var w = W.groundWeights(x, z, y);
         col.push(w.g, w.r, w.w);
+      }
+    }
+    /* normals straight from the heightfield · identical shading at every detail level */
+    for (var j5 = 0; j5 < n; j5++) {
+      for (var i5 = 0; i5 < n; i5++) {
+        var xm = H[j5 * n + Math.max(0, i5 - 1)], xp = H[j5 * n + Math.min(n - 1, i5 + 1)];
+        var zm = H[Math.max(0, j5 - 1) * n + i5], zp = H[Math.min(n - 1, j5 + 1) * n + i5];
+        var sx = (i5 === 0 || i5 === n - 1) ? q : 2 * q;
+        var sz = (j5 === 0 || j5 === n - 1) ? q : 2 * q;
+        var nx = (xm - xp) / sx, nz = (zm - zp) / sz;
+        var len = Math.sqrt(nx * nx + 1 + nz * nz);
+        nrm.push(nx / len, 1 / len, nz / len);
       }
     }
     for (var j2 = 0; j2 < seg; j2++) {
@@ -346,11 +364,17 @@
     for (var j3 = 0; j3 < seg; j3++) border.push(j3 * n + seg);
     for (var i4 = seg; i4 > 0; i4--) border.push(seg * n + i4);
     for (var j4 = seg; j4 > 0; j4--) border.push(j4 * n);
+    /* the skirt hides LOD seams · pulled inward and kept shallow so it never
+       shows itself, and its normals point up so it shades like the ground */
     var skirtStart = pos.length / 3;
+    var cxm = size / 2, czm = size / 2;
     for (var k = 0; k < border.length; k++) {
       var bi = border[k];
-      pos.push(pos[bi * 3], pos[bi * 3 + 1] - 26, pos[bi * 3 + 2]);
+      var bx = pos[bi * 3], bz = pos[bi * 3 + 2];
+      var ix = bx + (cxm - bx) * 0.10, iz = bz + (czm - bz) * 0.10;
+      pos.push(ix, pos[bi * 3 + 1] - 9, iz);
       col.push(col[bi * 3], col[bi * 3 + 1], col[bi * 3 + 2]);
+      nrm.push(nrm[bi * 3], nrm[bi * 3 + 1], nrm[bi * 3 + 2]);
     }
     for (var k2 = 0; k2 < border.length; k2++) {
       var b0 = border[k2], b1 = border[(k2 + 1) % border.length];
@@ -360,8 +384,8 @@
     var g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     g.setIndex(idx);
-    g.computeVertexNormals();
     g.computeBoundingSphere();
     return g;
   }
