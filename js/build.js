@@ -555,7 +555,7 @@
   /* the sculpted houses can only be planted once their files are here */
   function buildSculptedHouses() {
     var Y = TOWN.y;
-    var keys = ['house_a', 'house_b', 'house_c', 'kasbah'];
+    var keys = ['house_a', 'house_b', 'house_c'];   /* kasbah.glb renders red · left out until refetched */
     var made = 0;
     HOUSE_SPOTS.forEach(function (s, i) {
       if (i % 6 === 0) return;                 /* leave room round our own */
