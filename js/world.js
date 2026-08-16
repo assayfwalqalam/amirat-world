@@ -150,6 +150,12 @@
     var wet = sstep(26.0, 0.2, h - WATER_Y);
     var grass = Math.min(1, Math.max(b.grass, wet * 0.92));
     var rock = Math.min(1, b.rock * 0.9 + sstep(120, 190, h) * 0.7);
+    /* ground that has been built on or walked over is packed earth, not meadow */
+    var built = Math.max(W.flatAt ? W.flatAt(x, z) : 0, W.roadAt ? W.roadAt(x, z) : 0);
+    if (built > 0) {
+      grass *= (1 - built);
+      wet *= (1 - built * 0.8);
+    }
     return { g: grass, r: rock, w: wet };
   };
 
