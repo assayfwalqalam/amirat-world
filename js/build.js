@@ -342,7 +342,7 @@
       var da = Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA)));
       if (da < 0.075) continue;            /* the gateway gap */
       var x = TOWN.x + Math.cos(a) * R, z = TOWN.z + Math.sin(a) * R;
-      box(segW, 9.5, 4.6, x, Y + 4.75, z, i % 2 ? M.stone : M.stone2, -(a + Math.PI / 2));
+      box(segW, 9.5, 4.6, x, Y + 4.75, z, M.stone, -(a + Math.PI / 2));
       /* crenellations */
       for (var k = -1; k <= 1; k++) {
         var cx = x - Math.sin(a) * (k * segW * 0.34);
@@ -383,7 +383,7 @@
     for (var wI = 0; wI < N; wI++) {
       var wa = (wI / N) * Math.PI * 2;
       var wx = TOWN.x + Math.cos(wa) * (R - 3.2), wz = TOWN.z + Math.sin(wa) * (R - 3.2);
-      box(segW, 0.7, 3.4, wx, Y + 9.2, wz, M.stone2, -(wa + Math.PI / 2));
+      box(segW, 0.7, 3.4, wx, Y + 9.2, wz, M.stone, -(wa + Math.PI / 2));
     }
   }
 
@@ -510,53 +510,72 @@
     W.LIBRARY = { x: cx, z: cz, y: Y };
   }
 
-  /* mudbrick homes with lit windows; some open */
+  /* the housing: real sculpted kasbah houses, with a few of our own that open */
+  var HOUSE_SPOTS = [
+    [-72, 18, 0.3], [-58, 46, -0.5], [-30, 64, 0.9], [6, 76, 0.2], [38, 62, -0.7],
+    [66, 40, 0.5], [78, 8, -0.2], [68, -26, 0.8], [-76, -18, -0.6], [-64, -50, 0.4],
+    [-26, -76, 0.15], [18, -80, -0.4], [54, -64, 0.7], [88, -8, 0.1], [-90, 6, -0.3],
+    [-46, 86, 0.6], [32, 94, -0.25], [-8, -98, 0.35], [-92, -40, 0.9], [92, 30, -1.1],
+    [-48, -86, 0.25], [24, -60, 1.3], [-18, 92, -0.8], [70, 74, 0.45]
+  ];
   function buildHouses() {
     var Y = TOWN.y;
-    var spots = [
-      [-72, 18, 0.3], [-58, 44, -0.5], [-30, 62, 0.9], [4, 74, 0.2], [36, 62, -0.7],
-      [64, 40, 0.5], [76, 8, -0.2], [66, -26, 0.8], [-74, -18, -0.6], [-62, -48, 0.4],
-      [-26, -74, 0.15], [16, -78, -0.4], [52, -62, 0.7], [86, -6, 0.1], [-88, 6, -0.3],
-      [-44, 84, 0.6], [30, 92, -0.25], [-8, -96, 0.35]
-    ];
-    spots.forEach(function (s, i) {
-      var w = 7 + (i % 3) * 1.6, d = 6 + (i % 4) * 1.2, h = 3.6 + (i % 3) * 1.5;
+    /* four of our own, hollow, so you can walk in */
+    [[-72, 18, 0.3], [38, 62, -0.7], [-26, -76, 0.15], [78, 8, -0.2]].forEach(function (s, i) {
       var x = s[0], z = s[1], rot = s[2];
+      var w = 8 + i * 0.9, d = 7 + (i % 3), h = 4.2 + (i % 2) * 1.4;
       var m = i % 2 ? M.brick : M.brick2;
-      /* hollow if the door opens, solid block otherwise */
-      var opens = (i % 4 === 0);
-      if (opens) {
-        var th = 0.5, doorW = 1.6;
-        box(w, h, th, x, Y + h / 2, z - d / 2, m, rot);
-        box(th, h, d, x - w / 2, Y + h / 2, z, m, rot);
-        box(th, h, d, x + w / 2, Y + h / 2, z, m, rot);
-        var side = (w - doorW) / 2;
-        box(side, h, th, x - (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
-        box(side, h, th, x + (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
-        box(doorW, h - 2.2, th, x, Y + h - (h - 2.2) / 2, z + d / 2, m, rot);
-        door(x - doorW / 2, Y, z + d / 2, doorW, 2.1, rot, M.wood);
-        var fl = new T.Mesh(new T.PlaneGeometry(w - 1.2, d - 1.2), M.floor);
-        fl.rotation.x = -Math.PI / 2; fl.position.set(x, Y + 0.05, z);
-        W.scene.add(fl);
-        lamp(x, Y + h - 0.9, z, 1.1);
-      } else {
-        box(w, h, d, x, Y + h / 2, z, m, rot);
-        var dq = new T.Mesh(new T.PlaneGeometry(1.5, 2.1), M.wood);
-        dq.position.set(x + Math.sin(rot + Math.PI / 2) * 0.02, Y + 1.05, z + d / 2 + 0.03);
-        dq.rotation.y = rot;
-        W.scene.add(dq);
-      }
-      box(w + 0.5, 0.5, d + 0.5, x, Y + h + 0.25, z, m, rot);
+      var th = 0.55, doorW = 1.7;
+      box(w, h, th, x, Y + h / 2, z - d / 2, m, rot);
+      box(th, h, d, x - w / 2, Y + h / 2, z, m, rot);
+      box(th, h, d, x + w / 2, Y + h / 2, z, m, rot);
+      var side = (w - doorW) / 2;
+      box(side, h, th, x - (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
+      box(side, h, th, x + (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
+      box(doorW, h - 2.3, th, x, Y + h - (h - 2.3) / 2, z + d / 2, m, rot);
+      arch(doorW + 0.4, 1.5, th + 0.3, x, Y + 2.3, z + d / 2, M.stone2, rot);
+      door(x - doorW / 2, Y, z + d / 2, doorW, 2.2, rot, M.wood);
+      var fl = new T.Mesh(new T.PlaneGeometry(w - 1.4, d - 1.4), M.floor);
+      fl.rotation.x = -Math.PI / 2; fl.position.set(x, Y + 0.05, z);
+      W.scene.add(fl);
+      if (MODELS.carpet) place('carpet', x, Y + 0.07, z, 3.0, rot, false, 'x');
+      lamp(x, Y + h - 1.0, z, 1.2);
+      /* roof: parapet, beam ends, a stair to the top */
+      box(w + 0.6, 0.5, d + 0.6, x, Y + h + 0.25, z, m, rot);
+      beamRow2(x, z, w, d, h, rot, m);
       for (var k = -1; k <= 1; k++) {
-        box(1.0, 0.7, 0.7, x + k * (w * 0.3), Y + h + 0.85, z + d / 2 * 0.9, m, rot, false);
+        box(1.1, 0.85, 0.8, x + k * (w * 0.3), Y + h + 0.9, z + d / 2 * 0.92, m, rot, false);
+        box(1.1, 0.85, 0.8, x + k * (w * 0.3), Y + h + 0.9, z - d / 2 * 0.92, m, rot, false);
       }
-      var win = new T.Mesh(new T.PlaneGeometry(0.75, 0.95), (i % 3) ? M.win : M.winOff);
-      win.position.set(x - w * 0.28, Y + h * 0.62, z + d / 2 + 0.04);
-      win.rotation.y = rot;
-      W.scene.add(win);
-      if (i % 3 === 0) lamp(x - w * 0.28, Y + h * 0.62, z + d / 2 + 0.5, 0.55, false);
-      if (i % 5 === 0) torch(x + w / 2 + 0.5, Y + 2.6, z + d / 2 + 0.4, rot);
+      torch(x + w / 2 + 0.55, Y + 2.7, z + d / 2 - 0.6, rot);
     });
+
+    /* the rest of the town is built from the sculpted houses */
+    var keys = ['house_a', 'house_b', 'house_c', 'kasbah'];
+    HOUSE_SPOTS.forEach(function (s, i) {
+      if (i % 6 === 0) return;                 /* leave room round our own */
+      var key = keys[i % keys.length];
+      if (!MODELS[key]) return;
+      var hgt = 9 + (i % 4) * 2.6;
+      var g = place(key, s[0], W.heightAt(s[0], s[1]), s[1], hgt, s[2] + (i % 3) * 1.1, true);
+      if (g && i % 3 === 0) lamp(s[0] + 2.4, Y + 2.6, s[1] + 2.4, 0.9, false);
+    });
+  }
+  /* protruding roof beams, the signature of the style */
+  function beamRow2(x, z, w, d, h, rot, m) {
+    var count = Math.max(3, Math.round(w / 0.9));
+    var c = Math.cos(rot), sn = Math.sin(rot);
+    for (var i = 0; i < count; i++) {
+      var bx = -w / 2 + (i + 0.5) * (w / count);
+      [-1, 1].forEach(function (sgn) {
+        var lx = bx, lz = sgn * (d / 2 + 0.16);
+        var beam = new T.Mesh(new T.CylinderGeometry(0.07, 0.07, 0.55, 6), M.wood);
+        beam.rotation.x = Math.PI / 2;
+        beam.rotation.z = rot;
+        beam.position.set(x + lx * c - lz * sn, h - 0.3 + TOWN.y, z + lx * sn + lz * c);
+        W.scene.add(beam);
+      });
+    }
   }
 
   /* a desert camp: open tents around a fire */
@@ -855,6 +874,28 @@
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
+    function sowReeds(geo, m, count) {
+      if (!count) return;
+      var im = new T.InstancedMesh(geo, m, count);
+      var n = 0;
+      for (var i = 0; i < count; i++) {
+        var sd = (ci * 73856093) ^ (cj * 19349663) ^ ((i + 9007) * 83492791);
+        var rx = ox + hashU(sd) * CH, rz = oz + hashU(sd ^ 0x9e3779b9) * CH;
+        var h = W.heightAt(rx, rz);
+        var w = W.groundWeights(rx, rz, h);
+        if (h < W.WATER_Y - 0.1 || h > W.WATER_Y + 2.2 || w.w < 0.55) continue;
+        var sc = 0.8 + hashU(sd ^ 0x85ebca6b) * 0.7;
+        dummy.position.set(rx, h - 0.12, rz);
+        dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
+        dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        im.setMatrixAt(n++, dummy.matrix);
+      }
+      if (!n) { im.dispose(); return; }
+      im.count = n; im.instanceMatrix.needsUpdate = true;
+      W.scene.add(im); out.push(im);
+    }
+
     function sowCards(geo, m, count, sMin, sMax) {
       if (!count) return;
       var im = new T.InstancedMesh(geo, m, count);
@@ -895,7 +936,7 @@
 
     /* blades first, then the modelled clumps on top of them */
     sowCards(cardGeo, cardMat, Math.round(700 * (0.25 + cb.grass) * (W.vegScale || 1)), 0.85, 1.7);
-    sowCards(reedGeo, reedMat, Math.round(500 * (0.2 + cb.grass) * (W.vegScale || 1)), 0.7, 1.7);
+    sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
       sow('grass_a', Math.round(40 * (0.35 + cb.grass)), lush, 0.8, 1.6);
