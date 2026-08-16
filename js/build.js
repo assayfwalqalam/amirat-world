@@ -884,6 +884,7 @@
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
         if (h < W.WATER_Y - 0.1 || h > W.WATER_Y + 2.2 || w.w < 0.55) continue;
+        if (W.flatAt(rx, rz) > 0.30) continue;
         var sc = 0.8 + hashU(sd ^ 0x85ebca6b) * 0.7;
         dummy.position.set(rx, h - 0.12, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
@@ -906,6 +907,7 @@
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
         if (h < W.WATER_Y + 0.15 || w.g < 0.30 || w.r > 0.55) continue;
+        if (W.flatAt(rx, rz) > 0.30) continue;
         var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.6 + 0.7 * w.g);
         dummy.position.set(rx, h - 0.06, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
@@ -923,15 +925,15 @@
     var cb = W.biomeAt(ox + CH / 2, oz + CH / 2);
     var lush = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5;
+      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5 && W.flatAt(x, z) < 0.3;
     };
     var dry = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.6 && w.g < 0.5;
+      return h > W.WATER_Y + 0.6 && w.g < 0.5 && W.flatAt(x, z) < 0.3;
     };
     var stony = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.4 && w.r > 0.35;
+      return h > W.WATER_Y + 0.4 && w.r > 0.35 && W.flatAt(x, z) < 0.3;
     };
 
     /* blades first, then the modelled clumps on top of them */

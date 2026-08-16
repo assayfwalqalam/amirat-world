@@ -112,6 +112,18 @@
     return h;
   };
 
+  /* how strongly a place has been levelled for building · nothing grows there */
+  W.flatAt = function (x, z) {
+    var best = 0;
+    for (var i = 0; i < FLATS.length; i++) {
+      var f = FLATS[i];
+      var d = Math.sqrt((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z));
+      var v = 1 - sstep(f.r * 0.75, f.r + f.b * 0.5, d);
+      if (v > best) best = v;
+    }
+    return best;
+  };
+
   /* wetness/greenery weights used by the ground shader and the scatterer */
   W.groundWeights = function (x, z, h) {
     var b = W.biomeAt(x, z);
