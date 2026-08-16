@@ -660,6 +660,14 @@
   /* -------------------------------------------------------------- start */
   W.startEditor = function () {
     W.EDITOR = true;
+    /* A level plain to build on, above the water table. Without it the middle
+       of the map is whatever the noise happened to make there, which the first
+       time was the bottom of a lake -- the town went in underwater. The rest
+       of the world is untouched; this is only somewhere sensible to start. */
+    var natural = W.heightAt(0, 0);
+    var padY = Math.max(natural, W.WATER_Y + 9);
+    W.addFlat(0, 0, 420, padY, 150);
+    W.PAD_Y = padY;
     W.start();
     T = THREE;
     scene = W.scene; cam = W.cam; renderer = W.renderer;
@@ -668,7 +676,7 @@
 
     var l = $('load'); if (l) l.style.display = 'none';
     W.setDaylight(true);
-    W.camState({ x: 0, y: W.heightAt(0, 150) + 40, z: 150, yaw: 0, pitch: -0.42 });
+    W.camState({ x: 0, y: W.PAD_Y + 42, z: 150, yaw: 0, pitch: -0.42 });
     wireUI();
     refreshSnap();
     refreshBar();

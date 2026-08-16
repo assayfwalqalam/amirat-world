@@ -296,6 +296,7 @@
     var sky = tex('assets/puresky_4k.jpg', true);
     sky.mapping = THREE.EquirectangularReflectionMapping;
     scene.background = sky;
+    W._nightSky = sky;
 
     moonDir = new THREE.Vector3(0.36, 0.42, -0.83).normalize();
     var mp = moonDir.clone().multiplyScalar(2600);
@@ -337,8 +338,8 @@
       g.setAttribute('position', new THREE.BufferAttribute(p, 3));
       return new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf4f1e6, size: size, sizeAttenuation: false, transparent: true, opacity: op, fog: false, depthWrite: false }));
     }
-    scene.add(stars(500, 1.7, 0.6));
-    scene.add(stars(90, 2.7, 0.85));
+    W.starField = [stars(500, 1.7, 0.6), stars(90, 2.7, 0.85)];
+    W.starField.forEach(function (s2) { scene.add(s2); });
   }
 
   function skyFollow(p) {
@@ -379,6 +380,17 @@
       if (scene.fog) scene.fog.density = on ? 0.00035 : 0.00105;
       if (W.groundNight) W.groundNight.value = on ? 0.0 : 1.0;
       if (W.bloom) W.bloom.strength = on ? 0.12 : (TIER === 2 ? 0.40 : 0.28);
+      /* the sky is a night photograph, so daylight needs its own backdrop */
+      if (on) {
+        if (!W._daySky) W._daySky = new THREE.Color(0x9fc0e8);
+        scene.background = W._daySky;
+      } else if (W._nightSky) {
+        scene.background = W._nightSky;
+      }
+      if (moonMesh) moonMesh.visible = !on;
+      if (halo) halo.visible = !on;
+      clouds.forEach(function (c) { c.m.visible = !on; });
+      if (W.starField) W.starField.forEach(function (s2) { s2.visible = !on; });
     };
     moon.position.copy(moonDir).multiplyScalar(900);
     if (TIER === 2) {
