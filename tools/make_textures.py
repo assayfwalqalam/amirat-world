@@ -78,36 +78,59 @@ def adobe():
     base = grain(S, 24, 11).filter(ImageFilter.GaussianBlur(0.4))
     d = ImageDraw.Draw(base)
     rnd = random.Random(4)
-    # aggregate: small pale chips and dark pits pressed into the render
-    for _ in range(26000):
+    # Aggregate. The tile covers about 1.7 m of wall, so a two-pixel chip is
+    # three millimetres across and invisible from anywhere. Real grit in a mud
+    # render is 5-40 mm, which at this scale is 3-24 pixels.
+    # Mud render is mostly smooth with grit showing here and there. Too much
+    # of it and the wall reads as exposed-aggregate concrete.
+    for _ in range(1300):
         x, y = rnd.randrange(S), rnd.randrange(S)
-        r = rnd.choice((0, 0, 0, 1, 1, 2))
-        v = 128 + rnd.choice((-62, -48, -34, 36, 50, 66))
+        r = rnd.choice((2, 2, 3, 3, 4))             # 3-7 mm of grit
+        v = 128 + rnd.choice((-26, -19, -13, 15, 21, 27))
         d.ellipse([x - r, y - r, x + r, y + r], fill=v)
-    # trowel strokes: long, shallow, almost horizontal
-    for _ in range(420):
+    for _ in range(14000):         # sand in the render, fine and even
+        x, y = rnd.randrange(S), rnd.randrange(S)
+        d.point((x, y), fill=128 + rnd.choice((-18, -12, 13, 19)))
+    # trowel strokes: long, shallow, and wide enough to see
+    for _ in range(150):
         y = rnd.randrange(S)
         x0 = rnd.randrange(-100, S)
-        ln = rnd.randrange(60, 340)
-        sag = rnd.uniform(-4, 4)
-        v = 128 + rnd.choice((-9, -6, 6, 9))
+        ln = rnd.randrange(160, 620)
+        sag = rnd.uniform(-14, 14)
+        th = rnd.randrange(3, 9)
+        v = 128 + rnd.choice((-15, -10, 11, 16))
         for i in range(ln):
             xx = (x0 + i) % S
             yy = int(y + math.sin(i / ln * math.pi) * sag) % S
-            d.point((xx, yy), fill=v)
-    # brick courses showing faintly through the render
-    ch = 46
+            for t in range(th):
+                d.point((xx, (yy + t) % S), fill=v)
+    # Brick courses showing through the render. A course is about 150 mm, so
+    # roughly 90 pixels here, and the joint has to be several pixels wide or it
+    # disappears into the grain.
+    ch = 96
     for row in range(0, S + ch, ch):
-        off = (row // ch % 2) * 44
-        for i in range(0, S, 2):
-            yy = (row + int(math.sin(i * 0.02 + row) * 1.4)) % S
-            d.point((i, yy), fill=118)
-            d.point(((i + 1) % S, (yy + 1) % S), fill=136)
-        for bx in range(0, S, 88):
+        off = (row // ch % 2) * 92
+        for i in range(0, S):
+            yy = (row + int(math.sin(i * 0.011 + row) * 4)) % S
+            for t in range(4):
+                d.point((i, (yy + t) % S), fill=104 + t * 9)
+            d.point((i, (yy + 5) % S), fill=150)
+        for bx in range(0, S, 184):
             xx = (bx + off) % S
             for j in range(ch):
-                d.point((xx, (row + j) % S), fill=120)
-    im = tint(base, (198, 165, 123), contrast=0.62, base=1.0)
+                for t in range(4):
+                    d.point(((xx + t) % S, (row + j) % S), fill=106 + t * 8)
+    for _ in range(70):            # hairline cracks wandering down the render
+        x, y = rnd.randrange(S), rnd.randrange(S)
+        a = rnd.uniform(1.0, 2.2)
+        for _ in range(rnd.randrange(50, 260)):
+            a += rnd.uniform(-0.30, 0.30)
+            x = (x + math.cos(a)) % S
+            y = (y + math.sin(a)) % S
+            d.point((int(x), int(y)), fill=96)
+            if rnd.random() < 0.4:
+                d.point((int(x) + 1, int(y)), fill=112)
+    im = tint(base, (198, 165, 123), contrast=0.56, base=1.0)
     return im
 
 
@@ -141,8 +164,8 @@ def wood():
         wander = math.sin(y * 0.013) * 9 + math.sin(y * 0.041) * 4
         for x in range(0, S, 1):
             v = 128
-            v += math.sin((x + wander) * 0.115) * 16
-            v += math.sin((x + wander) * 0.037) * 9
+            v += math.sin((x + wander) * 0.031) * 20
+            v += math.sin((x + wander) * 0.0092) * 12
             v += rnd.gauss(0, 14)
             im.putpixel((x, y), max(0, min(255, int(v))))
     # knots
@@ -187,10 +210,14 @@ def ashlar():
     base = grain(S, 20, 77).filter(ImageFilter.GaussianBlur(0.4))
     d = ImageDraw.Draw(base)
     rnd = random.Random(88)
-    for _ in range(20000):
+    # stone is pitted, not spotted: small shallow marks only
+    for _ in range(7000):
         x, y = rnd.randrange(S), rnd.randrange(S)
-        r = rnd.choice((0, 0, 1))
-        d.ellipse([x - r, y - r, x + r, y + r], fill=128 + rnd.choice((-46, -32, 34, 48)))
+        r = rnd.choice((1, 1, 2, 2, 3))
+        d.ellipse([x - r, y - r, x + r, y + r], fill=128 + rnd.choice((-26, -18, 18, 26)))
+    for _ in range(9000):
+        x, y = rnd.randrange(S), rnd.randrange(S)
+        d.point((x, y), fill=128 + rnd.choice((-22, -15, 16, 24)))
     ch = 128
     for row in range(0, S, ch):
         off = (row // ch % 2) * 96

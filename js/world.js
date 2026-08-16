@@ -154,13 +154,21 @@
     var hMask = sstep(0.34, 0.62, fbm(x * 0.00042 - 61.1, z * 0.00042 + 8.4, 3));
     h += Math.pow(Math.max(0, swell - 0.30) / 0.70, 1.35) * 96 * hMask;
 
-    /* shelves: quantise a little of the height, so slopes step */
-    var bench = fbm(x * 0.0007 + 44.4, z * 0.0007 - 12.2, 2);
-    var bAmt = sstep(0.45, 0.72, bench) * sstep(24, 70, h);
-    if (bAmt > 0.01) {
-      var stepH = 11.0;
-      var q = Math.floor(h / stepH) * stepH + stepH * 0.5;
-      h = lerp(h, q, bAmt * 0.42);
+    /* Shelves, but only where there is a mountain to cut them into. Applied
+       across open ground this reads as contour lines drawn on a model, which
+       is exactly what it looked like the first time. The quantising is also
+       softened, so a shelf has a rounded lip rather than a machined step. */
+    if (mMask > 0.25) {
+      var bench = fbm(x * 0.0007 + 44.4, z * 0.0007 - 12.2, 2);
+      var bAmt = sstep(0.52, 0.80, bench) * mMask * sstep(70, 150, h);
+      if (bAmt > 0.01) {
+        var stepH = 13.0 + 7.0 * fbm(x * 0.0004 - 8.1, z * 0.0004 + 3.3, 2);
+        var f2 = h / stepH;
+        var fr = f2 - Math.floor(f2);
+        /* a soft plateau in the middle of each band, rounded at both lips */
+        var soft = Math.floor(f2) + 0.5 + (fr - 0.5) * (1 - sstep(0.12, 0.48, Math.abs(fr - 0.5)));
+        h = lerp(h, soft * stepH, bAmt * 0.30);
+      }
     }
 
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
