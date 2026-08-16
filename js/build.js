@@ -418,10 +418,19 @@
             }
           }
         });
-        if (name.indexOf('bh') === 0) {
+        if (name.indexOf('p_') === 0) {
           g.scene.traverse(function (o) {
             if (o.isMesh && o.material) {
-              o.material.color.setHex(0xd8ab72);      /* sun-dried mud, not pale plaster */
+              o.material.color.multiplyScalar(0.62);   /* they read far too pale at night */
+              o.material.roughness = 1;
+              o.material.metalness = 0;
+              if (o.geometry.attributes.color_1) o.geometry.deleteAttribute('color_1');
+            }
+          });
+        } else if (name.indexOf('bh') === 0) {
+          g.scene.traverse(function (o) {
+            if (o.isMesh && o.material) {
+              o.material.color.setHex(0xc8a582);      /* sun-dried mud, not pale plaster */
               o.material.roughness = 1;
               o.material.metalness = 0;
               if (o.geometry.attributes.color_1) o.geometry.deleteAttribute('color_1');

@@ -265,7 +265,7 @@ weld(ob)
 
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.uv.cube_project(cube_size=3.0)
+bpy.ops.uv.cube_project(cube_size=2.2)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 mat = bpy.data.materials.new("mosque")

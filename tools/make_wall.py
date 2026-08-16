@@ -194,7 +194,7 @@ weld(piece, 0.0004)
 bpy.context.view_layer.objects.active = piece
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.uv.cube_project(cube_size=3.0)
+bpy.ops.uv.cube_project(cube_size=2.1)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 mat = bpy.data.materials.new("citadel")

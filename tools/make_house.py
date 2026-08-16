@@ -289,7 +289,7 @@ weld(house, 0.0004)
 bpy.context.view_layer.objects.active = house
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.uv.cube_project(cube_size=2.6)
+bpy.ops.uv.cube_project(cube_size=1.7)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 mat = bpy.data.materials.new("adobe")
