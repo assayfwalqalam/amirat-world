@@ -593,12 +593,128 @@
     {
      "k": "grass_b",
      "n": "Grass b"
+    },
+    {
+     "k": "plant/agave_1",
+     "n": "Agave 1"
+    },
+    {
+     "k": "plant/agave_2",
+     "n": "Agave 2"
+    },
+    {
+     "k": "plant/aloe_1",
+     "n": "Aloe 1"
+    },
+    {
+     "k": "plant/aloe_2",
+     "n": "Aloe 2"
+    },
+    {
+     "k": "plant/blossom_1",
+     "n": "Blossom 1"
+    },
+    {
+     "k": "plant/blossom_2",
+     "n": "Blossom 2"
+    },
+    {
+     "k": "plant/creeper_1",
+     "n": "Creeper 1"
+    },
+    {
+     "k": "plant/creeper_2",
+     "n": "Creeper 2"
+    },
+    {
+     "k": "plant/fern_1",
+     "n": "Fern 1"
+    },
+    {
+     "k": "plant/fern_2",
+     "n": "Fern 2"
+    },
+    {
+     "k": "plant/lavender_1",
+     "n": "Lavender 1"
+    },
+    {
+     "k": "plant/lavender_2",
+     "n": "Lavender 2"
+    },
+    {
+     "k": "plant/papyrus_1",
+     "n": "Papyrus 1"
+    },
+    {
+     "k": "plant/papyrus_2",
+     "n": "Papyrus 2"
+    },
+    {
+     "k": "plant/poppy_1",
+     "n": "Poppy 1"
+    },
+    {
+     "k": "plant/poppy_2",
+     "n": "Poppy 2"
+    },
+    {
+     "k": "plant/reed_1",
+     "n": "Reed 1"
+    },
+    {
+     "k": "plant/reed_2",
+     "n": "Reed 2"
+    },
+    {
+     "k": "plant/sapling_1",
+     "n": "Sapling 1"
+    },
+    {
+     "k": "plant/sapling_2",
+     "n": "Sapling 2"
+    },
+    {
+     "k": "plant/shrub_1",
+     "n": "Shrub 1"
+    },
+    {
+     "k": "plant/shrub_2",
+     "n": "Shrub 2"
+    },
+    {
+     "k": "plant/succulent_1",
+     "n": "Succulent 1"
+    },
+    {
+     "k": "plant/succulent_2",
+     "n": "Succulent 2"
+    },
+    {
+     "k": "plant/thistle_1",
+     "n": "Thistle 1"
+    },
+    {
+     "k": "plant/thistle_2",
+     "n": "Thistle 2"
+    },
+    {
+     "k": "plant/tuft_1",
+     "n": "Tuft 1"
+    },
+    {
+     "k": "plant/tuft_2",
+     "n": "Tuft 2"
     }
    ]
   },
   {
    "name": "Rocks",
    "items": [
+    {
+     "k": "rock/boulder_1",
+     "n": "Boulder 1"
+    },
     {
      "k": "rock/boulder_2",
      "n": "Boulder 2"
@@ -654,6 +770,10 @@
     {
      "k": "rock/shard_1",
      "n": "Shard 1"
+    },
+    {
+     "k": "rock/shard_2",
+     "n": "Shard 2"
     },
     {
      "k": "rock/slab_1",

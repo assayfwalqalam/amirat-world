@@ -25,7 +25,7 @@ GROUPS = [
     ("Arms",        [r"^p_(spears|swordrack|bowarrows)$"]),
     ("Fire & light", [r"^p_(torch|torchpost|brazier|firewood)$", r"^lantern$"]),
     ("Trees",       [r"^(palm|tree_)"]),
-    ("Plants",      [r"^(fl_|grass_|bush_)"]),
+    ("Plants",      [r"^plant/", r"^(fl_|grass_|bush_)"]),
     ("Rocks",       [r"^rock/", r"^rock"]),
     ("Other",       [r"^p_"]),
 ]
