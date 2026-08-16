@@ -56,6 +56,20 @@
   }
 
   /* ------------------------------------------------------------ helpers */
+  /* a real photographed surface: colour, relief and shine */
+  function surf(base, color, opts) {
+    opts = opts || {};
+    var m = new T.MeshStandardMaterial({
+      color: color || 0xffffff,
+      roughness: opts.rough === undefined ? 1 : opts.rough,
+      metalness: 0
+    });
+    m.map = W.tex('assets/' + base + '_d.jpg', true, true);
+    m.normalMap = W.tex('assets/' + base + '_n.jpg', false, true);
+    m.normalScale = new T.Vector2(opts.nrm || 1.0, opts.nrm || 1.0);
+    if (opts.rmap !== false) m.roughnessMap = W.tex('assets/' + base + '_r.jpg', false, true);
+    return m;
+  }
   function mat(map, color, rough, rep) {
     var m = new T.MeshStandardMaterial({ color: color || 0xffffff, roughness: rough === undefined ? 0.95 : rough, metalness: 0 });
     if (map) {
@@ -68,18 +82,19 @@
 
   var M = {};
   function initMats() {
-    M.brick = mat('assets/mudbrick.jpg', 0xd6b184, 1, [1, 1]);
-    M.brick2 = mat('assets/mudbrick.jpg', 0xc09a72, 1, [1, 1]);
-    M.stone = mat('assets/sandstone.jpg', 0xe4c79a, 1, [1, 1]);
-    M.stone2 = mat('assets/sandstone.jpg', 0xcdb086, 1, [1, 1]);
+    M.brick = surf('t_adobe', 0xd9b489, { nrm: 1.2 });
+    M.brick2 = surf('t_adobe', 0xc19a74, { nrm: 1.2 });
+    M.stone = surf('t_ashlar', 0xe6cda4, { nrm: 1.0 });
+    M.stone2 = surf('t_fort', 0xd8bd94, { nrm: 1.0 });
+    M.marble = surf('t_marble', 0xf3ece6, { nrm: 0.5, rough: 0.42 });
     M.cloth = mat('assets/cloth.jpg', 0xbba98e, 1, [1, 1]);
     M.wood = new T.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 });
     M.dark = new T.MeshStandardMaterial({ color: 0x241a12, roughness: 1 });
     M.metal = new T.MeshStandardMaterial({ color: 0x2a2118, roughness: 0.45, metalness: 0.7 });
-    M.gold = new T.MeshStandardMaterial({ color: 0xb8913f, roughness: 0.36, metalness: 0.85 });
+    M.gold = new T.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.3, metalness: 0.9 });
     M.win = new T.MeshBasicMaterial({ color: 0xffab52, toneMapped: false });
     M.winOff = new T.MeshBasicMaterial({ color: 0x0a0b16 });
-    M.floor = new T.MeshStandardMaterial({ color: 0x7d6647, roughness: 1 });
+    M.floor = surf('t_floor', 0xb9a184, { nrm: 0.8 });
   }
 
   /* every face gets the same brick size, whatever the wall's dimensions */
@@ -251,7 +266,7 @@
     o.position.set(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
     var g = new T.Group();
     g.add(o);
-    g.position.set(x, y, z);
+    g.position.set(x, y - 0.14, z);
     g.rotation.y = rot || 0;
     W.scene.add(g);
     if (solid) {
@@ -327,12 +342,12 @@
       var da = Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA)));
       if (da < 0.075) continue;            /* the gateway gap */
       var x = TOWN.x + Math.cos(a) * R, z = TOWN.z + Math.sin(a) * R;
-      box(segW, 9.5, 4.6, x, Y + 4.75, z, i % 2 ? M.stone : M.stone2, -a);
+      box(segW, 9.5, 4.6, x, Y + 4.75, z, i % 2 ? M.stone : M.stone2, -(a + Math.PI / 2));
       /* crenellations */
       for (var k = -1; k <= 1; k++) {
-        var cx = x + Math.cos(a - Math.PI / 2) * (k * segW * 0.33);
-        var cz = z + Math.sin(a - Math.PI / 2) * (k * segW * 0.33);
-        box(segW * 0.24, 1.15, 1.0, cx + Math.cos(a) * 1.7, Y + 10.1, cz + Math.sin(a) * 1.7, M.stone, -a, false);
+        var cx = x - Math.sin(a) * (k * segW * 0.34);
+        var cz = z + Math.cos(a) * (k * segW * 0.34);
+        box(segW * 0.26, 1.25, 1.1, cx + Math.cos(a) * 1.5, Y + 10.2, cz + Math.sin(a) * 1.5, M.stone, -(a + Math.PI / 2), false);
       }
     }
     /* towers */
@@ -368,7 +383,7 @@
     for (var wI = 0; wI < N; wI++) {
       var wa = (wI / N) * Math.PI * 2;
       var wx = TOWN.x + Math.cos(wa) * (R - 3.2), wz = TOWN.z + Math.sin(wa) * (R - 3.2);
-      box(segW, 0.7, 2.6, wx, Y + 9.2, wz, M.stone2, -wa);
+      box(segW, 0.7, 3.4, wx, Y + 9.2, wz, M.stone2, -(wa + Math.PI / 2));
     }
   }
 
@@ -1038,7 +1053,9 @@
       '5': { x: 430, z: -228, yaw: 0, pitch: -0.05 },
       '6': { x: -360, z: 306, yaw: 0, pitch: 0.02 },
       '7': { x: -34, z: -6, yaw: 0, pitch: 0.06 },
-      '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true }
+      '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true },
+      '9': { x: 0, z: -(TOWN.R + 34), yaw: 3.14, pitch: 0.02, h: 2.4 },
+      '10': { x: -72, z: 4, yaw: 1.6, pitch: 0.0, h: 2.2 }
     };
 
     buildTown();
@@ -1066,11 +1083,11 @@
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
       'house_a', 'house_b', 'house_c', 'kasbah'], function () {
         /* things that need the models */
-        if (MODELS.well) place('well', 6, TOWN.y, 8, 3.2, 0.4, true);
+        if (MODELS.well) place('well', 6, W.heightAt(6, 8), 8, 3.4, 0.4, true);
         lamp(6, TOWN.y + 3.4, 8, 1.3, false);
-        if (MODELS.house_a) place('house_a', -86, TOWN.y, -70, 11, 0.6, true);
-        if (MODELS.house_b) place('house_b', 84, TOWN.y, 62, 11, -0.9, true);
-        if (MODELS.house_c) place('house_c', -6, TOWN.y, -84, 10, 0.2, true);
+        if (MODELS.house_a) place('house_a', -86, W.heightAt(-86, -70), -70, 11, 0.6, true);
+        if (MODELS.house_b) place('house_b', 84, W.heightAt(84, 62), 62, 11, -0.9, true);
+        if (MODELS.house_c) place('house_c', -6, W.heightAt(-6, -84), -84, 10, 0.2, true);
 
         buildCamp(430, -260, 4);
         buildCamp(-520, 300, 3);
