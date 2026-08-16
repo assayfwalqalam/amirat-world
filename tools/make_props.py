@@ -508,7 +508,10 @@ me = ob.data
 me.calc_loop_triangles()
 print("RESULT %s verts=%d tris=%d colliders=%d" % (KIND, len(me.vertices), len(me.loop_triangles), len(COLLIDERS)))
 
-use_vertex_colour(nt, bsdf, None)
+# Props carry a flat tint rather than a texture, so Base Color must stay a
+# constant: linking anything into it makes the exporter drop baseColorFactor
+# and every prop turns grey. The occlusion still ships, because the export
+# call below asks for the active colour layer explicitly.
 bpy.ops.object.select_all(action='DESELECT')
 ob.select_set(True)
 try:
