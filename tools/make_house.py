@@ -17,6 +17,29 @@ ASSETS = argv[2] if len(argv) > 2 else os.path.join(os.path.dirname(OUT), "..", 
 random.seed(SEED)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
+
+def use_vertex_colour(nt, bsdf, tex_node=None, name="ao"):
+    """Wire the baked occlusion into Base Color.
+
+    Blender only writes a vertex colour layer into the .glb if the material
+    actually reads it. Baking alone is silently dropped on export, which
+    leaves every surface flat -- so the layer is multiplied over the texture
+    here. glTF stores it as COLOR_0 and the renderer multiplies it back.
+    """
+    vc = nt.nodes.new('ShaderNodeVertexColor')
+    vc.layer_name = name
+    vc.location = (-700, -140)
+    if tex_node is None:
+        nt.links.new(vc.outputs['Color'], bsdf.inputs['Base Color'])
+        return
+    mix = nt.nodes.new('ShaderNodeMixRGB')
+    mix.blend_type = 'MULTIPLY'
+    mix.inputs['Fac'].default_value = 1.0
+    mix.location = (-380, 200)
+    nt.links.new(tex_node.outputs['Color'], mix.inputs['Color1'])
+    nt.links.new(vc.outputs['Color'], mix.inputs['Color2'])
+    nt.links.new(mix.outputs['Color'], bsdf.inputs['Base Color'])
+
 scene = bpy.context.scene
 scene.render.engine = 'CYCLES'
 scene.cycles.device = 'CPU'
@@ -410,10 +433,19 @@ me = house.data
 me.calc_loop_triangles()
 print("RESULT verts=%d tris=%d colliders=%d" % (len(me.vertices), len(me.loop_triangles), len(COLLIDERS)))
 
+use_vertex_colour(nt, bsdf, tn if 'tn' in dir() else None)
 bpy.ops.object.select_all(action='DESELECT')
 house.select_set(True)
-bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
-                          export_apply=True, export_yup=True)
+try:
+    # 'ACTIVE' writes the baked occlusion layer regardless of the node tree.
+    # The default only exports it if the exporter can trace it to Base Color,
+    # which silently loses the bake and leaves everything flat.
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
+                              export_apply=True, export_yup=True,
+                              export_vertex_color='ACTIVE')
+except TypeError:
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
+                              export_apply=True, export_yup=True)
 
 with open(os.path.splitext(OUT)[0] + ".col.json", "w") as f:
     json.dump({"boxes": COLLIDERS, "spots": SPOTS}, f)

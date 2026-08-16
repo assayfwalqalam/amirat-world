@@ -70,9 +70,32 @@
     return sstep(0.70, 0.80, l);
   }
 
+  /* Places where the water table reaches the surface. A walled desert town is
+     built where the water is, never in open sand, so the belt around the walls
+     is green and the dunes only begin further out. */
+  var OASES = [
+    { x: 0, z: 0, r: 300, f: 560 },        /* the town's own palm belt   */
+    { x: -430, z: 330, r: 190, f: 420 },   /* the lake and its reed beds */
+    { x: 520, z: -240, r: 120, f: 300 }
+  ];
+  function oasisAt(x, z) {
+    var best = 0;
+    for (var i = 0; i < OASES.length; i++) {
+      var o = OASES[i];
+      var d = Math.sqrt((x - o.x) * (x - o.x) + (z - o.z) * (z - o.z));
+      var v = 1 - sstep(o.r, o.r + o.f, d);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+  W.oasisAt = oasisAt;
+
   W.biomeAt = function (x, z) {
     var moist = fbm(x * 0.00040 + 91.3, z * 0.00040 - 17.7, 3);
     var rocky = fbm(x * 0.00066 - 33.1, z * 0.00066 + 55.9, 3);
+    var oa = oasisAt(x, z);
+    /* the edge of the green is ragged, not a drawn circle */
+    moist = lerp(moist, 0.94, oa * (0.72 + 0.28 * fbm(x * 0.0042 + 5.1, z * 0.0042 - 7.3, 2)));
     var g = sstep(0.38, 0.58, moist);
     var r = sstep(0.56, 0.73, rocky) * (1 - g * 0.8);
     return { grass: g, rock: r };
@@ -84,12 +107,27 @@
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
     var h = (cont - 0.13) * 165;
 
-    /* dunes ride on a warped field so their crests wander instead of marching */
-    var wx = x + fbm(x * 0.0013 + 21.4, z * 0.0013 - 8.2, 2) * 260;
-    var wz = z + fbm(x * 0.0011 - 5.6, z * 0.0011 + 14.9, 2) * 260;
-    var dune = ridged(wx * 0.0040 + 7.7, wz * 0.0034 - 3.3, 3);
-    var dune2 = ridged(wx * 0.0011 - 2.2, wz * 0.0013 + 5.5, 2);
-    h += ((dune - 0.5) * 16 + (dune2 - 0.5) * 21) * (1 - b.grass) * (1 - b.rock * 0.7);
+    /* Dune fields. A sand sea is not corduroy: dunes gather into trains with
+       bare sheets of flat sand between them, two sets crossing at an angle,
+       and each crest leans downwind so its lee face is short and steep. */
+    var sand = (1 - b.grass) * (1 - b.rock * 0.7);
+    if (sand > 0.02) {
+      var field = fbm(x * 0.00048 + 61.7, z * 0.00048 - 29.4, 3);
+      var dmask = sstep(0.40, 0.63, field);
+      if (dmask > 0.004) {
+        var wx = x + fbm(x * 0.0013 + 21.4, z * 0.0013 - 8.2, 2) * 300;
+        var wz = z + fbm(x * 0.0011 - 5.6, z * 0.0011 + 14.9, 2) * 300;
+        var ca = 0.8517, sa = 0.5240;          /* first train, +31.6 deg  */
+        var cb = 0.4085, sb = -0.9128;         /* second, crossing it     */
+        var xa = wx * ca + wz * sa, za = -wx * sa + wz * ca;
+        var xb = wx * cb + wz * sb, zb = -wx * sb + wz * cb;
+        var r0 = ridged(xa * 0.0038 + 7.7, za * 0.0030 - 3.3, 2);
+        var big = ridged((xa + r0 * 130) * 0.0038 + 7.7, za * 0.0030 - 3.3, 3);
+        var sml = ridged(xb * 0.0094 - 2.2, zb * 0.0081 + 5.5, 2);
+        var d = Math.pow(big * 0.74 + sml * 0.26, 1.75);
+        h += (d - 0.19) * 38 * dmask * sand;
+      }
+    }
 
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
     h += Math.pow(Math.max(0, hill), 1.9) * 165 * b.rock;
@@ -103,6 +141,11 @@
 
     var lk = lakeAt(x, z) * sstep(60, 10, h);
     h = lerp(h, WATER_Y - 4.6, lk);
+
+    /* the lake the town drinks from · carved, not left to the noise */
+    var ld = Math.sqrt((x + 430) * (x + 430) + (z - 330) * (z - 330));
+    var lb = 1 - sstep(96, 208, ld + (fbm(x * 0.0055 - 3.3, z * 0.0055 + 9.1, 2) - 0.5) * 130);
+    if (lb > 0) h = lerp(h, WATER_Y - 5.2, lb * lb * (3 - 2 * lb));
 
     for (var i = 0; i < FLATS.length; i++) {
       var f = FLATS[i];
@@ -252,11 +295,13 @@
     var mp = moonDir.clone().multiplyScalar(2600);
 
     halo = new THREE.Mesh(new THREE.PlaneGeometry(1150, 1150),
-      new THREE.MeshBasicMaterial({ map: tex('assets/glow.png', true), color: 0xa9b6f0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, opacity: 0.5 }));
+      new THREE.MeshBasicMaterial({ map: tex('assets/glow.png', true), color: 0xa9b6f0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, opacity: 0.34 }));
     halo.position.copy(mp); scene.add(halo);
 
-    moonMesh = new THREE.Mesh(new THREE.PlaneGeometry(310, 310),
-      new THREE.MeshBasicMaterial({ map: tex('assets/moon.png', true), transparent: true, depthWrite: false, fog: false, toneMapped: false }));
+    /* Bigger, but tinted just under the bloom threshold · a pure white disc
+       blooms into a featureless blob and the face is lost. */
+    moonMesh = new THREE.Mesh(new THREE.PlaneGeometry(380, 380),
+      new THREE.MeshBasicMaterial({ map: tex('assets/moon.png', true), color: 0xd6dcf0, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
     moonMesh.position.copy(mp); scene.add(moonMesh);
 
     var ctex = [tex('assets/cloud0.png', true), tex('assets/cloud1.png', true), tex('assets/cloud2.png', true)];
@@ -380,6 +425,17 @@
           'col = mix(col, rock, wRock);',
           'col = mix(col, col * vec3(0.70, 0.76, 0.70), vColor.b * 0.55);',
           'col *= 0.94 + 0.12 * fine;',
+          /* Grain underfoot. The broad layers repeat every ten metres or so,
+             which is smooth mush at arm's length, so a fine layer fades in
+             close to the eye and is gone before it can shimmer at distance. */
+          'float camD = length(vWPos - cameraPosition);',
+          'float nearW = 1.0 - smoothstep(3.0, 30.0, camD);',
+          'if (nearW > 0.002) {',
+          '  vec3 grain = texture2D(tSand, wxz * 0.62).rgb;',
+          '  vec3 grit  = texture2D(tGrav, wxz * 1.35).rgb;',
+          '  float g = grain.r * 0.65 + grit.r * 0.35;',
+          '  col *= mix(1.0, 0.58 + 0.86 * g, nearW * 0.62);',
+          '}',
           'diffuseColor.rgb *= col;'
         ].join('\n'));
     };

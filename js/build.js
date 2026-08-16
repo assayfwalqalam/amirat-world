@@ -521,7 +521,10 @@
         if (name.indexOf('p_') === 0) {
           g.scene.traverse(function (o) {
             if (o.isMesh && o.material) {
-              o.material.color.multiplyScalar(0.62);   /* they read far too pale at night */
+              o.castShadow = false;
+              /* the baked occlusion now carries most of the shading, so the
+                 base tone sits higher than it did when surfaces were flat */
+              o.material.color.multiplyScalar(0.95);
               o.material.roughness = 1;
               o.material.metalness = 0;
               if (o.geometry.attributes.color_1) o.geometry.deleteAttribute('color_1');
@@ -530,7 +533,7 @@
         } else if (name.indexOf('bh') === 0) {
           g.scene.traverse(function (o) {
             if (o.isMesh && o.material) {
-              o.material.color.setHex(0xc8a582);      /* sun-dried mud, not pale plaster */
+              o.material.color.setHex(0xe6c6a0);      /* sun-dried mud · occlusion darkens it back down */
               o.material.roughness = 1;
               o.material.metalness = 0;
               if (o.geometry.attributes.color_1) o.geometry.deleteAttribute('color_1');
@@ -579,10 +582,22 @@
   var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET,
                                     ['p_brazier', 'p_well', 'p_torch', 'p_torchpost']);
 
+  /* Props are drawn out to a distance that matches their size. Anything that
+     shows in a silhouette from across the square keeps its range; a bowl or an
+     inkpot is invisible at twenty paces and is not worth a draw call. */
+  var BIG_PROP = {
+    p_carpet: 1, p_table: 1, p_chest: 1, p_awning: 1, p_stall: 1, p_cart: 1,
+    p_bench: 1, p_barrel: 1, p_barrels: 1, p_crates: 1, p_sacks: 1, p_jars: 1,
+    p_plantpot: 1, p_spears: 1, p_swordrack: 1, p_brazier: 1, p_well: 1,
+    p_torch: 1, p_torchpost: 1, p_firewood: 1, p_basket: 1, p_pot: 1
+  };
+  var SMALL = [];
+
   function propOn(list, seed, x, y, z, rot, scale) {
     var key = list[Math.floor(hashU(seed) * list.length) % list.length];
     if (!MODELS[key]) return null;
     var g = placeBuilt(key, x, y, z, rot, scale || 1);
+    if (g) { g.userData.far = BIG_PROP[key] ? 19600 : 2500; SMALL.push(g); }
     return g;
   }
 
@@ -1466,6 +1481,7 @@
     }
   };
 
+  var smallTick = 0;
   W.tick = function (W, dt, t) {
     for (var i = 0; i < winds.length; i++) winds[i].value = t;
     var cp = W.cam.position;
@@ -1473,6 +1489,17 @@
     var pp = W.getPos();
     if (lawn && (Math.abs(pp.x - lawnAt.x) > 11 || Math.abs(pp.z - lawnAt.z) > 11)) refreshLawn(pp);
     tickFires(t, dt, cp);
+
+    /* Small things are only drawn near the player. A town's worth of pots and
+       barrels is more geometry than the buildings, and none of it reads from
+       across the square. */
+    if ((smallTick++ & 7) === 0) {
+      for (var sI = 0; sI < SMALL.length; sI++) {
+        var so = SMALL[sI];
+        var sdx = so.position.x - cp.x, sdz = so.position.z - cp.z;
+        so.visible = (sdx * sdx + sdz * sdz) < so.userData.far;
+      }
+    }
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
       if (lp.d2 > 26000) { lp.g.visible = false; continue; }
