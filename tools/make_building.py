@@ -588,44 +588,77 @@ def build_shops():
 
 
 def build_riad():
-    """Two storeys round a small inner court with an arcade."""
+    """Two storeys of rooms wrapped round a small inner court."""
     W = random.uniform(17, 22)
     D = random.uniform(15, 20)
-    cw, cd = W * random.uniform(0.34, 0.44), D * random.uniform(0.34, 0.44)
+    cw = W * random.uniform(0.30, 0.38)          # the court
+    cd = D * random.uniform(0.30, 0.38)
     h = random.uniform(3.2, 3.8)
+
     floor_slab(0, 0, W, D, 0)
-    cut_court = solid(cw, cd, 3.0, (0, 0, 0.4 + 1.4), False, False)
-    bpy.data.objects.remove(cut_court, do_unlink=True)
 
     for lvl in range(2):
         z = 0.4 + lvl * (h + 0.4)
-        # four ranges round the court
-        rd = (D - cd) / 2
-        rw = (W - cw) / 2
-        door = ('S', 0.0, 1.5, 2.5) if lvl == 0 else None
-        storey(0, -(cd / 2 + rd / 2), W, rd, z, h, doorway=door, wins=2)
-        storey(0, cd / 2 + rd / 2, W, rd, z, h, wins=1)
-        storey(-(cw / 2 + rw / 2), 0, rw, cd, z, h, wins=1)
-        storey(cw / 2 + rw / 2, 0, rw, cd, z, h, wins=1)
-        for cx2, cy2, w2, d2 in ((0, -(cd / 2 + rd / 2), W, rd), (0, cd / 2 + rd / 2, W, rd),
-                                 (-(cw / 2 + rw / 2), 0, rw, cd), (cw / 2 + rw / 2, 0, rw, cd)):
-            floor_slab(cx2, cy2, w2, d2, z + h)
+        # the outer enclosure: one ring of wall all the way round
+        door = ('S', random.uniform(-W * 0.18, W * 0.18), 1.6, 2.6) if lvl == 0 else None
+        storey(0, 0, W, D, z, h, doorway=door, wins=random.randint(2, 4),
+               roomspot=(lvl == 0))
+        # the court: a hole through this floor, walled on all four sides
+        for sy in (-1, 1):
+            solid(cw + T * 2, T, h, (0, sy * (cd / 2 + T / 2), z + h / 2))
+        for sx in (-1, 1):
+            solid(T, cd, h, (sx * (cw / 2 + T / 2), 0, z + h / 2))
+        # the floor of the storey above, with the court left open in it
+        band_d = (D - cd) / 2
+        band_w = (W - cw) / 2
+        for sy in (-1, 1):
+            floor_slab(0, sy * (cd / 2 + band_d / 2), W, band_d, z + h)
+        for sx in (-1, 1):
+            floor_slab(sx * (cw / 2 + band_w / 2), 0, band_w, cd, z + h)
+        if lvl == 0:
+            beams(0, -(cd / 2 + band_d / 2), W, band_d, z + h + 0.2)
+            SPOTS.append({"c": [0.0, round(z, 3), round(cd / 2 + band_d / 2, 3)],
+                          "r": [round(W / 2 - 2, 2), round(band_d / 2 - 1.2, 2)], "k": "room"})
+        else:
+            SPOTS.append({"c": [0.0, round(z, 3), round(-(cd / 2 + band_d / 2), 3)],
+                          "r": [round(W / 2 - 2, 2), round(band_d / 2 - 1.2, 2)], "k": "balcony"})
+
     ztop = 0.4 + 2 * (h + 0.4)
-    for cx2, cy2, w2, d2 in ((0, -(cd / 2 + (D - cd) / 4), W, (D - cd) / 2),
-                             (0, cd / 2 + (D - cd) / 4, W, (D - cd) / 2)):
-        parapet(cx2, cy2, w2, d2, ztop, 0.95)
-        SPOTS.append({"c": [round(cx2, 3), round(ztop, 3), round(-cy2, 3)],
-                      "r": [round(w2 / 2 - 1.2, 2), round(d2 / 2 - 1.0, 2)], "k": "roof"})
-    # the arcade of piers round the court, ground level
-    n = 4
-    for i in range(n + 1):
-        for sgn in (-1, 1):
-            px = -cw / 2 + i * (cw / n)
-            pillar(px, sgn * cd / 2, 0.4, h - 0.3, r=0.26)
-            py = -cd / 2 + i * (cd / n)
-            pillar(sgn * cw / 2, py, 0.4, h - 0.3, r=0.26)
+    # the roof terrace, with the court still open through it
+    for sy in (-1, 1):
+        band_d = (D - cd) / 2
+        parapet(0, sy * (cd / 2 + band_d / 2), W, band_d, ztop, 0.95, rails=(sy < 0))
+        SPOTS.append({"c": [0.0, round(ztop, 3), round(-sy * (cd / 2 + band_d / 2), 3)],
+                      "r": [round(W / 2 - 1.4, 2), round(band_d / 2 - 1.0, 2)], "k": "roof"})
+    for sx in (-1, 1):
+        band_w = (W - cw) / 2
+        parapet(sx * (cw / 2 + band_w / 2), 0, band_w, cd, ztop, 0.95, rails=False)
+    # a low kerb round the court opening on the roof, so nobody walks off it
+    for sy in (-1, 1):
+        solid(cw + 1.0, 0.28, 0.55, (0, sy * (cd / 2 + 0.14), ztop + 0.28))
+    for sx in (-1, 1):
+        solid(0.28, cd, 0.55, (sx * (cw / 2 + 0.14), 0, ztop + 0.28))
+
+    # the arcade of piers standing in the court, carrying the upper walk
+    n_x = max(2, int(cw / 2.4))
+    n_y = max(2, int(cd / 2.4))
+    for i in range(n_x + 1):
+        px = -cw / 2 + i * (cw / n_x)
+        for sy in (-1, 1):
+            pillar(px, sy * (cd / 2 - 0.55), 0.4, h - 0.35, r=0.24)
+    for i in range(1, n_y):
+        py = -cd / 2 + i * (cd / n_y)
+        for sx in (-1, 1):
+            pillar(sx * (cw / 2 - 0.55), py, 0.4, h - 0.35, r=0.24)
+
+    # what stands in a courtyard: a basin, and somewhere to sit
+    cyl(1.05, 0.42, (0, 0, 0.61), verts=16)
+    rec((0, 0, 0.61), 1.0, 1.0, 0.21)
+    cyl(0.85, 0.1, (0, 0, 0.83), verts=16)
+    cyl(0.16, 0.5, (0, 0, 1.05), verts=10)
     SPOTS.append({"c": [0.0, 0.4, 0.0],
-                  "r": [round(cw / 2 - 0.7, 2), round(cd / 2 - 0.7, 2)], "k": "court"})
+                  "r": [round(cw / 2 - 0.9, 2), round(cd / 2 - 0.9, 2)], "k": "court"})
+    ext_stair(-W / 2 + 0.9, -D / 2 - 2.8, 1.5, 2.6, 0, 0.4 + h)
 
 
 def build_block():
