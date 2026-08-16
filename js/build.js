@@ -85,7 +85,7 @@
     M.brick = surf('t_adobe', 0xd9b489, { nrm: 1.2 });
     M.brick2 = surf('t_adobe', 0xc19a74, { nrm: 1.2 });
     M.stone = surf('t_ashlar', 0xe6cda4, { nrm: 1.0 });
-    M.stone2 = surf('t_fort', 0xd8bd94, { nrm: 1.0 });
+    M.stone2 = surf('t_ashlar', 0xd5bb92, { nrm: 1.0 });
     M.marble = surf('t_marble', 0xf3ece6, { nrm: 0.5, rough: 0.42 });
     M.cloth = mat('assets/cloth.jpg', 0xbba98e, 1, [1, 1]);
     M.wood = new T.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 });
@@ -378,7 +378,17 @@
             }
           }
         });
-        if (name.indexOf('ah') === 0 && name.length === 3) {
+        if (name.indexOf('bh') === 0) {
+          g.scene.traverse(function (o) {
+            if (o.isMesh && o.material) {
+              o.material.color.setHex(0xd8ab72);      /* sun-dried mud, not pale plaster */
+              o.material.roughness = 1;
+              o.material.metalness = 0;
+              if (o.geometry.attributes.color_1) o.geometry.deleteAttribute('color_1');
+              if (o.material.map) { o.material.map.anisotropy = 8; }
+            }
+          });
+        } else if (name.indexOf('ah') === 0 && name.length === 3) {
           if (!M.wallTri) M.wallTri = triplanar('t_adobe', 0xd9b78c, 0.34);
           g.scene.traverse(function (o) { if (o.isMesh) o.material = M.wallTri; });
         } else if (name === 'mosque_orn') {
@@ -408,119 +418,78 @@
   /* ---------------------------------------------------------- the town */
   var TOWN = { x: 0, z: 0, y: 0, R: 118 };
 
-  /* A square town, the way a desert citadel is actually laid out:
-     four straight curtain walls, square towers at the corners and along each
-     run, and one gatehouse. Every piece is solid at its true size. */
-  var TOWNSQ = 132;                        /* half-width of the square */
-  function buildTown() {
-    var Y = TOWN.y, S = TOWNSQ;
-    var WH = 13.5, WD = 6.0, T_ = 24;      /* height, thickness, tower pitch */
-    var gateA = 'south';
+  /* A square citadel, assembled from Blender-made pieces so the walls carry the
+     same eroded stone as the houses. Every piece brings its own collision. */
+  var TOWNSQ = 132;
+  var WALL_KIT = ['w_seg', 'w_tower', 'w_tower_big', 'w_gate'];
+  var SEG_LEN = 12.0, GATE_HALF = 6.5;
 
-    function curtain(x0, z0, x1, z1, skipFrom, skipTo) {
-      var dx = x1 - x0, dz = z1 - z0;
+  function buildTown() {
+    /* the walls need their models · assembled once those have arrived */
+  }
+
+  function buildCitadel() {
+    var Y = TOWN.y, S = TOWNSQ;
+    if (!MODELS.w_seg) { W.diag('wall pieces missing'); return; }
+
+    /* four runs; yaw turns each piece to face outward */
+    var runs = [
+      { x0: -S, z0: S, x1: S, z1: S, yaw: 0 },              /* south, holds the gate */
+      { x0: S, z0: -S, x1: -S, z1: -S, yaw: Math.PI },      /* north */
+      { x0: -S, z0: -S, x1: -S, z1: S, yaw: -Math.PI / 2 },  /* west */
+      { x0: S, z0: S, x1: S, z1: -S, yaw: Math.PI / 2 }      /* east */
+    ];
+
+    runs.forEach(function (r, ri) {
+      var dx = r.x1 - r.x0, dz = r.z1 - r.z0;
       var len = Math.hypot(dx, dz);
-      var yaw = Math.atan2(dz, dx);
-      var n = Math.ceil(len / 8);
-      var seg = len / n;
+      var n = Math.round(len / SEG_LEN);
+      var ux = dx / len, uz = dz / len;
       for (var i = 0; i < n; i++) {
         var t = (i + 0.5) / n;
-        var cx = x0 + dx * t, cz = z0 + dz * t;
-        if (skipFrom !== undefined) {
-          var along = t * len;
-          if (along > skipFrom && along < skipTo) continue;
-        }
-        box(seg + 0.25, 3.4, WD + 1.6, cx, Y + 1.7, cz, M.stone2, -yaw);
-        box(seg + 0.25, WH - 3.4, WD, cx, Y + 3.4 + (WH - 3.4) / 2, cz, M.stone, -yaw);
-        box(seg + 0.25, 0.5, WD + 0.4, cx, Y + WH + 0.25, cz, M.stone2, -yaw);
-        /* battlements */
-        for (var k = -1; k <= 1; k += 2) {
-          box(seg * 0.34, 1.9, 1.5,
-              cx + Math.cos(yaw) * (k * seg * 0.26) + Math.sin(yaw) * (WD / 2 - 0.8),
-              Y + WH + 1.45,
-              cz + Math.sin(yaw) * (k * seg * 0.26) - Math.cos(yaw) * (WD / 2 - 0.8),
-              M.stone, -yaw, false);
-        }
-        /* the walkway, on the town side */
-        box(seg + 0.25, 0.8, 3.4,
-            cx - Math.sin(yaw) * (WD / 2 + 1.7), Y + WH - 0.4,
-            cz + Math.cos(yaw) * (WD / 2 + 1.7), M.stone2, -yaw);
-        box(seg + 0.25, 1.3, 0.7,
-            cx - Math.sin(yaw) * (WD / 2 + 3.2), Y + WH + 0.65,
-            cz + Math.cos(yaw) * (WD / 2 + 3.2), M.stone2, -yaw, false);
+        var cx = r.x0 + dx * t, cz = r.z0 + dz * t;
+        if (ri === 0 && Math.abs(cx) < GATE_HALF + 8.5) continue;   /* leave the gateway */
+        placeBuilt('w_seg', cx, Y, cz, r.yaw, 1.0);
       }
+    });
+
+    /* towers: bigger at the corners, regular ones along each run */
+    [[-S, -S], [S, -S], [-S, S], [S, S]].forEach(function (c) {
+      placeBuilt('w_tower_big', c[0], Y, c[1], 0, 1.0);
+    });
+    for (var k = 1; k <= 4; k++) {
+      var f = k / 5;
+      var at = -S + S * 2 * f;
+      placeBuilt('w_tower', at, Y, -S, 0, 1.0);
+      placeBuilt('w_tower', -S, Y, at, 0, 1.0);
+      placeBuilt('w_tower', S, Y, at, 0, 1.0);
+      if (Math.abs(f - 0.5) > 0.18) placeBuilt('w_tower', at, Y, S, 0, 1.0);
     }
 
-    function tower(cx, cz, yaw, big) {
-      var TH = WH + (big ? 6.5 : 4.5), w = big ? 13 : 11;
-      box(w + 1.4, 4.0, w + 1.4, cx, Y + 2.0, cz, M.stone2, yaw);
-      box(w, TH - 4.0, w, cx, Y + 4.0 + (TH - 4.0) / 2, cz, M.stone, yaw);
-      box(w + 1.2, 0.8, w + 1.2, cx, Y + TH + 0.4, cz, M.stone2, yaw);
-      for (var f = 0; f < 4; f++) {
-        var fa = yaw + f * Math.PI / 2;
-        for (var q = -1; q <= 1; q++) {
-          box(2.5, 2.0, 1.4,
-              cx + Math.cos(fa) * (w / 2 + 0.4) - Math.sin(fa) * (q * w * 0.3),
-              Y + TH + 1.4,
-              cz + Math.sin(fa) * (w / 2 + 0.4) + Math.cos(fa) * (q * w * 0.3),
-              M.stone, fa, false);
-        }
-      }
-      torch(cx, Y + WH - 1.2, cz + w / 2 + 0.5, 0);
-    }
+    /* the gatehouse */
+    placeBuilt('w_gate', 0, Y, S, 0, 1.0);
+    torch(-GATE_HALF - 1.0, Y + 3.8, S + 7.2, 0);
+    torch(GATE_HALF + 1.0, Y + 3.8, S + 7.2, 0);
+    torch(-GATE_HALF - 1.0, Y + 3.8, S - 7.2, 0);
+    torch(GATE_HALF + 1.0, Y + 3.8, S - 7.2, 0);
 
-    /* four curtain walls, with the gateway left open in the south run */
-    var gateHalf = 6.5;
-    var southLen = S * 2;
-    curtain(-S, S, S, S, southLen / 2 - gateHalf, southLen / 2 + gateHalf);  /* south */
-    curtain(S, -S, -S, -S);                                                   /* north */
-    curtain(-S, -S, -S, S);                                                   /* west */
-    curtain(S, S, S, -S);                                                     /* east */
-
-    /* corner towers, then intermediate ones along each run */
-    [[-S, -S], [S, -S], [-S, S], [S, S]].forEach(function (c) { tower(c[0], c[1], 0, true); });
-    for (var t2 = 1; t2 <= 4; t2++) {
-      var f2 = t2 / 5;
-      tower(-S + S * 2 * f2, -S, 0, false);
-      if (Math.abs(f2 - 0.5) > 0.16) tower(-S + S * 2 * f2, S, 0, false);
-      tower(-S, -S + S * 2 * f2, 0, false);
-      tower(S, -S + S * 2 * f2, 0, false);
-    }
-
-    /* the gatehouse, in the middle of the south wall */
-    var gz = S, GH = WH + 7;
+    /* stairs up to the rampart, climbing along the wall and facing into the town */
     [-1, 1].forEach(function (sgn) {
-      var bx = sgn * (gateHalf + 6.5);
-      box(14, 4.2, 14, bx, Y + 2.1, gz, M.stone2, 0);
-      box(12.6, GH - 4.2, 12.6, bx, Y + 4.2 + (GH - 4.2) / 2, gz, M.stone, 0);
-      box(13.8, 0.8, 13.8, bx, Y + GH + 0.4, gz, M.stone2, 0);
-      for (var q3 = -1; q3 <= 1; q3++) {
-        box(2.8, 2.1, 1.5, bx + q3 * 4.2, Y + GH + 1.55, gz + 6.6, M.stone, 0, false);
-        box(2.8, 2.1, 1.5, bx + q3 * 4.2, Y + GH + 1.55, gz - 6.6, M.stone, 0, false);
-      }
-      torch(bx + sgn * 6.0, Y + 4.6, gz + 7.0, 0);
-    });
-    box(gateHalf * 2 + 14, 5.2, 13, 0, Y + WH - 1.1, gz, M.stone, 0);
-    box(gateHalf * 2 + 15, 0.8, 13.4, 0, Y + WH + 1.9, gz, M.stone2, 0);
-    for (var q4 = -2; q4 <= 2; q4++) {
-      box(2.8, 2.1, 1.5, q4 * 4.3, Y + WH + 3.2, gz + 6.6, M.stone, 0, false);
-    }
-    arch(gateHalf * 2 - 0.6, 8.4, 13.4, 0, Y + 8.2, gz, M.stone2, 0);
-    torch(-gateHalf - 0.6, Y + 3.8, gz + 7.0, 0);
-    torch(gateHalf + 0.6, Y + 3.8, gz + 7.0, 0);
-
-    /* stairs to the rampart · they climb along the wall and face into the town,
-       so you walk up them the way you are already walking */
-    [[-1, 'south'], [1, 'south']].forEach(function (side) {
-      var sgn = side[0];
-      var sx = sgn * (gateHalf + 15);
-      var steps = 19, rise = WH / steps, run = 1.5;
+      var sx = sgn * (GATE_HALF + 17);
+      var steps = 19, rise = 13.5 / steps, run = 1.5;
       for (var i = 0; i < steps; i++) {
-        box(4.2, rise + 0.12, run + 0.1,
-            sx, Y + rise / 2 + i * rise, gz - 9 - i * run, M.stone2, 0);
+        box(4.2, rise + 0.14, run + 0.12, sx, Y + rise / 2 + i * rise,
+            S - 10 - i * run, M.stone2, 0);
       }
-      box(4.2, 0.9, 4.0, sx, Y + WH - 0.45, gz - 9 - steps * run - 1.6, M.stone2, 0);
+      box(4.2, 0.9, 4.2, sx, Y + 13.5 - 0.45, S - 10 - steps * run - 1.8, M.stone2, 0);
     });
+
+    /* torches along the rampart */
+    for (var w2 = 0; w2 < 12; w2++) {
+      var a2 = w2 / 12;
+      torch(-S + S * 2 * a2, Y + 12.2, S - 4.5, 0);
+      torch(-S + S * 2 * a2, Y + 12.2, -S + 4.5, Math.PI);
+    }
   }
 
   /* the friday mosque · dome, minaret, mihrab, lamps */
@@ -1249,13 +1218,14 @@
       }
     }
 
-    Promise.all(BUILT.map(loadCollision));
-    loadModels(BUILT.concat(['mosque_orn',
+    Promise.all(BUILT.concat(WALL_KIT).map(loadCollision));
+    loadModels(BUILT.concat(WALL_KIT).concat(['mosque_orn',
       'palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small']), function () {
         /* things that need the models */
+        buildCitadel();
         buildSculptedHouses();
         /* the friday mosque */
         if (MODELS.mosque_orn) {
