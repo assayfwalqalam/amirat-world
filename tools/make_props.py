@@ -444,6 +444,32 @@ elif KIND == "torchpost":
         c = sphere(0.075, (math.cos(a) * 0.07, math.sin(a) * 0.07, 2.45))
         jitter(c, 0.02)
 
+elif KIND == "ladder":
+    # leaning ladder, after the roofs in the reference panorama
+    H = 2.7
+    lean = 0.16
+    for sx in (-1, 1):
+        cyl(0.034, 0.028, H, (sx * 0.20, 0, H / 2), rot=(lean, 0, 0), verts=6)
+    for i in range(7):
+        z = 0.25 + i * (H - 0.5) / 6
+        y = -(z - H / 2) * math.tan(lean)
+        cyl(0.021, 0.021, 0.42, (0, y, z), rot=(0, math.pi / 2, 0), verts=6)
+
+elif KIND == "pergola":
+    # posts carrying spaced planks: the shade structure of every courtyard
+    W2, D2, H2 = 3.0, 2.6, 2.35
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cyl(0.085, 0.07, H2, (sx * W2 / 2, sy * D2 / 2, H2 / 2),
+                rot=(random.uniform(-0.03, 0.03), random.uniform(-0.03, 0.03), 0),
+                verts=7, collide=True)
+    for sy in (-1, 1):
+        box(W2 + 0.5, 0.11, 0.13, (0, sy * D2 / 2, H2))
+    n = 8
+    for i in range(n):
+        x = -W2 / 2 + i * (W2 / (n - 1))
+        box(0.09, D2 + 0.55, 0.05, (x, 0, H2 + 0.08))
+
 elif KIND == "stones":
     for i in range(9):
         r = random.uniform(0.18, 0.42)
@@ -496,6 +522,7 @@ TINT = {
     # iron stands right under a flame -- too dark a tint and it reads as a
     # black modern lamp post rather than a lit bracket
     "torch": (0.34, 0.28, 0.23), "torchpost": (0.38, 0.32, 0.26),
+    "ladder": (0.30, 0.21, 0.12), "pergola": (0.27, 0.19, 0.11),
 }.get(KIND, (0.45, 0.36, 0.26))
 
 mat = bpy.data.materials.new(KIND)

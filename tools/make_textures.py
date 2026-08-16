@@ -92,13 +92,13 @@ def adobe():
         x, y = rnd.randrange(S), rnd.randrange(S)
         d.point((x, y), fill=128 + rnd.choice((-18, -12, 13, 19)))
     # trowel strokes: long, shallow, and wide enough to see
-    for _ in range(150):
+    for _ in range(80):
         y = rnd.randrange(S)
         x0 = rnd.randrange(-100, S)
         ln = rnd.randrange(160, 620)
         sag = rnd.uniform(-14, 14)
         th = rnd.randrange(3, 9)
-        v = 128 + rnd.choice((-15, -10, 11, 16))
+        v = 128 + rnd.choice((-11, -8, 8, 12))
         for i in range(ln):
             xx = (x0 + i) % S
             yy = int(y + math.sin(i / ln * math.pi) * sag) % S
@@ -130,6 +130,13 @@ def adobe():
             d.point((int(x), int(y)), fill=96)
             if rnd.random() < 0.4:
                 d.point((int(x) + 1, int(y)), fill=112)
+    # (putlog hole rows removed: they are the mosque's own design in the
+    #  reference, not the houses' -- his correction)
+    # broad mottle, streaked DOWN the wall the way rain leaves it
+    mot = Image.new("L", (S // 10, S // 4))
+    mot.putdata([128 + int(rnd.gauss(0, 22)) for _ in range((S // 10) * (S // 4))])
+    mot = mot.resize((S, S), Image.BICUBIC).filter(ImageFilter.GaussianBlur(5))
+    base = Image.blend(base, mot, 0.15)
     im = tint(base, (198, 165, 123), contrast=0.56, base=1.0)
     return im
 

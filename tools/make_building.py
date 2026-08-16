@@ -458,6 +458,21 @@ def floor_slab(cx, cy, w, d, z, thick=0.4, proud=False):
         solid(w, d, thick, (cx, cy, z + thick / 2))
 
 
+def bulkhead(cx, cy, z):
+    """The little room over a stair head, standard furniture of these roofs
+    (study: every second roof in the reference panorama carries one)."""
+    bw, bd, bh = 2.1, 2.1, 2.2
+    solid(bw, T, bh, (cx, cy + bd / 2 - T / 2, z + bh / 2))
+    solid(T, bd - T * 2, bh, (cx - bw / 2 + T / 2, cy, z + bh / 2))
+    solid(T, bd - T * 2, bh, (cx + bw / 2 - T / 2, cy, z + bh / 2))
+    fy = cy - bd / 2 + T / 2
+    for sgn in (-1, 1):
+        solid(0.3, T, bh, (cx + sgn * (bw / 2 - 0.15), fy, z + bh / 2))
+    solid(bw, T, 0.35, (cx, fy, z + bh - 0.175))
+    cap = solid(bw + 0.5, bd + 0.5, 0.3, (cx, cy, z + bh + 0.15))
+    erode(cap, 1, 0.015, 0.025)
+
+
 # =============================================================== families
 def build_court():
     """Rooms round a walled yard, with a gate: a small compound."""
@@ -572,6 +587,8 @@ def build_house(storeys=None):
             gap=(stair_x, 1.8) if (want_stair and storeys == 1) else None)
     SPOTS.append({"c": [round(cx, 3), round(z, 3), round(-cy, 3)],
                   "r": [round(cw / 2 - 1.0, 2), round(cd / 2 - 1.0, 2)], "k": "roof"})
+    if storeys >= 2 and random.random() < 0.6:
+        bulkhead(cx + cw / 2 - 1.6, cy + cd / 2 - 1.6, z)
 
     if want_stair:
         # to the upper doorway, or through the parapet gap onto the roof
@@ -649,6 +666,8 @@ def build_shops():
     parapet(0, 0, W - 0.3, D - 0.3, z, 1.0)
     SPOTS.append({"c": [0.0, round(z, 3), 0.0],
                   "r": [round(W / 2 - 1.2, 2), round(D / 2 - 1.2, 2)], "k": "roof"})
+    if random.random() < 0.5:
+        bulkhead(W / 2 - 1.8, D / 2 - 1.8, z)
     # awning poles along the shop front
     for i in range(max(2, int(W / 4))):
         px = -W / 2 + (i + 0.5) * (W / max(2, int(W / 4)))
@@ -761,6 +780,8 @@ def build_block():
     parapet(0, 0, W, D, z, 1.1)
     SPOTS.append({"c": [0.0, round(z, 3), 0.0],
                   "r": [round(W / 2 - 1.4, 2), round(D / 2 - 1.4, 2)], "k": "roof"})
+    if random.random() < 0.65:
+        bulkhead(-W / 2 + 1.6, D / 2 - 1.6, z)
     # Buttresses: round piers standing on the ground and touching the wall.
     n = max(2, int(W / 5.5))
     for i in range(n):
@@ -793,7 +814,7 @@ weld(ob, 0.0004)
 
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.uv.cube_project(cube_size=1.7)
+bpy.ops.uv.cube_project(cube_size=2.6)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 mat = bpy.data.materials.new("adobe")
@@ -813,6 +834,18 @@ if os.path.exists(tex_path):
     nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
 else:
     bsdf.inputs["Base Color"].default_value = (0.82, 0.69, 0.50, 1)
+
+nor_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_gn.jpg"))
+if os.path.exists(nor_path) and tn is not None:
+    nimg = bpy.data.images.load(nor_path)
+    nimg.colorspace_settings.name = 'Non-Color'
+    ntex = nt.nodes.new('ShaderNodeTexImage')
+    ntex.image = nimg
+    nmap = nt.nodes.new('ShaderNodeNormalMap')
+    nmap.inputs['Strength'].default_value = 1.2
+    nt.links.new(ntex.outputs['Color'], nmap.inputs['Color'])
+    nt.links.new(nmap.outputs['Normal'], bsdf.inputs['Normal'])
+    nimg.pack()
 
 if tn is not None:
     tn.image.pack()

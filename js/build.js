@@ -126,6 +126,8 @@
     M.cloth = mat('assets/cloth.jpg', 0xbba98e, 1, [1, 1]);
     M.wood = new T.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 });
     M.iron = new T.MeshStandardMaterial({ color: 0x2e2a26, roughness: 0.72, metalness: 0.35 });
+    /* the painted door of the reference courtyard: honey-gold arched panels */
+    M.doorPaint = new T.MeshStandardMaterial({ map: W.tex('assets/t_door_d.jpg', true), roughness: 0.78 });
     M.dark = new T.MeshStandardMaterial({ color: 0x241a12, roughness: 1 });
     M.metal = new T.MeshStandardMaterial({ color: 0x2a2118, roughness: 0.45, metalness: 0.7 });
     M.gold = new T.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.3, metalness: 0.9 });
@@ -394,17 +396,34 @@
     var pivot = new T.Group();
     pivot.position.set(x, y, z);
     pivot.rotation.y = rot;
-    var leaf = new T.Mesh(leafGeometry(w, h), m || M.wood);
-    pivot.add(leaf);
-    /* the planks and the ledger that hold a board door together */
-    for (var pl = 1; pl < 4; pl++) {
-      var rib = new T.Mesh(new T.BoxGeometry(0.045, h * 0.94, 0.03), m || M.wood);
-      rib.position.set(w * pl / 4, h * 0.47, 0.075);
-      pivot.add(rib);
+    /* about half the doors are the painted kind, chosen by where they stand
+       so the choice never flickers between visits */
+    var painted = false;
+    var mat = m;
+    if (!mat) {
+      if (M.doorPaint && hashU(((x * 73.7 + z * 131.3) * 1000) | 0) > 0.78) {
+        painted = true;
+        mat = M.doorPaint.clone();
+        mat.map = M.doorPaint.map.clone();
+        mat.map.repeat.set(1 / w, 1 / h);
+        mat.map.needsUpdate = true;
+      } else {
+        mat = M.wood;
+      }
     }
-    var band = new T.Mesh(new T.BoxGeometry(w * 0.92, 0.09, 0.035), M.iron || m || M.wood);
-    band.position.set(w / 2, h * 0.28, 0.08);
-    pivot.add(band);
+    var leaf = new T.Mesh(leafGeometry(w, h), mat);
+    pivot.add(leaf);
+    if (!painted) {
+      /* the planks and the ledger that hold a board door together */
+      for (var pl = 1; pl < 4; pl++) {
+        var rib = new T.Mesh(new T.BoxGeometry(0.045, h * 0.94, 0.03), M.wood);
+        rib.position.set(w * pl / 4, h * 0.47, 0.075);
+        pivot.add(rib);
+      }
+      var band = new T.Mesh(new T.BoxGeometry(w * 0.92, 0.09, 0.035), M.iron || M.wood);
+      band.position.set(w / 2, h * 0.28, 0.08);
+      pivot.add(band);
+    }
     var knob = new T.Mesh(new T.SphereGeometry(0.06, 8, 6), M.gold);
     knob.position.set(w - 0.18, h * 0.5, 0.1);
     pivot.add(knob);
@@ -603,12 +622,12 @@
   var PROPS_ROOF = ['p_carpet', 'p_cushions', 'p_table', 'p_stool', 'p_chest', 'p_books',
                     'p_scrolls', 'p_inkset', 'p_bowl', 'p_bread', 'p_pot', 'p_plantpot',
                     'p_broom', 'p_basket', 'p_waterjug', 'p_oillamp', 'p_jars',
-                    'p_ropecoil', 'p_firewood', 'p_crates', 'p_sacks', 'p_barrel'];
+                    'p_ropecoil', 'p_firewood', 'p_crates', 'p_sacks', 'p_barrel', 'p_ladder'];
   var PROPS_ARMS = ['p_spears', 'p_swordrack', 'p_bowarrows'];
   var PROPS_ROOM = ['p_carpet', 'p_cushions', 'p_table', 'p_stool', 'p_chest', 'p_books',
                     'p_scrolls', 'p_inkset', 'p_bowl', 'p_pot', 'p_waterjug', 'p_basket'];
   var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
-                      'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood',
+                      'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
   var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET,
                                     ['p_brazier', 'p_well', 'p_torch', 'p_torchpost']);
@@ -621,7 +640,7 @@
     p_bench: 1, p_barrel: 1, p_barrels: 1, p_crates: 1, p_sacks: 1, p_jars: 1,
     p_plantpot: 1, p_spears: 1, p_swordrack: 1, p_brazier: 1, p_well: 1,
     p_torch: 1, p_torchpost: 1, p_firewood: 1, p_basket: 1, p_pot: 1,
-    p_stones: 1
+    p_stones: 1, p_pergola: 1, p_ladder: 1
   };
   var SMALL = [];
 
