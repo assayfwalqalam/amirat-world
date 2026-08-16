@@ -216,6 +216,160 @@
    ]
   },
   {
+   "name": "Market stalls",
+   "items": [
+    {
+     "k": "stall/barrow_fruit",
+     "n": "Barrow fruit"
+    },
+    {
+     "k": "stall/barrow_grain",
+     "n": "Barrow grain"
+    },
+    {
+     "k": "stall/booth_cloth",
+     "n": "Booth cloth"
+    },
+    {
+     "k": "stall/booth_metal",
+     "n": "Booth metal"
+    },
+    {
+     "k": "stall/booth_spice",
+     "n": "Booth spice"
+    },
+    {
+     "k": "stall/canopy_bread",
+     "n": "Canopy bread"
+    },
+    {
+     "k": "stall/canopy_fruit",
+     "n": "Canopy fruit"
+    },
+    {
+     "k": "stall/canopy_grain",
+     "n": "Canopy grain"
+    },
+    {
+     "k": "stall/canopy_spice",
+     "n": "Canopy spice"
+    },
+    {
+     "k": "stall/leanto_bread",
+     "n": "Leanto bread"
+    },
+    {
+     "k": "stall/leanto_pottery",
+     "n": "Leanto pottery"
+    },
+    {
+     "k": "stall/leanto_wood",
+     "n": "Leanto wood"
+    },
+    {
+     "k": "stall/mat_basket",
+     "n": "Mat basket"
+    },
+    {
+     "k": "stall/mat_rope",
+     "n": "Mat rope"
+    },
+    {
+     "k": "stall/mat_spice",
+     "n": "Mat spice"
+    },
+    {
+     "k": "stall/rack_cloth",
+     "n": "Rack cloth"
+    },
+    {
+     "k": "stall/rack_rope",
+     "n": "Rack rope"
+    },
+    {
+     "k": "stall/trestle_basket",
+     "n": "Trestle basket"
+    },
+    {
+     "k": "stall/trestle_metal",
+     "n": "Trestle metal"
+    },
+    {
+     "k": "stall/trestle_pottery",
+     "n": "Trestle pottery"
+    }
+   ]
+  },
+  {
+   "name": "Pottery",
+   "items": [
+    {
+     "k": "pot/amphora",
+     "n": "Amphora"
+    },
+    {
+     "k": "pot/basin",
+     "n": "Basin"
+    },
+    {
+     "k": "pot/bowl",
+     "n": "Bowl"
+    },
+    {
+     "k": "pot/cookpot",
+     "n": "Cookpot"
+    },
+    {
+     "k": "pot/cup",
+     "n": "Cup"
+    },
+    {
+     "k": "pot/deepbowl",
+     "n": "Deepbowl"
+    },
+    {
+     "k": "pot/flask",
+     "n": "Flask"
+    },
+    {
+     "k": "pot/jar",
+     "n": "Jar"
+    },
+    {
+     "k": "pot/jug",
+     "n": "Jug"
+    },
+    {
+     "k": "pot/krater",
+     "n": "Krater"
+    },
+    {
+     "k": "pot/oiljar",
+     "n": "Oiljar"
+    },
+    {
+     "k": "pot/pitcher",
+     "n": "Pitcher"
+    },
+    {
+     "k": "pot/plate",
+     "n": "Plate"
+    },
+    {
+     "k": "pot/squat",
+     "n": "Squat"
+    },
+    {
+     "k": "pot/storage",
+     "n": "Storage"
+    },
+    {
+     "k": "pot/urn",
+     "n": "Urn"
+    }
+   ]
+  },
+  {
    "name": "Market",
    "items": [
     {
@@ -446,6 +600,78 @@
    "name": "Rocks",
    "items": [
     {
+     "k": "rock/boulder_2",
+     "n": "Boulder 2"
+    },
+    {
+     "k": "rock/cliff_1",
+     "n": "Cliff 1"
+    },
+    {
+     "k": "rock/cliff_2",
+     "n": "Cliff 2"
+    },
+    {
+     "k": "rock/kerb_1",
+     "n": "Kerb 1"
+    },
+    {
+     "k": "rock/kerb_2",
+     "n": "Kerb 2"
+    },
+    {
+     "k": "rock/outcrop_1",
+     "n": "Outcrop 1"
+    },
+    {
+     "k": "rock/outcrop_2",
+     "n": "Outcrop 2"
+    },
+    {
+     "k": "rock/pebbles_1",
+     "n": "Pebbles 1"
+    },
+    {
+     "k": "rock/pebbles_2",
+     "n": "Pebbles 2"
+    },
+    {
+     "k": "rock/round_1",
+     "n": "Round 1"
+    },
+    {
+     "k": "rock/round_2",
+     "n": "Round 2"
+    },
+    {
+     "k": "rock/scree_1",
+     "n": "Scree 1"
+    },
+    {
+     "k": "rock/scree_2",
+     "n": "Scree 2"
+    },
+    {
+     "k": "rock/shard_1",
+     "n": "Shard 1"
+    },
+    {
+     "k": "rock/slab_1",
+     "n": "Slab 1"
+    },
+    {
+     "k": "rock/slab_2",
+     "n": "Slab 2"
+    },
+    {
+     "k": "rock/stack_1",
+     "n": "Stack 1"
+    },
+    {
+     "k": "rock/stack_2",
+     "n": "Stack 2"
+    },
+    {
      "k": "rock_a",
      "n": "Rock a"
     },
@@ -470,6 +696,10 @@
   {
    "name": "Other",
    "items": [
+    {
+     "k": "grand",
+     "n": "Grand"
+    },
     {
      "k": "p_stones",
      "n": "Stones"

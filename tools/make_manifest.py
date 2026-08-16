@@ -16,6 +16,8 @@ GROUPS = [
     ("Buildings",   [r"^bh\d+$", r"^m_mosque$"]),
     ("City walls",  [r"^w_"]),
     ("Fences",      [r"^fence/"]),
+    ("Market stalls", [r"^stall/"]),
+    ("Pottery",     [r"^pot/"]),
     ("Market",      [r"^p_(stall|awning|cart|bench)$"]),
     ("Containers",  [r"^p_(barrel|barrels|crates|jars|sacks|basket|pot|waterjug|plantpot)$"]),
     ("Household",   [r"^p_(carpet|cushions|table|stool|chest|books|scrolls|inkset|bowl|bread|broom|oillamp|ropecoil)$",
@@ -24,7 +26,7 @@ GROUPS = [
     ("Fire & light", [r"^p_(torch|torchpost|brazier|firewood)$", r"^lantern$"]),
     ("Trees",       [r"^(palm|tree_)"]),
     ("Plants",      [r"^(fl_|grass_|bush_)"]),
-    ("Rocks",       [r"^rock"]),
+    ("Rocks",       [r"^rock/", r"^rock"]),
     ("Other",       [r"^p_"]),
 ]
 

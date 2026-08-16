@@ -60,6 +60,7 @@ def cleave(ob, n=4, keep_bottom=True):
                         math.sin(a) * d * math.cos(el),
                         d * math.sin(el) * 0.7 + (0.2 if not keep_bottom else 0.5))
         bpy.ops.object.transform_apply(location=True)
+        before = len(ob.data.vertices)
         m = ob.modifiers.new("b", 'BOOLEAN')
         m.operation = 'DIFFERENCE'
         m.object = cut
@@ -67,6 +68,12 @@ def cleave(ob, n=4, keep_bottom=True):
         bpy.context.view_layer.objects.active = ob
         bpy.ops.object.modifier_apply(modifier=m.name)
         bpy.data.objects.remove(cut, do_unlink=True)
+        # A plane that happens to fall the wrong side takes the whole stone
+        # away and the export then has nothing to write. Stop cutting if the
+        # lump is nearly gone.
+        if len(ob.data.vertices) < 8:
+            print("cleave swallowed the lump, stopping")
+            return
 
 
 def weather(ob, fine=0.02, broad=0.05, levels=1):
@@ -94,32 +101,47 @@ def weather(ob, fine=0.02, broad=0.05, levels=1):
 
 def sink(ob):
     """Drop the lowest point to zero, so it sits on the ground not through it."""
+    if not len(ob.data.vertices):
+        return
     lo = min(v.co.z for v in ob.data.vertices)
     for v in ob.data.vertices:
         v.co.z -= lo
 
 
+def hewn(r, loc, seg, squash, wobble, cuts):
+    """A lump broken by flat planes -- retried plainly if the cuts eat it.
+
+    A cutting plane that happens to fall the wrong side can take the whole
+    stone, and the export then has nothing to write. Rather than ship a hole
+    in the world, keep the uncut lump.
+    """
+    b = lump(r, loc, seg, squash, wobble)
+    cleave(b, cuts)
+    if len(b.data.vertices) < 8:
+        parts.remove(b)
+        bpy.data.objects.remove(b, do_unlink=True)
+        b = lump(r, loc, seg, squash, wobble)
+    return b
+
+
 # ------------------------------------------------------------------ kinds
 if KIND == "boulder":
     R = random.uniform(1.1, 2.2)
-    b = lump(R, (0, 0, 0), 14, random.uniform(0.62, 0.9))
-    cleave(b, random.randint(3, 5))
+    b = hewn(R, (0, 0, 0), 14, random.uniform(0.62, 0.9), 0.22, random.randint(3, 5))
     weather(b, 0.03, 0.08)
     sink(b)
     rec((0, 0, R * 0.4), R * 0.8, R * 0.8, R * 0.4)
 
 elif KIND == "slab":
     W = random.uniform(1.6, 3.0)
-    b = lump(W, (0, 0, 0), 12, random.uniform(0.14, 0.24), 0.3)
-    cleave(b, random.randint(4, 6))
+    b = hewn(W, (0, 0, 0), 12, random.uniform(0.14, 0.24), 0.3, random.randint(4, 6))
     weather(b, 0.02, 0.05)
     sink(b)
     rec((0, 0, W * 0.1), W * 0.8, W * 0.7, W * 0.1)
 
 elif KIND == "shard":
     H = random.uniform(1.2, 2.6)
-    b = lump(H * 0.5, (0, 0, 0), 10, random.uniform(1.5, 2.4), 0.34)
-    cleave(b, random.randint(5, 7))
+    b = hewn(H * 0.5, (0, 0, 0), 10, random.uniform(1.5, 2.4), 0.34, random.randint(5, 7))
     weather(b, 0.02, 0.05)
     sink(b)
     b.rotation_euler = (random.uniform(-0.25, 0.25), random.uniform(-0.25, 0.25), 0)
@@ -137,9 +159,8 @@ elif KIND == "stack":
     z = 0.0
     for i in range(random.randint(3, 5)):
         r = random.uniform(0.45, 0.95) * (1.0 - i * 0.11)
-        b = lump(r, (random.uniform(-0.14, 0.14), random.uniform(-0.14, 0.14), z + r * 0.4),
-                 12, random.uniform(0.4, 0.62))
-        cleave(b, 3)
+        b = hewn(r, (random.uniform(-0.14, 0.14), random.uniform(-0.14, 0.14), z + r * 0.4),
+                 12, random.uniform(0.4, 0.62), 0.22, 3)
         weather(b, 0.02, 0.04)
         z += r * 0.62
     rec((0, 0, z / 2), 0.9, 0.9, z / 2)
@@ -162,8 +183,7 @@ elif KIND == "scree":
         bpy.ops.object.transform_apply(rotation=True)
 
 elif KIND == "outcrop":
-    base = lump(random.uniform(2.4, 3.4), (0, 0, 0), 14, random.uniform(0.5, 0.8))
-    cleave(base, 5)
+    base = hewn(random.uniform(2.4, 3.4), (0, 0, 0), 14, random.uniform(0.5, 0.8), 0.22, 5)
     weather(base, 0.04, 0.1)
     sink(base)
     for _ in range(random.randint(2, 4)):
@@ -177,8 +197,7 @@ elif KIND == "outcrop":
 elif KIND == "cliff":
     W = random.uniform(6.0, 9.0)
     H = random.uniform(5.0, 8.0)
-    b = lump(W * 0.5, (0, 0, 0), 16, H / (W * 0.5) * 0.5, 0.24)
-    cleave(b, 6)
+    b = hewn(W * 0.5, (0, 0, 0), 16, H / (W * 0.5) * 0.5, 0.24, 6)
     weather(b, 0.06, 0.16, levels=1)
     sink(b)
     for _ in range(random.randint(3, 6)):

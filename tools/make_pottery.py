@@ -216,7 +216,8 @@ TINT = {
 
 mat = bpy.data.materials.new(FORM)
 mat.use_nodes = True
-bsdf = mat.node_tree.nodes["Principled BSDF"]
+nt = mat.node_tree
+bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 # glazed wares catch a highlight; unglazed earthenware does not
 glazed = FORM in ("flask", "krater", "cup", "plate")
