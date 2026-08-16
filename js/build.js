@@ -757,6 +757,16 @@
           var px = x + j * 1.6, pz = z + j * 1.2, prot = facing + j * 0.10;
           var g = placeBuilt(key, px, Y, pz, prot, HOUSE_SCALE);
           if (g) {
+            /* every house is rendered a slightly different mud */
+            var tint = new T.Color(0xc8a582);
+            var hv = hashU((idx * 2246822519) | 0);
+            tint.offsetHSL((hv - 0.5) * 0.035, (hv - 0.5) * 0.12, (hv - 0.5) * 0.10);
+            g.traverse(function (o) {
+              if (o.isMesh && o.material) {
+                o.material = o.material.clone();
+                o.material.color.copy(tint);
+              }
+            });
             made++;
             dressBuilding(key, px, Y, pz, prot, HOUSE_SCALE, idx * 31 + 7);
             if (idx % 4 === 0) torch(px + 6.4, Y + 2.9, pz + (facing ? -6.6 : 6.6), facing);
