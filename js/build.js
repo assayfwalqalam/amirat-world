@@ -13,6 +13,48 @@
   var winds = [];
   var loader = null;
 
+  /* every flame and lamp registers here; a small pool of real lights
+     follows whichever are nearest, so the shaders stay cheap everywhere */
+  var EMIT = [];
+  var POOL = [];
+  var POOL_N = 6;
+  function initPool() {
+    for (var i = 0; i < POOL_N; i++) {
+      var l = new T.PointLight(0xffa445, 0, 26, 1.9);
+      l.position.set(0, -9999, 0);
+      W.scene.add(l);
+      POOL.push(l);
+    }
+  }
+  function driveLights(t) {
+    var cp = W.cam.position;
+    for (var i = 0; i < EMIT.length; i++) {
+      var e = EMIT[i];
+      var dx = e.x - cp.x, dy = e.y - cp.y, dz = e.z - cp.z;
+      e.d2 = dx * dx + dy * dy + dz * dz;
+    }
+    /* partial selection of the nearest few */
+    var best = [];
+    for (var k = 0; k < EMIT.length; k++) {
+      var e2 = EMIT[k];
+      if (e2.d2 > 6400) continue;
+      if (best.length < POOL_N) { best.push(e2); best.sort(function (a, b) { return a.d2 - b.d2; }); }
+      else if (e2.d2 < best[POOL_N - 1].d2) { best[POOL_N - 1] = e2; best.sort(function (a, b) { return a.d2 - b.d2; }); }
+    }
+    for (var p = 0; p < POOL_N; p++) {
+      var L = POOL[p], src = best[p];
+      if (!src) { L.intensity = 0; continue; }
+      var fl = src.steady
+        ? 0.92 + 0.08 * Math.sin(t * 3.1 + src.ph)
+        : 0.72 + 0.28 * (0.5 + 0.5 * (Math.sin(t * 11 + src.ph) * 0.5 + Math.sin(t * 23.3 + src.ph * 2) * 0.3 + Math.sin(t * 4.1 + src.ph) * 0.2));
+      L.color.setHex(src.col);
+      L.distance = src.reach;
+      L.position.set(src.x, src.y, src.z);
+      L.intensity = src.base * fl;
+      src.lit = fl;
+    }
+  }
+
   /* ------------------------------------------------------------ helpers */
   function mat(map, color, rough, rep) {
     var m = new T.MeshStandardMaterial({ color: color || 0xffffff, roughness: rough === undefined ? 0.95 : rough, metalness: 0 });
@@ -109,26 +151,25 @@
     core.position.set(x, y + 0.3 * scale, z);
     W.scene.add(core);
 
-    var light = new T.PointLight(0xffa445, 2.1 * power, 26 * Math.sqrt(power), 1.9);
-    light.position.set(x, y + 0.55 * scale, z);
-    W.scene.add(light);
-
-    var f = { m: m, core: core, l: light, base: 2.1 * power, ph: Math.random() * 10, sc: scale, frame: 0 };
+    var f = { m: m, core: core, base: 2.3 * power, reach: 26 * Math.sqrt(power),
+              x: x, y: y + 0.55 * scale, z: z, col: 0xffa445,
+              ph: Math.random() * 10, sc: scale, frame: 0, lit: 1 };
     fires.push(f);
+    EMIT.push(f);
     return f;
   }
   /* a hanging lamp: warm pool of light that fades at its reach */
   function lamp(x, y, z, power, model) {
-    var l = new T.PointLight(0xffb367, power || 1.5, 22, 1.8);
-    l.position.set(x, y, z);
-    W.scene.add(l);
     var g = new T.Mesh(new T.PlaneGeometry(1.05, 1.05),
       new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.62 }));
     g.position.set(x, y, z);
     W.scene.add(g);
-    lamps.push({ l: l, g: g, base: power || 1.5, ph: Math.random() * 9 });
+    var e = { g: g, base: power || 1.5, reach: 22, x: x, y: y, z: z, col: 0xffb367,
+              ph: Math.random() * 9, steady: 1, lit: 1 };
+    lamps.push(e);
+    EMIT.push(e);
     if (model !== false) place('lantern', x, y - 0.34, z, 0.62, Math.random() * 3);
-    return l;
+    return e;
   }
   /* a torch on a wall: bracket, flame, and a shaft of light down the stone */
   function torch(x, y, z, rot) {
@@ -574,11 +615,11 @@
   }
   var VEG = {};
   function vegSource(key) {
-    if (VEG[key] !== undefined) return VEG[key];
+    if (VEG[key]) return VEG[key];          /* never cache a miss */
     var src = MODELS[key];
-    if (!src) return (VEG[key] = null);
+    if (!src) return null;
     var m = firstMesh(src);
-    if (!m) return (VEG[key] = null);
+    if (!m) return null;
     var g = m.geometry.clone();
     /* normalise so instances stand on the ground at unit height */
     g.computeBoundingBox();
@@ -730,21 +771,24 @@
   W.tick = function (W, dt, t) {
     for (var i = 0; i < winds.length; i++) winds[i].value = t;
     var cp = W.cam.position;
+    driveLights(t);
+    var flameFrame = 1 - (Math.floor((t * 15) % 8) + 1) / 8;
+    for (var q = 0; q < flameTex.length; q++) flameTex[q].offset.y = 1 - (Math.floor((t * 15 + q * 2.7) % 8) + 1) / 8;
     for (var f = 0; f < fires.length; f++) {
       var fr = fires[f];
-      fr.frame = (fr.frame + dt * 15) % 8;
-      if (fr.m.material.map) fr.m.material.map.offset.y = 1 - (Math.floor(fr.frame) + 1) / 8;
+      if (fr.d2 > 26000) { fr.m.visible = false; fr.core.visible = false; continue; }
+      fr.m.visible = true; fr.core.visible = true;
       fr.m.lookAt(cp.x, fr.m.position.y, cp.z);
       fr.core.lookAt(cp.x, fr.core.position.y, cp.z);
-      var fl = 0.78 + 0.22 * (Math.sin(t * 11 + fr.ph) * 0.5 + Math.sin(t * 23.3 + fr.ph * 2) * 0.3 + Math.sin(t * 4.1 + fr.ph) * 0.2 + 0.5);
-      fr.l.intensity = fr.base * fl;
-      fr.core.material.opacity = 0.34 + 0.2 * fl;
-      fr.m.scale.set(0.94 + 0.12 * fl, 0.9 + 0.2 * fl, 1);
+      fr.core.material.opacity = 0.30 + 0.22 * fr.lit;
+      fr.m.scale.set(0.94 + 0.12 * fr.lit, 0.9 + 0.2 * fr.lit, 1);
     }
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
-      lp.l.intensity = lp.base * (0.9 + 0.1 * Math.sin(t * 3.3 + lp.ph));
+      if (lp.d2 > 26000) { lp.g.visible = false; continue; }
+      lp.g.visible = true;
       lp.g.lookAt(cp);
+      lp.g.material.opacity = 0.5 + 0.16 * lp.lit;
     }
     for (var d2 = 0; d2 < doors.length; d2++) {
       var dr = doors[d2];
@@ -758,10 +802,11 @@
   W.buildAll = function (W) {
     initMats();
     initFire();
+    initPool();
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
-    W.addFlat(TOWN.x, TOWN.z, TOWN.R + 16, TOWN.y, 90);
+    W.addFlat(TOWN.x, TOWN.z, TOWN.R + 42, TOWN.y, 120);
 
     W.SPAWN = { x: 0, z: TOWN.R + 46 };
     W.SPAWN_YAW = 0;

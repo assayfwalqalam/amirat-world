@@ -80,8 +80,9 @@
 
   W.heightAt = function (x, z) {
     var b = W.biomeAt(x, z);
+    /* the land rides above the water table · only carved basins flood */
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
-    var h = (cont - 0.44) * 210;
+    var h = (cont - 0.28) * 175;
 
     var dune = ridged(x * 0.0040 + 7.7, z * 0.0040 - 3.3, 3);
     h += (dune - 0.5) * 34 * (1 - b.grass) * (1 - b.rock * 0.7);
