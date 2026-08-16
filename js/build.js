@@ -125,6 +125,7 @@
     M.marble = surf('t_marble', 0xf3ece6, { nrm: 0.5, rough: 0.42 });
     M.cloth = mat('assets/cloth.jpg', 0xbba98e, 1, [1, 1]);
     M.wood = new T.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 });
+    M.iron = new T.MeshStandardMaterial({ color: 0x2e2a26, roughness: 0.72, metalness: 0.35 });
     M.dark = new T.MeshStandardMaterial({ color: 0x241a12, roughness: 1 });
     M.metal = new T.MeshStandardMaterial({ color: 0x2a2118, roughness: 0.45, metalness: 0.7 });
     M.gold = new T.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.3, metalness: 0.9 });
@@ -336,12 +337,12 @@
   }
 
   /* a hanging lamp: warm pool of light that fades at its reach */
-  function lamp(x, y, z, power, model) {
+  function lamp(x, y, z, power, model, reach) {
     var g = new T.Mesh(new T.PlaneGeometry(1.5, 1.5),
       new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.7 }));
     g.position.set(x, y, z);
     W.scene.add(g);
-    var e = { g: g, base: (power || 1.5) * 1.9, reach: 26, x: x, y: y, z: z, col: 0xffb367,
+    var e = { g: g, base: (power || 1.5) * 1.9, reach: reach || 26, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
     lamps.push(e);
     EMIT.push(e);
@@ -369,13 +370,41 @@
   }
 
   /* -------------------------------------------------------------- doors */
+  /* The leaf is cut to the shape of the opening. A rectangle in a round-headed
+     doorway leaves two bright crescents of night showing through the top
+     corners, which is what gave the doors away. */
+  var leafGeos = {};
+  function leafGeometry(w, h) {
+    var key = w.toFixed(2) + 'x' + h.toFixed(2);
+    if (leafGeos[key]) return leafGeos[key];
+    var r = w / 2, straight = Math.max(0.2, h - r);
+    var sh = new T.Shape();
+    sh.moveTo(0, 0);
+    sh.lineTo(w, 0);
+    sh.lineTo(w, straight);
+    sh.absarc(r, straight, r, 0, Math.PI, false);
+    sh.lineTo(0, 0);
+    var g = new T.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: false, curveSegments: 10 });
+    g.translate(0, 0, -0.06);
+    leafGeos[key] = g;
+    return g;
+  }
+
   function door(x, y, z, w, h, rot, m) {
     var pivot = new T.Group();
     pivot.position.set(x, y, z);
     pivot.rotation.y = rot;
-    var leaf = new T.Mesh(new T.BoxGeometry(w, h, 0.14), m || M.wood);
-    leaf.position.set(w / 2, h / 2, 0);
+    var leaf = new T.Mesh(leafGeometry(w, h), m || M.wood);
     pivot.add(leaf);
+    /* the planks and the ledger that hold a board door together */
+    for (var pl = 1; pl < 4; pl++) {
+      var rib = new T.Mesh(new T.BoxGeometry(0.045, h * 0.94, 0.03), m || M.wood);
+      rib.position.set(w * pl / 4, h * 0.47, 0.075);
+      pivot.add(rib);
+    }
+    var band = new T.Mesh(new T.BoxGeometry(w * 0.92, 0.09, 0.035), M.iron || m || M.wood);
+    band.position.set(w / 2, h * 0.28, 0.08);
+    pivot.add(band);
     var knob = new T.Mesh(new T.SphereGeometry(0.06, 8, 6), M.gold);
     knob.position.set(w - 0.18, h * 0.5, 0.1);
     pivot.add(knob);
@@ -641,7 +670,10 @@
         if (sp.k === 'room' && j === 0 && hashU(sd ^ 0x2b1d) > 0.28) {
           var rx = bx + (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
           var rz = bz + (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
-          lamp(rx, by + ly + 1.35, rz, 0.72, false);
+          /* short reach on purpose · point lights are not stopped by walls, so
+             a room lamp with a long reach lights the street outside through
+             the wall, and walking past a house made the night flare */
+          lamp(rx, by + ly + 1.35, rz, 0.5, false, 6.5);
         }
       }
     }
@@ -752,29 +784,43 @@
     torch(GATE_HALF + 1.0, Y + 3.8, S - 7.2, 0);
 
     /* Stairs against the inner face of the wall. They start out along the wall,
-       away from the gate, and climb toward it, topping out just short of the
-       gatehouse, the way a rampart stair is actually built. */
+       away from the gate, and climb toward it, topping out on the rampart walk
+       just short of the gatehouse.
+
+       The two numbers below are measured off the wall pieces themselves, not
+       guessed: the walk surface stands RAMPART_Y above the town floor, and its
+       inner edge is WALK_IN in from the wall line. Getting either wrong leaves
+       the stair hanging in the air short of the wall, which is exactly what it
+       used to do -- two and a half metres shy in both directions. */
+    var RAMPART_Y = 15.95;
+    var WALK_IN = 3.2;
     [-1, 1].forEach(function (sgn) {
-      var steps = 24, rise = 13.5 / steps, run = 1.45;
+      var steps = 26, rise = RAMPART_Y / steps, run = 1.5;
       var far = sgn * (GATE_HALF + 16 + steps * run);   /* the foot, away from the gate */
-      var zIn = S - 7.6;                                /* hard against the wall */
+      var deep = 7.2;                                   /* runs back INTO the wall */
+      var zIn = S - WALK_IN - deep / 2 + 1.4;           /* so the top tread overlaps the walk */
       for (var i = 0; i < steps; i++) {
         var h = rise * (i + 1);
         var x = far - sgn * i * run;
-        box(run + 0.1, h, 4.2, x, Y + h / 2, zIn, M.stone2, 0);
+        box(run + 0.1, h, deep, x, Y + h / 2, zIn, M.stone2, 0);
       }
       /* the cheek wall carrying its open side */
       var midX = far - sgn * (steps - 1) * run / 2;
-      box(steps * run, 13.5, 0.85, midX, Y + 6.75, zIn - 2.3, M.stone2, 0);
-      /* the landing, just short of the gatehouse */
-      box(4.6, 0.9, 4.2, far - sgn * steps * run, Y + 13.5 - 0.45, zIn, M.stone2, 0);
+      box(steps * run, RAMPART_Y, 0.85, midX, Y + RAMPART_Y / 2, zIn - deep / 2 + 0.42, M.stone2, 0);
+      /* the landing, level with the walk */
+      box(4.8, 1.0, deep, far - sgn * steps * run, Y + RAMPART_Y - 0.5, zIn, M.stone2, 0);
     });
 
-    /* torches along the rampart */
+    /* Torches along the rampart, bracketed to the parapet and standing over
+       the walk. They used to hang in mid air a metre inside the wall and two
+       metres below the walk floor. */
     for (var w2 = 0; w2 < 12; w2++) {
       var a2 = w2 / 12;
-      torch(-S + S * 2 * a2, Y + 12.2, S - 4.5, 0);
-      torch(-S + S * 2 * a2, Y + 12.2, -S + 4.5, Math.PI);
+      var tx = -S + S * 2 * a2;
+      torch(tx, Y + RAMPART_Y + 1.15, S - 1.9, 0);
+      torch(tx, Y + RAMPART_Y + 1.15, -S + 1.9, Math.PI);
+      torch(S - 1.9, Y + RAMPART_Y + 1.15, tx, -Math.PI / 2);
+      torch(-S + 1.9, Y + RAMPART_Y + 1.15, tx, Math.PI / 2);
     }
 
     /* Things stacked against the inside of the wall. A town wall is never a
@@ -1616,11 +1662,48 @@
   };
 
   /* ------------------------------------------------------------- build */
+  /* A layout made in the editor. The editor writes a plain list of
+     {k, p, r, s}; every entry is placed with its own collision, so what was
+     put down there is what is solid here. */
+  function buildLayout(list) {
+    var keys = [];
+    list.forEach(function (o) { if (keys.indexOf(o.k) < 0) keys.push(o.k); });
+    Promise.all(keys.map(loadCollision));
+    loadModels(keys, function () {
+      var made = 0;
+      list.forEach(function (o) {
+        if (placeBuilt(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, o.s === undefined ? 1 : o.s)) made++;
+      });
+      W.diag('');
+      W.LAYOUT_COUNT = made;
+      if (!made) W.diag('the layout is empty');
+    });
+    /* stand the player outside whatever was built */
+    var minZ = 0;
+    list.forEach(function (o) { if (o.p[2] < minZ) minZ = o.p[2]; });
+    W.SPAWN = { x: 0, z: minZ - 40 };
+    W.SPAWN_YAW = 0;
+  }
+
   W.buildAll = function (W) {
     initMats();
     initFire();
     initPool();
     initLawn();
+
+    var q = new URLSearchParams(location.search);
+    if (q.get('layout')) {
+      var raw = null;
+      try { raw = localStorage.getItem('amirat.layout'); } catch (e) {}
+      if (raw) {
+        try {
+          buildLayout(JSON.parse(raw));
+          return;                       /* the editor's town replaces the built one */
+        } catch (e) { W.diag('layout unreadable: ' + e.message); }
+      } else {
+        W.diag('nothing saved in the editor yet');
+      }
+    }
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);

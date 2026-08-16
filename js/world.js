@@ -253,7 +253,7 @@
     initWater();
     initLights();
     if (W.buildAll) W.buildAll(W);
-    initPlayer();
+    if (W.EDITOR) primeEditor(); else initPlayer();
     startLoop();
   };
 
@@ -360,18 +360,39 @@
        the only direction. Kept low on purpose, because every fire and lamp in
        the town has to read as the brighter thing -- that is what makes a night
        scene look like night rather than a dim afternoon. */
-    scene.add(new THREE.HemisphereLight(0x5b5ea6, 0x241f36, 0.36));
-    scene.add(new THREE.AmbientLight(0x33325a, 0.16));
+    var hemi = new THREE.HemisphereLight(0x5b5ea6, 0x241f36, 0.36);
+    var amb = new THREE.AmbientLight(0x33325a, 0.16);
+    scene.add(hemi); scene.add(amb);
     var moon = new THREE.DirectionalLight(0xc6cdf5, 0.60);
+    /* The editor needs to see what it is placing, so it can raise the sun.
+       Night is what the game ships with; this only changes the lights. */
+    W.setDaylight = function (on) {
+      W.DAYLIGHT = !!on;
+      hemi.intensity = on ? 1.15 : 0.36;
+      hemi.color.setHex(on ? 0xbfd4f2 : 0x5b5ea6);
+      hemi.groundColor.setHex(on ? 0x6d5f49 : 0x241f36);
+      amb.intensity = on ? 0.42 : 0.16;
+      amb.color.setHex(on ? 0x9aa6c4 : 0x33325a);
+      moon.intensity = on ? 1.5 : 0.60;
+      moon.color.setHex(on ? 0xfff2d8 : 0xc6cdf5);
+      renderer.toneMappingExposure = on ? 1.0 : 0.95;
+      if (scene.fog) scene.fog.density = on ? 0.00035 : 0.00105;
+      if (W.groundNight) W.groundNight.value = on ? 0.0 : 1.0;
+      if (W.bloom) W.bloom.strength = on ? 0.12 : (TIER === 2 ? 0.40 : 0.28);
+    };
     moon.position.copy(moonDir).multiplyScalar(900);
     if (TIER === 2) {
       moon.castShadow = true;
-      moon.shadow.mapSize.set(2048, 2048);
+      /* A 460-metre shadow box over 2048 texels is a quarter of a metre per
+         texel, which cannot hold the edge of a step; and a normal bias of 0.6
+         pushes the shadow most of a metre off whatever casts it, so nothing
+         looked attached to the ground. Tighter box, bigger map, small bias. */
+      moon.shadow.mapSize.set(4096, 4096);
       var c = moon.shadow.camera;
-      c.near = 400; c.far = 1500;
-      c.left = -230; c.right = 230; c.top = 230; c.bottom = -230;
-      moon.shadow.bias = -0.0009;
-      moon.shadow.normalBias = 0.6;
+      c.near = 500; c.far = 1400;
+      c.left = -125; c.right = 125; c.top = 125; c.bottom = -125;
+      moon.shadow.bias = -0.00035;
+      moon.shadow.normalBias = 0.045;
       W.moonLight = moon;
       W.moonTarget = new THREE.Object3D();
       scene.add(W.moonTarget);
@@ -399,13 +420,15 @@
       sh.uniforms.tRock = { value: tRock };
       sh.uniforms.tGrass = { value: tGrass };
       sh.uniforms.tMask = { value: tMask };
+      sh.uniforms.uNight = { value: 1.0 };
+      W.groundNight = sh.uniforms.uNight;
 
       sh.vertexShader = 'varying vec3 vWPos;\nvarying vec3 vWNrm;\n' + sh.vertexShader.replace(
         '#include <begin_vertex>',
         '#include <begin_vertex>\n vWPos = (modelMatrix * vec4(transformed,1.0)).xyz;\n vWNrm = normalize(mat3(modelMatrix) * objectNormal);'
       );
 
-      sh.fragmentShader = 'uniform sampler2D tSand;\nuniform sampler2D tGrav;\nuniform sampler2D tRock;\nuniform sampler2D tGrass;\nuniform sampler2D tMask;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\n' + sh.fragmentShader;
+      sh.fragmentShader = 'uniform sampler2D tSand;\nuniform sampler2D tGrav;\nuniform sampler2D tRock;\nuniform sampler2D tGrass;\nuniform sampler2D tMask;\nuniform float uNight;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\n' + sh.fragmentShader;
       /* vertex colours carry biome weights, so do not tint by them */
       sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '');
       sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>',
@@ -449,8 +472,8 @@
           /* Moonlight is blue, and photographed daylight sand is far too bright
              to stand in for ground at night: left alone it reads as lit
              concrete and outshines the walls it should sit beneath. */
-          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.40);',
-          'col *= 0.46;',
+          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.40 * uNight);',
+          'col *= mix(1.0, 0.46, uNight);',
           'diffuseColor.rgb *= col;'
         ].join('\n'));
     };
@@ -816,7 +839,48 @@
     }
   }
 
+  /* The editor flies its own camera and wants no gravity, no collision and no
+     idle pause. It drives pos/yaw/pitch through W.camState and everything
+     downstream -- streaming, sky, water, the moon -- carries on unchanged. */
+  /* The editor brings its own controls, so none of the player's pointer-lock,
+     touch or joystick handling is wanted -- only a start position and a primed
+     set of terrain chunks. */
+  function primeEditor() {
+    pos.set(0, W.heightAt(0, 140) + 34, 210);
+    yaw = Math.PI; pitch = -0.42;
+    W.setIdle(1e9);
+    updateChunks(pos, true);
+    pumpChunks(80);
+  }
+
+  W.camState = function (o) {
+    if (o) {
+      if (o.x !== undefined) pos.set(o.x, o.y, o.z);
+      if (o.yaw !== undefined) yaw = o.yaw;
+      if (o.pitch !== undefined) pitch = o.pitch;
+    }
+    return { x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch };
+  };
+  W.keyHeld = function (code) { return !!keys[code]; };
+
   function step(dt) {
+    if (W.EDITOR) {
+      if (W.editorStep) W.editorStep(dt);
+      cam.position.copy(pos);
+      cam.rotation.set(0, 0, 0);
+      cam.rotateY(yaw); cam.rotateX(pitch);
+      if (water) { water.position.x = pos.x; water.position.z = pos.z; }
+      if (W.moonLight) {
+        W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
+        W.moonTarget.updateMatrixWorld();
+        W.moonLight.position.copy(moonDir).multiplyScalar(900).add(
+          new THREE.Vector3(pos.x, 0, pos.z));
+      }
+      skyFollow(pos);
+      updateChunks(pos, false);
+      pumpChunks(pos.y > 120 ? 4 : 3);
+      return;
+    }
     var sp = fly ? 42 : (keys['ShiftLeft'] || keys['ShiftRight'] ? 17 : 9.2);
     var f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(-1);
     if (fly) { f.y = Math.sin(pitch); f.normalize(); }

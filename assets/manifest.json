@@ -1,0 +1,484 @@
+{
+ "groups": [
+  {
+   "name": "Buildings",
+   "items": [
+    {
+     "k": "bh21",
+     "n": "Bh21"
+    },
+    {
+     "k": "bh22",
+     "n": "Bh22"
+    },
+    {
+     "k": "bh23",
+     "n": "Bh23"
+    },
+    {
+     "k": "bh24",
+     "n": "Bh24"
+    },
+    {
+     "k": "bh25",
+     "n": "Bh25"
+    },
+    {
+     "k": "bh26",
+     "n": "Bh26"
+    },
+    {
+     "k": "bh27",
+     "n": "Bh27"
+    },
+    {
+     "k": "bh28",
+     "n": "Bh28"
+    },
+    {
+     "k": "bh29",
+     "n": "Bh29"
+    },
+    {
+     "k": "bh30",
+     "n": "Bh30"
+    },
+    {
+     "k": "kit/block_10",
+     "n": "Block 10"
+    },
+    {
+     "k": "kit/block_13",
+     "n": "Block 13"
+    },
+    {
+     "k": "kit/block_20",
+     "n": "Block 20"
+    },
+    {
+     "k": "kit/block_28",
+     "n": "Block 28"
+    },
+    {
+     "k": "kit/court_18",
+     "n": "Court 18"
+    },
+    {
+     "k": "kit/court_25",
+     "n": "Court 25"
+    },
+    {
+     "k": "kit/court_3",
+     "n": "Court 3"
+    },
+    {
+     "k": "kit/court_8",
+     "n": "Court 8"
+    },
+    {
+     "k": "kit/house_1",
+     "n": "House 1"
+    },
+    {
+     "k": "kit/house_14",
+     "n": "House 14"
+    },
+    {
+     "k": "kit/house_21",
+     "n": "House 21"
+    },
+    {
+     "k": "kit/house_27",
+     "n": "House 27"
+    },
+    {
+     "k": "kit/house_5",
+     "n": "House 5"
+    },
+    {
+     "k": "kit/house_9",
+     "n": "House 9"
+    },
+    {
+     "k": "kit/riad_12",
+     "n": "Riad 12"
+    },
+    {
+     "k": "kit/riad_26",
+     "n": "Riad 26"
+    },
+    {
+     "k": "kit/riad_6",
+     "n": "Riad 6"
+    },
+    {
+     "k": "kit/shops_11",
+     "n": "Shops 11"
+    },
+    {
+     "k": "kit/shops_19",
+     "n": "Shops 19"
+    },
+    {
+     "k": "kit/shops_4",
+     "n": "Shops 4"
+    },
+    {
+     "k": "kit/tower_16",
+     "n": "Tower 16"
+    },
+    {
+     "k": "kit/tower_2",
+     "n": "Tower 2"
+    },
+    {
+     "k": "kit/tower_23",
+     "n": "Tower 23"
+    },
+    {
+     "k": "kit/tower_7",
+     "n": "Tower 7"
+    },
+    {
+     "k": "m_mosque",
+     "n": "Mosque"
+    }
+   ]
+  },
+  {
+   "name": "City walls",
+   "items": [
+    {
+     "k": "w_gate",
+     "n": "Gate"
+    },
+    {
+     "k": "w_seg",
+     "n": "Seg"
+    },
+    {
+     "k": "w_tower",
+     "n": "Tower"
+    },
+    {
+     "k": "w_tower_big",
+     "n": "Tower big"
+    }
+   ]
+  },
+  {
+   "name": "Fences",
+   "items": [
+    {
+     "k": "fence/brace",
+     "n": "Brace"
+    },
+    {
+     "k": "fence/brush",
+     "n": "Brush"
+    },
+    {
+     "k": "fence/gate",
+     "n": "Gate"
+    },
+    {
+     "k": "fence/lattice",
+     "n": "Lattice"
+    },
+    {
+     "k": "fence/low",
+     "n": "Low"
+    },
+    {
+     "k": "fence/palm",
+     "n": "Palm"
+    },
+    {
+     "k": "fence/picket",
+     "n": "Picket"
+    },
+    {
+     "k": "fence/post",
+     "n": "Post"
+    },
+    {
+     "k": "fence/rail",
+     "n": "Rail"
+    },
+    {
+     "k": "fence/thorn",
+     "n": "Thorn"
+    },
+    {
+     "k": "fence/wattle",
+     "n": "Wattle"
+    }
+   ]
+  },
+  {
+   "name": "Market",
+   "items": [
+    {
+     "k": "p_awning",
+     "n": "Awning"
+    },
+    {
+     "k": "p_bench",
+     "n": "Bench"
+    },
+    {
+     "k": "p_cart",
+     "n": "Cart"
+    },
+    {
+     "k": "p_stall",
+     "n": "Stall"
+    }
+   ]
+  },
+  {
+   "name": "Containers",
+   "items": [
+    {
+     "k": "p_barrel",
+     "n": "Barrel"
+    },
+    {
+     "k": "p_barrels",
+     "n": "Barrels"
+    },
+    {
+     "k": "p_basket",
+     "n": "Basket"
+    },
+    {
+     "k": "p_crates",
+     "n": "Crates"
+    },
+    {
+     "k": "p_jars",
+     "n": "Jars"
+    },
+    {
+     "k": "p_plantpot",
+     "n": "Plantpot"
+    },
+    {
+     "k": "p_pot",
+     "n": "Pot"
+    },
+    {
+     "k": "p_sacks",
+     "n": "Sacks"
+    },
+    {
+     "k": "p_waterjug",
+     "n": "Waterjug"
+    }
+   ]
+  },
+  {
+   "name": "Household",
+   "items": [
+    {
+     "k": "carpet",
+     "n": "Carpet"
+    },
+    {
+     "k": "mashaf",
+     "n": "Mashaf"
+    },
+    {
+     "k": "p_books",
+     "n": "Books"
+    },
+    {
+     "k": "p_bowl",
+     "n": "Bowl"
+    },
+    {
+     "k": "p_bread",
+     "n": "Bread"
+    },
+    {
+     "k": "p_broom",
+     "n": "Broom"
+    },
+    {
+     "k": "p_carpet",
+     "n": "Carpet"
+    },
+    {
+     "k": "p_chest",
+     "n": "Chest"
+    },
+    {
+     "k": "p_cushions",
+     "n": "Cushions"
+    },
+    {
+     "k": "p_inkset",
+     "n": "Inkset"
+    },
+    {
+     "k": "p_oillamp",
+     "n": "Oillamp"
+    },
+    {
+     "k": "p_ropecoil",
+     "n": "Ropecoil"
+    },
+    {
+     "k": "p_scrolls",
+     "n": "Scrolls"
+    },
+    {
+     "k": "p_stool",
+     "n": "Stool"
+    },
+    {
+     "k": "p_table",
+     "n": "Table"
+    }
+   ]
+  },
+  {
+   "name": "Arms",
+   "items": [
+    {
+     "k": "p_bowarrows",
+     "n": "Bowarrows"
+    },
+    {
+     "k": "p_spears",
+     "n": "Spears"
+    },
+    {
+     "k": "p_swordrack",
+     "n": "Swordrack"
+    }
+   ]
+  },
+  {
+   "name": "Fire & light",
+   "items": [
+    {
+     "k": "lantern",
+     "n": "Lantern"
+    },
+    {
+     "k": "p_brazier",
+     "n": "Brazier"
+    },
+    {
+     "k": "p_firewood",
+     "n": "Firewood"
+    },
+    {
+     "k": "p_torch",
+     "n": "Torch"
+    },
+    {
+     "k": "p_torchpost",
+     "n": "Torchpost"
+    }
+   ]
+  },
+  {
+   "name": "Trees",
+   "items": [
+    {
+     "k": "palm",
+     "n": "Palm"
+    },
+    {
+     "k": "tree_anc",
+     "n": "Tree anc"
+    },
+    {
+     "k": "tree_big_a",
+     "n": "Tree big a"
+    },
+    {
+     "k": "tree_big_b",
+     "n": "Tree big b"
+    },
+    {
+     "k": "tree_small",
+     "n": "Tree small"
+    }
+   ]
+  },
+  {
+   "name": "Plants",
+   "items": [
+    {
+     "k": "bush_dry",
+     "n": "Bush dry"
+    },
+    {
+     "k": "fl_orange",
+     "n": "Fl orange"
+    },
+    {
+     "k": "fl_purple",
+     "n": "Fl purple"
+    },
+    {
+     "k": "fl_white",
+     "n": "Fl white"
+    },
+    {
+     "k": "fl_yellow",
+     "n": "Fl yellow"
+    },
+    {
+     "k": "grass_a",
+     "n": "Grass a"
+    },
+    {
+     "k": "grass_b",
+     "n": "Grass b"
+    }
+   ]
+  },
+  {
+   "name": "Rocks",
+   "items": [
+    {
+     "k": "rock_a",
+     "n": "Rock a"
+    },
+    {
+     "k": "rock_b",
+     "n": "Rock b"
+    },
+    {
+     "k": "rock_c",
+     "n": "Rock c"
+    },
+    {
+     "k": "rock_d",
+     "n": "Rock d"
+    },
+    {
+     "k": "rock_small",
+     "n": "Rock small"
+    }
+   ]
+  },
+  {
+   "name": "Other",
+   "items": [
+    {
+     "k": "p_stones",
+     "n": "Stones"
+    },
+    {
+     "k": "p_well",
+     "n": "Well"
+    }
+   ]
+  }
+ ]
+}

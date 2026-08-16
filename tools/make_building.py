@@ -1,0 +1,668 @@
+# Builds one Aserai-style mud-brick building and exports .glb + .col.json.
+#   blender --background --python make_building.py -- <family> <seed> <out.glb> [assets]
+#
+# Families (each seed gives a different building within the family):
+#   court  one-storey rooms round a walled yard, with a gate
+#   house  one to three storeys, upper floors set back, roof terrace
+#   tower  narrow, three or four storeys, lantern or small dome on top
+#   shops  arcaded ground floor of open shops, living quarters over
+#   riad   two storeys round a small inner court with an arcade
+#   block  wide, buttressed, two or three storeys
+#
+# Two rules learned the hard way, do not reorder them:
+#   1. Cut each solid while it is still a clean box. Joining first shreds it.
+#   2. Erode before cutting. Eroding afterwards tears the wall around openings.
+#
+# Every structural box is written to the collision file, so what you stand on is
+# exactly what you see. A wall carrying a doorway is NEVER recorded as one slab:
+# the piers either side and the lintel over are recorded instead, or the opening
+# would be visible but sealed.
+import bpy, json, math, os, random, sys
+
+argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+FAMILY = argv[0] if argv else "house"
+SEED = int(argv[1]) if len(argv) > 1 else 1
+OUT = argv[2] if len(argv) > 2 else "building.glb"
+ASSETS = argv[3] if len(argv) > 3 else "assets"
+random.seed(SEED * 7919 + sum(ord(c) for c in FAMILY) * 131)
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+scene = bpy.context.scene
+scene.render.engine = 'CYCLES'
+scene.cycles.device = 'CPU'
+scene.cycles.samples = 12
+
+COLLIDERS = []
+SPOTS = []
+parts = []
+T = 0.42                      # wall thickness
+
+
+def rec(loc, hx, hy, hz):
+    """Record a collider in game axes (blender x,y,z -> game x, z, -y)."""
+    COLLIDERS.append({"c": [round(loc[0], 3), round(loc[2], 3), round(-loc[1], 3)],
+                      "h": [round(hx, 3), round(hz, 3), round(hy, 3)]})
+
+
+def solid(sx, sy, sz, loc, collide=True, keep=True):
+    bpy.ops.mesh.primitive_cube_add(size=2, location=loc)
+    ob = bpy.context.active_object
+    ob.scale = (sx / 2, sy / 2, sz / 2)
+    bpy.ops.object.transform_apply(scale=True)
+    if collide:
+        rec(loc, sx / 2, sy / 2, sz / 2)
+    if keep:
+        parts.append(ob)
+    return ob
+
+
+def cyl(r, depth, loc, rot=(0, 0, 0), verts=12, keep=True):
+    bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=depth, location=loc, vertices=verts)
+    ob = bpy.context.active_object
+    ob.rotation_euler = rot
+    bpy.ops.object.transform_apply(rotation=True)
+    if keep:
+        parts.append(ob)
+    return ob
+
+
+def dome(r, loc, seg=20, squash=1.0):
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=r, location=loc, segments=seg, ring_count=seg // 2)
+    ob = bpy.context.active_object
+    for v in ob.data.vertices:
+        if v.co.z < 0:
+            v.co.z = 0
+        else:
+            v.co.z *= squash
+    parts.append(ob)
+    return ob
+
+
+def cut(target, cutter):
+    m = target.modifiers.new("b", 'BOOLEAN')
+    m.operation = 'DIFFERENCE'
+    m.object = cutter
+    m.solver = 'EXACT'
+    bpy.context.view_layer.objects.active = target
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    if cutter in parts:
+        parts.remove(cutter)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+
+
+def weld(ob, dist=0.0006):
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=dist)
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def erode(ob, levels=2, fine=0.045, broad=0.075):
+    bpy.context.view_layer.objects.active = ob
+    m = ob.modifiers.new("sub", 'SUBSURF')
+    m.subdivision_type = 'SIMPLE'
+    m.levels = m.render_levels = levels
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    weld(ob)
+    for sc, st in ((1.2, fine), (3.8, broad)):
+        t = bpy.data.textures.new("n", 'CLOUDS')
+        t.noise_scale = sc
+        t.noise_depth = 2
+        d = ob.modifiers.new("d", 'DISPLACE')
+        d.texture = t
+        d.strength = st
+        d.mid_level = 0.5
+        bpy.ops.object.modifier_apply(modifier=d.name)
+    weld(ob)
+
+
+def bevel(ob, width=0.02, segs=2, angle=35):
+    m = ob.modifiers.new("bv", 'BEVEL')
+    m.width = width
+    m.segments = segs
+    m.limit_method = 'ANGLE'
+    m.angle_limit = math.radians(angle)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.modifier_apply(modifier=m.name)
+
+
+# ------------------------------------------------------------- openings
+def arch_cut(target, cx, cy, cz, w, h, through, axis='y'):
+    """A round-headed opening cut clean through a wall."""
+    straight = max(0.15, h - w / 2)
+    if axis == 'y':
+        cut(target, solid(w, through, straight, (cx, cy, cz + straight / 2), False, False))
+        cut(target, cyl(w / 2, through, (cx, cy, cz + straight),
+                        rot=(math.pi / 2, 0, 0), verts=16, keep=False))
+    else:
+        cut(target, solid(through, w, straight, (cx, cy, cz + straight / 2), False, False))
+        cut(target, cyl(w / 2, through, (cx, cy, cz + straight),
+                        rot=(0, math.pi / 2, 0), verts=16, keep=False))
+
+
+def slot_cut(target, cx, cy, cz, w, h, through, axis='y'):
+    """A plain square window."""
+    if axis == 'y':
+        cut(target, solid(w, through, h, (cx, cy, cz + h / 2), False, False))
+    else:
+        cut(target, solid(through, w, h, (cx, cy, cz + h / 2), False, False))
+
+
+def rec_wall_with_gap(axis, along0, along1, fixed, z0, h, gap_c, gap_w, gap_h):
+    """Collision for a wall that has one opening in it: the piers and the lintel."""
+    for a, b in ((along0, gap_c - gap_w / 2), (gap_c + gap_w / 2, along1)):
+        if b - a > 0.05:
+            if axis == 'x':
+                rec(((a + b) / 2, fixed, z0 + h / 2), (b - a) / 2, T / 2, h / 2)
+            else:
+                rec((fixed, (a + b) / 2, z0 + h / 2), T / 2, (b - a) / 2, h / 2)
+    if h - gap_h > 0.05:
+        if axis == 'x':
+            rec((gap_c, fixed, z0 + gap_h + (h - gap_h) / 2), gap_w / 2, T / 2, (h - gap_h) / 2)
+        else:
+            rec((fixed, gap_c, z0 + gap_h + (h - gap_h) / 2), T / 2, gap_w / 2, (h - gap_h) / 2)
+
+
+# --------------------------------------------------------------- surface
+def weather(ob, cx, cy, w, d, h, z0, face):
+    """Cracks down the render and bites out of the top edge."""
+    for _ in range(random.randint(2, 5)):
+        ln = random.uniform(0.5, 1.5)
+        zc = z0 + random.uniform(h * 0.2, h * 0.8)
+        lean = random.uniform(-0.28, 0.28)
+        if face == 'y':
+            c = solid(random.uniform(0.05, 0.11), T * 2.4, ln,
+                      (cx + random.uniform(-w * 0.4, w * 0.4), cy, zc), False, False)
+        else:
+            c = solid(T * 2.4, random.uniform(0.05, 0.11), ln,
+                      (cx, cy + random.uniform(-d * 0.4, d * 0.4), zc), False, False)
+        c.rotation_euler[1 if face == 'y' else 0] = lean
+        bpy.ops.object.transform_apply(rotation=True)
+        cut(ob, c)
+    for _ in range(random.randint(1, 3)):
+        b = random.uniform(0.3, 0.8)
+        if face == 'y':
+            cut(ob, solid(b, T * 2.4, b * 0.6,
+                          (cx + random.uniform(-w * 0.42, w * 0.42), cy, z0 + h), False, False))
+        else:
+            cut(ob, solid(T * 2.4, b, b * 0.6,
+                          (cx, cy + random.uniform(-d * 0.42, d * 0.42), z0 + h), False, False))
+
+
+def patch(x, y, z, w, hh, face):
+    """A slab of newer render stuck on over the old."""
+    if face == 'y':
+        o = solid(w, 0.05, hh, (x, y, z), False)
+    else:
+        o = solid(0.05, w, hh, (x, y, z), False)
+    bevel(o, 0.02)
+    return o
+
+
+# -------------------------------------------------------------- pieces
+def parapet(cx, cy, w, d, z, height=0.95, rails=True):
+    """The wall round a roof terrace, with timber rails on some sides."""
+    for sy in (-1, 1):
+        solid(w, 0.3, height, (cx, cy + sy * (d / 2 - 0.15), z + height / 2))
+    for sx in (-1, 1):
+        solid(0.3, d - 0.6, height, (cx + sx * (w / 2 - 0.15), cy, z + height / 2))
+    if rails and random.random() < 0.72:
+        n = max(3, int(w / 1.1))
+        for i in range(n):
+            if random.random() < 0.12:
+                continue                      # a post has gone missing
+            px = cx - w / 2 + (i + 0.5) * (w / n)
+            cyl(0.045, 0.6, (px, cy - d / 2 + 0.15, z + height + 0.3), verts=6)
+        solid(w, 0.09, 0.09, (cx, cy - d / 2 + 0.15, z + height + 0.62))
+
+
+def beams(cx, cy, w, d, z, n=None):
+    """Projecting roof beams, the detail that says mud brick more than anything."""
+    n = n or max(3, int(w / 1.5))
+    for i in range(n):
+        px = cx - w / 2 + (i + 0.5) * (w / n)
+        cyl(0.062, 0.5, (px, cy - d / 2 - 0.16, z), rot=(math.pi / 2, 0, 0), verts=6)
+
+
+def ext_stair(x0, y0, w, run_d, z0, z1, along='y'):
+    """An outside stair climbing a wall, solid to the ground."""
+    steps = max(5, int((z1 - z0) / 0.33))
+    rise = (z1 - z0) / steps
+    run = run_d / steps
+    for i in range(steps):
+        h = z0 + rise * (i + 1)
+        if along == 'y':
+            solid(w, run + 0.04, h, (x0, y0 + i * run, h / 2))
+        else:
+            solid(run + 0.04, w, h, (x0 + i * run, y0, h / 2))
+    return z1
+
+
+def pillar(cx, cy, z0, h, r=0.3, base=True, cap=True, collide=True):
+    """A round, eroded pillar standing on the ground.
+
+    Square posts read as scaffolding, and a cylinder made at z=0 sits half
+    under the floor -- both mistakes were visible in the first block.
+    """
+    if base:
+        b = cyl(r * 1.45, 0.22, (cx, cy, z0 + 0.11), verts=12)
+        erode(b, 1, 0.015, 0.025)
+    shaft = cyl(r, h, (cx, cy, z0 + h / 2), verts=14)
+    # taper it slightly toward the top, the way a mud pier is built
+    for v in shaft.data.vertices:
+        t = (v.co.z - (z0 + h / 2)) / h + 0.5
+        v.co.x = cx + (v.co.x - cx) * (1.0 - 0.16 * t)
+        v.co.y = cy + (v.co.y - cy) * (1.0 - 0.16 * t)
+    erode(shaft, 1, 0.02, 0.035)
+    if cap:
+        c = cyl(r * 1.3, 0.2, (cx, cy, z0 + h + 0.1), verts=12)
+        erode(c, 1, 0.015, 0.025)
+    if collide:
+        rec((cx, cy, z0 + h / 2), r * 0.92, r * 0.92, h / 2)
+    return shaft
+
+
+def small_dome(cx, cy, z, r):
+    cyl(r * 0.94, 0.5, (cx, cy, z + 0.25), verts=14)
+    d = dome(r, (cx, cy, z + 0.5), 18, 0.86)
+    erode(d, 1, 0.02, 0.03)
+    cyl(0.09, 0.5, (cx, cy, z + 0.5 + r * 0.86 + 0.2), verts=8)
+
+
+# ------------------------------------------------------------ the storey
+def storey(cx, cy, w, d, z0, h, doorway=None, wins=2, arcade=False, roomspot=True):
+    """Four wall slabs, so the inside is a real room you can walk into.
+
+    doorway: None, or (face, offset, width, height) where face is 'S','N','E','W'
+    """
+    walls = {}
+    fy_s, fy_n = cy - d / 2 + T / 2, cy + d / 2 - T / 2
+    fx_w, fx_e = cx - w / 2 + T / 2, cx + w / 2 - T / 2
+    dface = doorway[0] if doorway else None
+
+    walls['S'] = solid(w, T, h, (cx, fy_s, z0 + h / 2), collide=(dface != 'S'))
+    walls['N'] = solid(w, T, h, (cx, fy_n, z0 + h / 2), collide=(dface != 'N'))
+    walls['W'] = solid(T, d - T * 2, h, (fx_w, cy, z0 + h / 2), collide=(dface != 'W'))
+    walls['E'] = solid(T, d - T * 2, h, (fx_e, cy, z0 + h / 2), collide=(dface != 'E'))
+    for wl in walls.values():
+        erode(wl, 2)
+
+    if doorway:
+        face, off, dw, dh = doorway
+        if face in ('S', 'N'):
+            fy = fy_s if face == 'S' else fy_n
+            arch_cut(walls[face], cx + off, fy, z0, dw, dh, T + 1.4, 'y')
+            rec_wall_with_gap('x', cx - w / 2, cx + w / 2, fy, z0, h, cx + off, dw, dh)
+            SPOTS.append({"c": [round(cx + off - dw / 2, 3), round(z0, 3), round(-fy, 3)],
+                          "r": [round(dw, 3), round(dh, 3)], "k": "door",
+                          "f": (0 if face == 'S' else 180)})
+        else:
+            fx = fx_w if face == 'W' else fx_e
+            arch_cut(walls[face], fx, cy + off, z0, dw, dh, T + 1.4, 'x')
+            rec_wall_with_gap('y', cy - d / 2 + T, cy + d / 2 - T, fx, z0, h, cy + off, dw, dh)
+            SPOTS.append({"c": [round(fx, 3), round(z0, 3), round(-(cy + off - dw / 2), 3)],
+                          "r": [round(dw, 3), round(dh, 3)], "k": "door",
+                          "f": (270 if face == 'W' else 90)})
+
+    if arcade:
+        # a run of open arches along the south face, the shop fronts
+        n = max(2, int(w / 3.4))
+        step = w / n
+        for i in range(n):
+            ax = cx - w / 2 + (i + 0.5) * step
+            if doorway and doorway[0] == 'S' and abs(ax - (cx + doorway[1])) < 2.2:
+                continue
+            arch_cut(walls['S'], ax, fy_s, z0 + 0.1, step * 0.62, h * 0.74, T + 1.4, 'y')
+            rec((ax - step * 0.5, fy_s, z0 + h / 2), step * 0.19, T / 2, h / 2)
+        rec((cx, fy_s, z0 + h * 0.88), w / 2, T / 2, h * 0.12)
+
+    for i in range(wins):
+        wx = cx + random.uniform(-w * 0.34, w * 0.34)
+        if doorway and doorway[0] == 'S' and abs(wx - (cx + doorway[1])) < 1.6:
+            wx += 2.4 * (1 if random.random() < 0.5 else -1)
+        zz = z0 + h * random.uniform(0.46, 0.66)
+        if random.random() < 0.55:
+            arch_cut(walls['S'], wx, fy_s, zz, 0.72, 1.25, T + 1.4, 'y')
+        else:
+            slot_cut(walls['S'], wx, fy_s, zz, 0.7, 1.0, T + 1.4, 'y')
+    if random.random() < 0.75:
+        side = 'W' if random.random() < 0.5 else 'E'
+        arch_cut(walls[side], fx_w if side == 'W' else fx_e,
+                 cy + random.uniform(-d * 0.3, d * 0.3), z0 + h * 0.55, 0.68, 1.15, T + 1.4, 'x')
+    if random.random() < 0.5:
+        slot_cut(walls['N'], cx + random.uniform(-w * 0.3, w * 0.3), fy_n,
+                 z0 + h * 0.55, 0.66, 0.95, T + 1.4, 'y')
+
+    weather(walls['S'], cx, fy_s, w, d, h, z0, 'y')
+    weather(walls['N'], cx, fy_n, w, d, h, z0, 'y')
+    weather(walls['W'], fx_w, cy, w, d, h, z0, 'x')
+    weather(walls['E'], fx_e, cy, w, d, h, z0, 'x')
+    for wl in walls.values():
+        weld(wl)
+
+    for _ in range(random.randint(1, 3)):
+        if random.random() < 0.55:
+            patch(cx + random.uniform(-w * 0.3, w * 0.3), fy_s - 0.04,
+                  z0 + random.uniform(h * 0.2, h * 0.7),
+                  random.uniform(1.1, 2.6), random.uniform(0.8, 1.9), 'y')
+        else:
+            sg = 1 if random.random() < 0.5 else -1
+            patch(cx + sg * (w / 2 - T / 2 - 0.04), cy + random.uniform(-d * 0.3, d * 0.3),
+                  z0 + random.uniform(h * 0.2, h * 0.7),
+                  random.uniform(1.0, 2.2), random.uniform(0.8, 1.8), 'x')
+
+    if roomspot:
+        SPOTS.append({"c": [round(cx, 3), round(z0 + 0.3, 3), round(-cy, 3)],
+                      "r": [round(w / 2 - 1.1, 2), round(d / 2 - 1.1, 2)], "k": "room"})
+    # where a torch bracket belongs: flush on the front face
+    SPOTS.append({"c": [round(cx + w * 0.3, 3), round(z0 + 2.5, 3), round(-(cy - d / 2), 3)],
+                  "r": [0.2, 0.2], "k": "torch", "f": 0})
+    return walls
+
+
+def floor_slab(cx, cy, w, d, z, thick=0.4):
+    solid(w, d, thick, (cx, cy, z + thick / 2))
+
+
+# =============================================================== families
+def build_court():
+    """Rooms round a walled yard, with a gate: a small compound."""
+    W = random.uniform(17, 24)
+    D = random.uniform(15, 21)
+    h = random.uniform(3.2, 3.9)
+    # the main range along the north
+    mw, md = W * random.uniform(0.55, 0.8), D * random.uniform(0.34, 0.44)
+    mx, my = random.uniform(-W * 0.1, W * 0.1), D / 2 - md / 2
+    floor_slab(mx, my, mw, md, 0)
+    storey(mx, my, mw, md, 0.4, h, doorway=('S', random.uniform(-mw * 0.2, mw * 0.2), 1.4, 2.4), wins=2)
+    floor_slab(mx, my, mw, md, 0.4 + h)
+    parapet(mx, my, mw, md, 0.8 + h, 0.9)
+    beams(mx, my, mw, md, 0.4 + h + 0.2)
+    SPOTS.append({"c": [round(mx, 3), round(0.8 + h, 3), round(-my, 3)],
+                  "r": [round(mw / 2 - 1.2, 2), round(md / 2 - 1.2, 2)], "k": "roof"})
+    ext_stair(mx - mw / 2 + 0.9, my - md / 2 - 2.6, 1.5, 2.4, 0, 0.4 + h)
+
+    # a side wing
+    if random.random() < 0.8:
+        ww, wd = W * random.uniform(0.22, 0.3), D * random.uniform(0.42, 0.55)
+        wx = -W / 2 + ww / 2
+        wy = -D / 2 + wd / 2 + 1.0
+        floor_slab(wx, wy, ww, wd, 0)
+        storey(wx, wy, ww, wd, 0.4, h * 0.92,
+               doorway=('E', random.uniform(-wd * 0.2, wd * 0.2), 1.3, 2.2), wins=1)
+        floor_slab(wx, wy, ww, wd, 0.4 + h * 0.92)
+        parapet(wx, wy, ww, wd, 0.8 + h * 0.92, 0.85)
+        SPOTS.append({"c": [round(wx, 3), round(0.8 + h * 0.92, 3), round(-wy, 3)],
+                      "r": [round(ww / 2 - 1.0, 2), round(wd / 2 - 1.0, 2)], "k": "roof"})
+
+    # the yard wall, with a gate in the south
+    yh = random.uniform(2.1, 2.7)
+    gw = 2.2
+    goff = random.uniform(-W * 0.15, W * 0.15)
+    sy = -D / 2
+    wall_s = solid(W, 0.34, yh, (0, sy, yh / 2), collide=False)
+    erode(wall_s, 1, 0.03, 0.05)
+    arch_cut(wall_s, goff, sy, 0, gw, 2.5, 1.4, 'y')
+    rec_wall_with_gap('x', -W / 2, W / 2, sy, 0, yh, goff, gw, 2.5)
+    weather(wall_s, 0, sy, W, 0.34, yh, 0, 'y')
+    weld(wall_s)
+    SPOTS.append({"c": [round(goff - gw / 2, 3), 0.0, round(-sy, 3)],
+                  "r": [round(gw, 3), 2.5], "k": "door", "f": 0})
+    for sx in (-1, 1):
+        w2 = solid(0.34, D, yh * random.uniform(0.92, 1.05), (sx * W / 2, 0, yh / 2))
+        erode(w2, 1, 0.03, 0.05)
+        weld(w2)
+    SPOTS.append({"c": [0.0, 0.05, round(-(-D / 4), 3)],
+                  "r": [round(W / 2 - 2.5, 2), round(D / 5, 2)], "k": "court"})
+
+
+def build_house(storeys=None):
+    storeys = storeys or random.choice([1, 2, 2, 3])
+    W = random.uniform(8.5, 12.5)
+    D = random.uniform(7.5, 10.5)
+    z = 0.0
+    floor_slab(0, 0, W, D, 0)
+    z = 0.4
+    cw, cd = W, D
+    cx, cy = 0.0, 0.0
+    for i in range(storeys):
+        h = random.uniform(3.0, 3.7) if i == 0 else random.uniform(2.7, 3.3)
+        door = ('S', random.uniform(-cw * 0.22, cw * 0.22), 1.4, 2.45) if i == 0 else None
+        storey(cx, cy, cw, cd, z, h, doorway=door, wins=random.randint(1, 3))
+        floor_slab(cx, cy, cw, cd, z + h)
+        beams(cx, cy, cw, cd, z + h + 0.2)
+        z += h + 0.4
+        if i < storeys - 1 and random.random() < 0.5:
+            # the next floor steps back, leaving a terrace
+            back = random.uniform(1.2, 2.4)
+            parapet(cx, cy - back / 2, cw, cd, z, 0.85)
+            SPOTS.append({"c": [round(cx, 3), round(z, 3), round(-(cy - cd / 2 + back / 2), 3)],
+                          "r": [round(cw / 2 - 0.8, 2), round(back / 2 - 0.2, 2)], "k": "balcony"})
+            cd -= back
+            cy += back / 2
+    parapet(cx, cy, cw, cd, z, random.uniform(0.85, 1.15))
+    SPOTS.append({"c": [round(cx, 3), round(z, 3), round(-cy, 3)],
+                  "r": [round(cw / 2 - 1.0, 2), round(cd / 2 - 1.0, 2)], "k": "roof"})
+    if random.random() < 0.72:
+        ext_stair(-W / 2 + 0.85, -D / 2 - 2.8, 1.45, 2.6, 0, 0.4 + 3.4)
+    if storeys >= 2 and random.random() < 0.45:
+        # a covered balcony on timber posts
+        bw = W * 0.5
+        by = -D / 2 - 0.9
+        solid(bw, 1.8, 0.22, (0, by, 0.4 + 3.4))
+        for sx in (-1, 1):
+            pillar(sx * bw / 2 * 0.86, by - 0.7, 0.0, 3.4, r=0.1, base=False, cap=False)
+        parapet(0, by, bw, 1.8, 0.62 + 3.4, 0.75, rails=True)
+        SPOTS.append({"c": [0.0, round(0.62 + 3.4, 3), round(-by, 3)],
+                      "r": [round(bw / 2 - 0.5, 2), 0.55], "k": "balcony"})
+
+
+def build_tower():
+    storeys = random.choice([3, 3, 4])
+    W = random.uniform(6.0, 7.8)
+    D = random.uniform(5.6, 7.2)
+    floor_slab(0, 0, W, D, 0)
+    z = 0.4
+    for i in range(storeys):
+        h = random.uniform(2.9, 3.4)
+        door = ('S', random.uniform(-W * 0.16, W * 0.16), 1.35, 2.4) if i == 0 else None
+        storey(0, 0, W - i * 0.28, D - i * 0.28, z, h, doorway=door, wins=random.randint(1, 2))
+        floor_slab(0, 0, W - i * 0.28, D - i * 0.28, z + h)
+        if i == storeys - 2:
+            beams(0, 0, W, D, z + h + 0.2)
+        z += h + 0.4
+    parapet(0, 0, W - storeys * 0.28, D - storeys * 0.28, z, 1.0)
+    SPOTS.append({"c": [0.0, round(z, 3), 0.0],
+                  "r": [round(W / 2 - 1.4, 2), round(D / 2 - 1.4, 2)], "k": "roof"})
+    if random.random() < 0.5:
+        small_dome(0, 0, z + 1.0, min(W, D) * 0.34)
+    ext_stair(-W / 2 + 0.8, -D / 2 - 2.6, 1.35, 2.4, 0, 0.4 + 3.2)
+
+
+def build_shops():
+    W = random.uniform(14, 20)
+    D = random.uniform(8, 11)
+    floor_slab(0, 0, W, D, 0)
+    h0 = random.uniform(3.6, 4.2)
+    storey(0, 0, W, D, 0.4, h0, doorway=None, wins=0, arcade=True, roomspot=True)
+    floor_slab(0, 0, W, D, 0.4 + h0)
+    beams(0, 0, W, D, 0.4 + h0 + 0.2)
+    z = 0.4 + h0 + 0.4
+    ups = random.choice([1, 1, 2])
+    for i in range(ups):
+        h = random.uniform(2.8, 3.3)
+        storey(0, 0, W - 0.3, D - 0.3, z, h, doorway=None, wins=random.randint(2, 4))
+        floor_slab(0, 0, W - 0.3, D - 0.3, z + h)
+        z += h + 0.4
+    parapet(0, 0, W - 0.3, D - 0.3, z, 1.0)
+    SPOTS.append({"c": [0.0, round(z, 3), 0.0],
+                  "r": [round(W / 2 - 1.2, 2), round(D / 2 - 1.2, 2)], "k": "roof"})
+    # awning poles along the shop front
+    for i in range(max(2, int(W / 4))):
+        px = -W / 2 + (i + 0.5) * (W / max(2, int(W / 4)))
+        pillar(px, -D / 2 - 1.0, 0.0, 3.0, r=0.095, base=False, cap=False)
+    solid(W * 0.94, 2.0, 0.14, (0, -D / 2 - 1.0, 3.05))
+    ext_stair(W / 2 - 0.85, -D / 2 - 2.8, 1.45, 2.6, 0, 0.4 + h0)
+
+
+def build_riad():
+    """Two storeys round a small inner court with an arcade."""
+    W = random.uniform(17, 22)
+    D = random.uniform(15, 20)
+    cw, cd = W * random.uniform(0.34, 0.44), D * random.uniform(0.34, 0.44)
+    h = random.uniform(3.2, 3.8)
+    floor_slab(0, 0, W, D, 0)
+    cut_court = solid(cw, cd, 3.0, (0, 0, 0.4 + 1.4), False, False)
+    bpy.data.objects.remove(cut_court, do_unlink=True)
+
+    for lvl in range(2):
+        z = 0.4 + lvl * (h + 0.4)
+        # four ranges round the court
+        rd = (D - cd) / 2
+        rw = (W - cw) / 2
+        door = ('S', 0.0, 1.5, 2.5) if lvl == 0 else None
+        storey(0, -(cd / 2 + rd / 2), W, rd, z, h, doorway=door, wins=2)
+        storey(0, cd / 2 + rd / 2, W, rd, z, h, wins=1)
+        storey(-(cw / 2 + rw / 2), 0, rw, cd, z, h, wins=1)
+        storey(cw / 2 + rw / 2, 0, rw, cd, z, h, wins=1)
+        for cx2, cy2, w2, d2 in ((0, -(cd / 2 + rd / 2), W, rd), (0, cd / 2 + rd / 2, W, rd),
+                                 (-(cw / 2 + rw / 2), 0, rw, cd), (cw / 2 + rw / 2, 0, rw, cd)):
+            floor_slab(cx2, cy2, w2, d2, z + h)
+    ztop = 0.4 + 2 * (h + 0.4)
+    for cx2, cy2, w2, d2 in ((0, -(cd / 2 + (D - cd) / 4), W, (D - cd) / 2),
+                             (0, cd / 2 + (D - cd) / 4, W, (D - cd) / 2)):
+        parapet(cx2, cy2, w2, d2, ztop, 0.95)
+        SPOTS.append({"c": [round(cx2, 3), round(ztop, 3), round(-cy2, 3)],
+                      "r": [round(w2 / 2 - 1.2, 2), round(d2 / 2 - 1.0, 2)], "k": "roof"})
+    # the arcade of piers round the court, ground level
+    n = 4
+    for i in range(n + 1):
+        for sgn in (-1, 1):
+            px = -cw / 2 + i * (cw / n)
+            pillar(px, sgn * cd / 2, 0.4, h - 0.3, r=0.26)
+            py = -cd / 2 + i * (cd / n)
+            pillar(sgn * cw / 2, py, 0.4, h - 0.3, r=0.26)
+    SPOTS.append({"c": [0.0, 0.4, 0.0],
+                  "r": [round(cw / 2 - 0.7, 2), round(cd / 2 - 0.7, 2)], "k": "court"})
+
+
+def build_block():
+    W = random.uniform(16, 23)
+    D = random.uniform(11, 15)
+    storeys = random.choice([2, 3])
+    floor_slab(0, 0, W, D, 0)
+    z = 0.4
+    for i in range(storeys):
+        h = random.uniform(3.1, 3.7)
+        door = ('S', random.uniform(-W * 0.25, W * 0.25), 1.6, 2.6) if i == 0 else None
+        storey(0, 0, W, D, z, h, doorway=door, wins=random.randint(3, 5))
+        floor_slab(0, 0, W, D, z + h)
+        if i == 0:
+            beams(0, 0, W, D, z + h + 0.2)
+        z += h + 0.4
+    parapet(0, 0, W, D, z, 1.1)
+    SPOTS.append({"c": [0.0, round(z, 3), 0.0],
+                  "r": [round(W / 2 - 1.4, 2), round(D / 2 - 1.4, 2)], "k": "roof"})
+    # Buttresses: round piers standing on the ground and touching the wall.
+    # They used to be boxes made centred on z=0, so half of each was under the
+    # floor and none of them reached the wall they were meant to hold up.
+    n = max(2, int(W / 5.5))
+    for i in range(n):
+        bx = -W / 2 + (i + 0.5) * (W / n)
+        for sy in (-1, 1):
+            bh = z * random.uniform(0.52, 0.76)
+            by = sy * (D / 2 - 0.12)          # buried a little into the wall
+            pillar(bx, by, 0.0, bh, r=random.uniform(0.42, 0.56))
+            # a sloped shoulder where it meets the wall
+            sh = cyl(0.34, 0.9, (bx, by + sy * -0.1, bh + 0.35), verts=10)
+            sh.rotation_euler = (sy * 0.5, 0, 0)
+            bpy.ops.object.transform_apply(rotation=True)
+    ext_stair(-W / 2 + 0.9, -D / 2 - 3.0, 1.5, 2.8, 0, 0.4 + 3.4)
+
+
+BUILDERS = {"court": build_court, "house": build_house, "tower": build_tower,
+            "shops": build_shops, "riad": build_riad, "block": build_block}
+BUILDERS.get(FAMILY, build_house)()
+
+# ------------------------------------------------------------- assemble
+for o in parts:
+    bevel(o, 0.02)
+bpy.ops.object.select_all(action='DESELECT')
+for o in parts:
+    o.select_set(True)
+bpy.context.view_layer.objects.active = parts[0]
+bpy.ops.object.join()
+ob = bpy.context.active_object
+ob.name = FAMILY
+weld(ob, 0.0004)
+
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.uv.cube_project(cube_size=1.7)
+bpy.ops.object.mode_set(mode='OBJECT')
+
+mat = bpy.data.materials.new("adobe")
+mat.use_nodes = True
+nt = mat.node_tree
+bsdf = nt.nodes["Principled BSDF"]
+bsdf.inputs["Roughness"].default_value = 1.0
+ob.data.materials.clear()
+ob.data.materials.append(mat)
+
+tex_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_d.jpg"))
+tn = None
+if os.path.exists(tex_path):
+    img = bpy.data.images.load(tex_path)
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+else:
+    bsdf.inputs["Base Color"].default_value = (0.82, 0.69, 0.50, 1)
+
+while len(ob.data.color_attributes):
+    ob.data.color_attributes.remove(ob.data.color_attributes[0])
+ob.data.color_attributes.active_color = ob.data.color_attributes.new(
+    name="ao", type='FLOAT_COLOR', domain='CORNER')
+scene.render.bake.target = 'VERTEX_COLORS'
+scene.render.bake.margin = 2
+bpy.ops.object.select_all(action='DESELECT')
+ob.select_set(True)
+bpy.context.view_layer.objects.active = ob
+try:
+    bpy.ops.object.bake(type='AO')
+    data = ob.data.color_attributes["ao"].data
+    for i in range(len(data)):
+        ao = 0.30 + 0.66 * data[i].color[0]
+        data[i].color = (ao, ao, ao, 1.0)
+except Exception as e:
+    print("bake failed:", e)
+
+if tn is not None:
+    tn.image.pack()
+    use = nt.nodes.new('ShaderNodeVertexColor')
+    use.layer_name = "ao"
+    mix = nt.nodes.new('ShaderNodeMixRGB')
+    mix.blend_type = 'MULTIPLY'
+    mix.inputs['Fac'].default_value = 1.0
+    nt.links.new(tn.outputs['Color'], mix.inputs['Color1'])
+    nt.links.new(use.outputs['Color'], mix.inputs['Color2'])
+    nt.links.new(mix.outputs['Color'], bsdf.inputs['Base Color'])
+
+me = ob.data
+me.calc_loop_triangles()
+print("RESULT %s/%d verts=%d tris=%d colliders=%d spots=%d"
+      % (FAMILY, SEED, len(me.vertices), len(me.loop_triangles), len(COLLIDERS), len(SPOTS)))
+
+bpy.ops.object.select_all(action='DESELECT')
+ob.select_set(True)
+try:
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
+                              export_apply=True, export_yup=True, export_vertex_color='ACTIVE')
+except TypeError:
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
+                              export_apply=True, export_yup=True)
+with open(os.path.splitext(OUT)[0] + ".col.json", "w") as f:
+    json.dump({"boxes": COLLIDERS, "spots": SPOTS}, f)
+print("WROTE", OUT)
