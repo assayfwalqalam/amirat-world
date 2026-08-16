@@ -575,10 +575,15 @@
       var sx = sgn * (GATE_HALF + 17);
       var steps = 19, rise = 13.5 / steps, run = 1.5;
       for (var i = 0; i < steps; i++) {
-        /* the lowest step stands furthest from the wall; you climb toward it */
-        box(4.2, rise + 0.14, run + 0.12, sx, Y + rise / 2 + i * rise,
+        /* each step is a solid block standing on the ground · a stair of this
+           size is a mass of masonry, not a shelf hanging in the air */
+        var h = rise * (i + 1);
+        box(4.4, h, run + 0.12, sx, Y + h / 2,
             S - 12 - (steps - 1 - i) * run, M.stone2, 0);
       }
+      /* the cheek wall along its open side */
+      box(0.8, 13.5, steps * run + 1.0, sx - 2.6, Y + 6.75,
+          S - 12 - (steps - 1) * run / 2, M.stone2, 0);
       box(4.2, 0.9, 4.4, sx, Y + 13.5 - 0.45, S - 12 + 2.2, M.stone2, 0);
     });
 

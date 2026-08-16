@@ -222,11 +222,17 @@ if has_upper:
 stair_side = 1 if random.random() < 0.5 else -1
 steps = 11
 rise = (top_z + 0.42) / steps
+run = 0.46
+SX = stair_side * (W / 2 + 0.68)
 for i in range(steps):
-    shell.append(solid(1.3, 0.46, rise + 0.06,
-                       (stair_side * (W / 2 + 0.65),
-                        -D / 2 + 0.9 + i * 0.46,
-                        rise / 2 + i * rise)))
+    # each step is a solid block standing on the ground, not a floating tread,
+    # so the flight reads as the mass of masonry it would really be
+    h = rise * (i + 1)
+    shell.append(solid(1.35, run, h,
+                       (SX, -D / 2 + 0.9 + i * run, h / 2)))
+# the cheek wall that carries the flight, closing its open side
+timber.append(solid(0.22, steps * run, 0.55,
+                    (SX + stair_side * 0.72, -D / 2 + 0.9 + (steps - 1) * run / 2, 0.3), False))
 
 # --------------------------------------------------------------- timber
 def beams(cx, cy, w, d, z, n):
