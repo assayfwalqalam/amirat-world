@@ -892,20 +892,26 @@
     if (!running) return;
     lastRaf = performance.now();
     rafId = requestAnimationFrame(loop);
+
+    /* A fixed viewpoint keeps asking for frames but stops drawing once the
+       world has settled. Headless capture advances a virtual clock through
+       animation frames, so the loop must keep spinning or the clock stalls
+       and the screenshot never fires; it just must stop costing anything.
+       The canvas holds the last drawn frame, which is the one we want. */
+    if (W.SHOT_MODE && shotDone) return;
+
     try { frame(); } catch (e) { running = false; W.diag('frame error: ' + e.message); }
-    /* A fixed viewpoint stops itself once the world has settled. Headless
-       capture drives virtual time, so a loop that never stops renders
-       thousands of frames and the screenshot never arrives. */
+
     if (W.SHOT_MODE) {
-      if (W.MODELS_IN) shotFrames++;
-      if (shotFrames > 45) { running = false; document.title = 'settled'; }
+      if (W.MODELS_IN && pending.length === 0) shotFrames++; else shotFrames = 0;
+      if (shotFrames > 30) { shotDone = true; document.title = 'settled'; }
       return;
     }
     var moving = keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD'] || movePid !== null;
     if (moving) idleAt = performance.now();
     if (performance.now() - idleAt > IDLE_MS) { running = false; hint(true); }
   }
-  var shotFrames = 0;
+  var shotFrames = 0, shotDone = false;
   function startLoop() {
     hbEl = document.getElementById('hb');
     running = true;
