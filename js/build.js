@@ -389,6 +389,7 @@
 
   /* the friday mosque · dome, minaret, mihrab, lamps */
   function buildMosque(cx, cz) {
+    W.MOSQUE_BUILT = [];
     var Y = TOWN.y, w = 30, d = 30, h = 9, th = 1.2;
     var doorW = 3.6;
     /* walls with a doorway in the south face */
@@ -555,13 +556,13 @@
   /* the sculpted houses can only be planted once their files are here */
   function buildSculptedHouses() {
     var Y = TOWN.y;
-    var keys = ['house_a', 'house_b', 'house_c'];   /* kasbah.glb renders red · left out until refetched */
+    var keys = ['ah1', 'ah2', 'ah3', 'ah4', 'ah5', 'ah6'];
     var made = 0;
     HOUSE_SPOTS.forEach(function (s, i) {
       if (i % 6 === 0) return;                 /* leave room round our own */
       var key = keys[i % keys.length];
       if (!MODELS[key]) return;
-      var hgt = 9 + (i % 4) * 2.6;
+      var hgt = 7.5 + (i % 5) * 1.9;
       var g = place(key, s[0], W.heightAt(s[0], s[1]), s[1], hgt, s[2] + (i % 3) * 1.1, true);
       if (g) {
         made++;
@@ -1113,7 +1114,6 @@
     };
 
     buildTown();
-    buildMosque(-34, -30);
     buildPalace(36, -34);
     buildLibrary(34, 36);
     buildHouses();
@@ -1131,13 +1131,25 @@
       torch(Math.cos(wa) * (TOWN.R - 6.4), TOWN.y + 2.9, Math.sin(wa) * (TOWN.R - 6.4), wa + Math.PI);
     }
 
-    loadModels(['palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
+    loadModels(['ah1', 'ah2', 'ah3', 'ah4', 'ah5', 'ah6', 'mosque_orn',
+      'palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
-      'house_a', 'house_b', 'house_c', 'kasbah'], function () {
+      'house_a', 'house_b', 'house_c'], function () {
         /* things that need the models */
         buildSculptedHouses();
+        /* the friday mosque */
+        if (MODELS.mosque_orn) {
+          place('mosque_orn', -34, TOWN.y - 0.2, -30, 30, 0.0, true);
+          [[-17, 12], [17, 12], [-17, -15], [17, -15]].forEach(function (t) {
+            torch(-34 + t[0], TOWN.y + 3.0, -30 + t[1], 0);
+          });
+          lamp(-34, TOWN.y + 5.2, -30 + 17, 1.9, false);
+          W.MOSQUE = { x: -34, z: -30, y: TOWN.y };
+        } else {
+          buildMosque(-34, -30);
+        }
         if (MODELS.well) place('well', 6, W.heightAt(6, 8), 8, 3.4, 0.4, true);
         lamp(6, TOWN.y + 3.4, 8, 1.3, false);
         if (MODELS.house_a) place('house_a', -86, W.heightAt(-86, -70), -70, 11, 0.6, true);
