@@ -960,7 +960,7 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.46, 0.42, 0xd7e3c6);
+      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xd2dfbe);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
@@ -975,7 +975,7 @@
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
         if (h < W.WATER_Y - 0.1 || h > W.WATER_Y + 2.2 || w.w < 0.55) continue;
-        if (W.flatAt(rx, rz) > 0.30) continue;
+        if (W.flatAt(rx, rz) > 0.30 || W.roadAt(rx, rz) > 0.35) continue;
         var sc = 0.8 + hashU(sd ^ 0x85ebca6b) * 0.7;
         dummy.position.set(rx, h - 0.12, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
@@ -998,7 +998,7 @@
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
         if (h < W.WATER_Y + 0.15 || w.g < 0.30 || w.r > 0.55) continue;
-        if (W.flatAt(rx, rz) > 0.30) continue;
+        if (W.flatAt(rx, rz) > 0.30 || W.roadAt(rx, rz) > 0.35) continue;
         var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.6 + 0.7 * w.g);
         dummy.position.set(rx, h - 0.06, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
@@ -1016,15 +1016,15 @@
     var cb = W.biomeAt(ox + CH / 2, oz + CH / 2);
     var lush = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5 && W.flatAt(x, z) < 0.3;
+      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5 && W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
     };
     var dry = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.6 && w.g < 0.5 && W.flatAt(x, z) < 0.3;
+      return h > W.WATER_Y + 0.6 && w.g < 0.5 && W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
     };
     var stony = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.4 && w.r > 0.35 && W.flatAt(x, z) < 0.3;
+      return h > W.WATER_Y + 0.4 && w.r > 0.35 && W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
     };
 
     /* blades first, then the modelled clumps on top of them */
@@ -1084,7 +1084,7 @@
   var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 44;
   function initLawn() {
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.46, 0.42, 0xd7e3c6);
+      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xd2dfbe);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
@@ -1107,7 +1107,7 @@
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
       if (h < W.WATER_Y + 0.12 || w.g < 0.20 || w.r > 0.65) continue;
-      if (W.flatAt(gx, gz) > 0.30) continue;
+      if (W.flatAt(gx, gz) > 0.30 || W.roadAt(gx, gz) > 0.35) continue;
       var sc = (0.55 + hashU(sd ^ 0x85ebca6b) * 0.7) * (0.55 + 0.7 * w.g);
       dummy.position.set(gx, h - 0.07, gz);
       dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
@@ -1178,6 +1178,8 @@
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
     W.addFlat(TOWN.x, TOWN.z, TOWN.R + 14, TOWN.y, 70);
 
+    W.addRoad(0, TOWN.R - 6, 0, TOWN.R + 230, 8.5);
+    W.addRoad(0, TOWN.R + 120, 210, TOWN.R + 300, 7);
     W.SPAWN = { x: 0, z: TOWN.R + 46 };
     W.SPAWN_YAW = 0;
     W.SHOTS = {

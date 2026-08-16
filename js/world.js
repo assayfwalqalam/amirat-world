@@ -124,6 +124,26 @@
     return best;
   };
 
+  /* the trodden road to the gate · nothing grows on a road */
+  var ROADS = [];
+  W.addRoad = function (x0, z0, x1, z1, halfWidth) {
+    ROADS.push({ x0: x0, z0: z0, x1: x1, z1: z1, w: halfWidth || 7 });
+  };
+  W.roadAt = function (x, z) {
+    var best = 0;
+    for (var i = 0; i < ROADS.length; i++) {
+      var r = ROADS[i];
+      var dx = r.x1 - r.x0, dz = r.z1 - r.z0;
+      var len2 = dx * dx + dz * dz;
+      var t2 = len2 > 0 ? Math.max(0, Math.min(1, ((x - r.x0) * dx + (z - r.z0) * dz) / len2)) : 0;
+      var px = r.x0 + dx * t2, pz = r.z0 + dz * t2;
+      var d = Math.sqrt((x - px) * (x - px) + (z - pz) * (z - pz));
+      var v = 1 - sstep(r.w * 0.55, r.w, d);
+      if (v > best) best = v;
+    }
+    return best;
+  };
+
   /* wetness/greenery weights used by the ground shader and the scatterer */
   W.groundWeights = function (x, z, h) {
     var b = W.biomeAt(x, z);
