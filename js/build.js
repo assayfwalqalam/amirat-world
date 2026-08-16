@@ -411,7 +411,7 @@
         active--;
         g.scene.traverse(function (o) {
           if (o.isMesh) {
-            o.castShadow = false; o.receiveShadow = false;
+            o.castShadow = true; o.receiveShadow = true;
             if (o.material) {
               o.material.envMapIntensity = 0.35;
               if (o.material.map) o.material.map.anisotropy = 4;
@@ -509,7 +509,7 @@
   /* A square citadel, assembled from Blender-made pieces so the walls carry the
      same eroded stone as the houses. Every piece brings its own collision. */
   var TOWNSQ = 132;
-  var WALL_KIT = ['w_seg', 'w_tower', 'w_tower_big', 'w_gate'];
+  var WALL_KIT = ['w_seg', 'w_tower', 'w_tower_big', 'w_gate', 'm_mosque'];
   var SEG_LEN = 12.0, GATE_HALF = 6.5;
 
   function buildTown() {
@@ -1121,7 +1121,7 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(1500 * (0.3 + cb.grass) * (W.vegScale || 1)), 0.85, 1.8);
+    sowCards(cardGeo, cardMat, Math.round(2100 * (0.32 + cb.grass) * (W.vegScale || 1)), 0.85, 1.9);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
@@ -1136,7 +1136,7 @@
     sow('rock_d', Math.round(6 * (0.3 + cb.rock)), stony, 0.8, 2.2);
 
     /* trees and palms, sparse and deliberate */
-    var treeN = Math.max(1, Math.round((6 * cb.grass + 2) * (W.vegScale || 1)));
+    var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -1174,7 +1174,7 @@
   };
 
   /* a dense carpet of grass that travels with you · the only way a lawn reads */
-  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 44;
+  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 52;
   function initLawn() {
     if (!cardGeo) {
       var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xd2dfbe);
@@ -1182,7 +1182,7 @@
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
-    var n = W.TIER === 2 ? 26000 : (W.TIER === 1 ? 9000 : 2600);
+    var n = W.TIER === 2 ? 34000 : (W.TIER === 1 ? 11000 : 3000);
     lawn = new T.InstancedMesh(cardGeo, cardMat, n);
     lawn.name = 'lawn';
     lawn.frustumCulled = false;
@@ -1282,7 +1282,7 @@
       '4': { x: 300, z: 400, yaw: 0, pitch: -0.03 },
       '5': { x: 430, z: -228, yaw: 0, pitch: -0.05 },
       '6': { x: -360, z: 306, yaw: 0, pitch: 0.02 },
-      '7': { x: -34, z: -6, yaw: 0, pitch: 0.06 },
+      '7': { x: -40, z: -76, yaw: 3.14159, pitch: 0.05, h: 2.2 },
       '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true },
       '9': { x: 0, z: -(TOWN.R + 34), yaw: 3.14, pitch: 0.02, h: 2.4 },
       '10': { x: -72, z: 4, yaw: 1.6, pitch: 0.0, h: 2.2 }
@@ -1302,30 +1302,33 @@
     }
 
     Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
-    loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(['mosque_orn',
-      'palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
+    loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
+      'palm', 'lantern', 'mashaf', 'carpet',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small']), function () {
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();
-        /* the friday mosque */
-        if (MODELS.mosque_orn) {
-          place('mosque_orn', -34, TOWN.y - 0.2, -30, 30, 0.0, true);
-          [[-17, 12], [17, 12], [-17, -15], [17, -15]].forEach(function (t) {
-            torch(-34 + t[0], TOWN.y + 3.0, -30 + t[1], 0);
+        /* the friday mosque, made in Blender: hall, dome, minaret, courtyard */
+        if (MODELS.m_mosque) {
+          var MX = -40, MZ = -34;
+          placeBuilt('m_mosque', MX, TOWN.y, MZ, 0, 1.0);
+          dressBuilding('m_mosque', MX, TOWN.y, MZ, 0, 1.0, 4242);
+          [[-15, 14], [15, 14], [-15, -13], [15, -13]].forEach(function (t) {
+            torch(MX + t[0], TOWN.y + 3.2, MZ + t[1], 0);
           });
-          lamp(-34, TOWN.y + 5.2, -30 + 17, 1.9, false);
-          W.MOSQUE = { x: -34, z: -30, y: TOWN.y };
+          /* lamps hung between the courtyard piers */
+          for (var q = -2; q <= 2; q++) {
+            lamp(MX + q * 9, TOWN.y + 5.4, MZ - 37, 1.5, false);
+          }
+          lamp(MX, TOWN.y + 6.0, MZ, 1.8, false);
+          W.MOSQUE = { x: MX, z: MZ, y: TOWN.y };
         } else {
           buildMosque(-34, -30);
         }
-        if (MODELS.well) place('well', 6, W.heightAt(6, 8), 8, 3.4, 0.4, true);
+        if (MODELS.p_well) { placeBuilt('p_well', 6, TOWN.y, 8, 0.4, 1.6); lamp(6, TOWN.y + 4.2, 8, 1.2, false); }
         lamp(6, TOWN.y + 3.4, 8, 1.3, false);
-        if (MODELS.house_a) place('house_a', -86, W.heightAt(-86, -70), -70, 11, 0.6, true);
-        if (MODELS.house_b) place('house_b', 84, W.heightAt(84, 62), 62, 11, -0.9, true);
-        if (MODELS.house_c) place('house_c', -6, W.heightAt(-6, -84), -84, 10, 0.2, true);
 
         buildCamp(430, -260, 4);
         buildCamp(-520, 300, 3);

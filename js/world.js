@@ -181,7 +181,8 @@
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
-    renderer.shadowMap.enabled = false;
+    renderer.shadowMap.enabled = (TIER === 2);
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
     renderer.domElement.addEventListener('webglcontextlost', function (ev) {
       ev.preventDefault();
@@ -308,6 +309,19 @@
     scene.add(new THREE.AmbientLight(0x3b3a63, 0.30));
     var moon = new THREE.DirectionalLight(0xccd2ff, 0.88);
     moon.position.copy(moonDir).multiplyScalar(900);
+    if (TIER === 2) {
+      moon.castShadow = true;
+      moon.shadow.mapSize.set(2048, 2048);
+      var c = moon.shadow.camera;
+      c.near = 400; c.far = 1500;
+      c.left = -230; c.right = 230; c.top = 230; c.bottom = -230;
+      moon.shadow.bias = -0.0009;
+      moon.shadow.normalBias = 0.6;
+      W.moonLight = moon;
+      W.moonTarget = new THREE.Object3D();
+      scene.add(W.moonTarget);
+      moon.target = W.moonTarget;
+    }
     scene.add(moon);
   }
 
@@ -771,6 +785,12 @@
     cam.rotation.set(0, 0, 0);
     cam.rotateY(yaw); cam.rotateX(pitch);
     if (water) { water.position.x = pos.x; water.position.z = pos.z; }
+    if (W.moonLight) {
+      W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
+      W.moonTarget.updateMatrixWorld();
+      W.moonLight.position.copy(moonDir).multiplyScalar(900).add(
+        new THREE.Vector3(pos.x, 0, pos.z));
+    }
     skyFollow(pos);
     updateChunks(pos, false);
     pumpChunks(pos.y > 120 ? 3 : 2);
