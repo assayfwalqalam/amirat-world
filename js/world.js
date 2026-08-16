@@ -133,6 +133,36 @@
       }
     }
 
+    /* ------------------------------------------------------------ relief
+       Three systems, none sharing a mask, so the land is not one shape
+       repeated at different sizes.
+
+       RIDGES  long chains, ridged noise, tall
+       HILLS   rounded swells with convex flanks
+       BENCH   flat shelves cut into the slopes, which is what stops a hill
+               looking like a heap of sand */
+    var mountain = ridged(x * 0.00031 - 55.2, z * 0.00031 + 71.8, 4);
+    var mMask = sstep(0.52, 0.86, fbm(x * 0.00019 + 13.7, z * 0.00019 - 41.2, 3));
+    if (mMask > 0.004) {
+      var m2 = ridged(x * 0.00082 + 9.4, z * 0.00082 - 3.1, 3);
+      var peak = Math.pow(Math.max(0, mountain - 0.30) / 0.70, 1.55);
+      h += peak * 300 * mMask;
+      h += Math.pow(Math.max(0, m2 - 0.42), 1.8) * 90 * mMask;
+    }
+
+    var swell = fbm(x * 0.00125 - 7.7, z * 0.00125 + 21.3, 4);
+    var hMask = sstep(0.34, 0.62, fbm(x * 0.00042 - 61.1, z * 0.00042 + 8.4, 3));
+    h += Math.pow(Math.max(0, swell - 0.30) / 0.70, 1.35) * 96 * hMask;
+
+    /* shelves: quantise a little of the height, so slopes step */
+    var bench = fbm(x * 0.0007 + 44.4, z * 0.0007 - 12.2, 2);
+    var bAmt = sstep(0.45, 0.72, bench) * sstep(24, 70, h);
+    if (bAmt > 0.01) {
+      var stepH = 11.0;
+      var q = Math.floor(h / stepH) * stepH + stepH * 0.5;
+      h = lerp(h, q, bAmt * 0.42);
+    }
+
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
     h += Math.pow(Math.max(0, hill), 1.9) * 165 * b.rock;
 
@@ -468,6 +498,15 @@
           'float wRock = clamp(vColor.g + smoothstep(0.30, 0.62, slope) - 0.10 * vColor.r, 0.0, 1.0);',
           'vec3 col = mix(sand, grass, clamp(vColor.r * (0.85 + 0.3 * fine), 0.0, 1.0));',
           'col = mix(col, rock, wRock);',
+          /* Scree on the steep faces and gravel in the hollows. Rock does not
+             lie evenly: it collects where it falls and washes out of where
+             water runs, and showing that is most of what makes ground read. */
+          'float steep = smoothstep(0.24, 0.62, slope);',
+          'vec3 scree = texture2D(tGrav, wxz * 0.19).rgb * (0.7 + 0.7 * texture2D(tRock, wxz * 0.031).r);',
+          'col = mix(col, scree * 0.92, steep * 0.72);',
+          'float hollow = 1.0 - smoothstep(0.02, 0.16, slope);',
+          'vec3 grit2 = texture2D(tGrav, wxz * 0.33 + vec2(0.4, 0.9)).rgb;',
+          'col = mix(col, col * (0.72 + 0.66 * grit2.r), hollow * 0.34 * (1.0 - vColor.r));',
           'col = mix(col, col * vec3(0.70, 0.76, 0.70), vColor.b * 0.55);',
           'col *= 0.94 + 0.12 * fine;',
           /* Grain underfoot. The broad layers repeat every ten metres or so,
@@ -477,8 +516,9 @@
           'float nearW = 1.0 - smoothstep(3.0, 30.0, camD);',
           'if (nearW > 0.002) {',
           '  vec3 grain = texture2D(tSand, wxz * 0.62).rgb;',
+          '  vec3 fine2 = texture2D(tGrav, wxz * 3.1).rgb;',
           '  vec3 grit  = texture2D(tGrav, wxz * 1.35).rgb;',
-          '  float g = grain.r * 0.65 + grit.r * 0.35;',
+          '  float g = grain.r * 0.48 + grit.r * 0.30 + fine2.r * 0.22;',
           '  col *= mix(1.0, 0.58 + 0.86 * g, nearW * 0.62);',
           '}',
           /* Moonlight is blue, and photographed daylight sand is far too bright
@@ -657,22 +697,47 @@
 
   /* -------------------------------------------------------------- water */
   var water;
+  var waterMat = null, waterFlow = null;
   function initWater() {
     var wn = tex('assets/water_n.jpg', false, true);
-    wn.repeat.set(120, 120);
     var g = new THREE.PlaneGeometry(7000, 7000, 1, 1);
     g.rotateX(-Math.PI / 2);
     var m = new THREE.MeshStandardMaterial({
       color: 0x16203c, roughness: 0.14, metalness: 0.55,
-      normalMap: wn, normalScale: new THREE.Vector2(0.5, 0.5),
+      normalMap: wn, normalScale: new THREE.Vector2(0.55, 0.55),
       transparent: true, opacity: 0.93
     });
+    m.onBeforeCompile = function (sh) {
+      sh.uniforms.uFlow = { value: 0 };
+      waterFlow = sh.uniforms.uFlow;
+      sh.vertexShader = 'varying vec3 vWaterPos;\n' + sh.vertexShader.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\n vWaterPos = (modelMatrix * vec4(transformed,1.0)).xyz;'
+      );
+      sh.fragmentShader = 'uniform float uFlow;\nvarying vec3 vWaterPos;\n' + sh.fragmentShader;
+      /* Two sheets of ripple, taken from world position so they stay where
+         they are however far you walk, drifting at different speeds so the
+         pattern never sits still and never repeats visibly. */
+      sh.fragmentShader = sh.fragmentShader.replace(
+        '#include <normal_fragment_maps>',
+        [
+          'vec2 wUv = vWaterPos.xz * 0.045;',
+          'vec3 nA = texture2D( normalMap, wUv + vec2( uFlow * 0.021, uFlow * 0.013) ).xyz * 2.0 - 1.0;',
+          'vec3 nB = texture2D( normalMap, wUv * 0.47 + vec2(-uFlow * 0.011, uFlow * 0.024) ).xyz * 2.0 - 1.0;',
+          'vec3 nC = texture2D( normalMap, wUv * 2.3 + vec2( uFlow * 0.04, -uFlow * 0.031) ).xyz * 2.0 - 1.0;',
+          'vec3 mapN = normalize(nA + nB * 0.8 + nC * 0.35);',
+          'mapN.xy *= normalScale;',
+          'normal = normalize( tbn * mapN );'
+        ].join('\n'));
+    };
     water = new THREE.Mesh(g, m);
     water.position.y = WATER_Y;
     water.renderOrder = 1;
+    waterMat = m;
     scene.add(water);
     W.water = water;
   }
+  W.tickWater = function (t) { if (waterFlow) waterFlow.value = t; };
 
   /* ------------------------------------------------------------ physics */
   var COLL = [];          /* oriented boxes */
@@ -965,6 +1030,7 @@
   function frame() {
     var dt = Math.min(clock.getDelta(), 0.05);
     hbT += dt;
+    if (W.tickWater) W.tickWater(clock.elapsedTime);
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
     step(dt);
     if (composer) composer.render(); else renderer.render(scene, cam);
