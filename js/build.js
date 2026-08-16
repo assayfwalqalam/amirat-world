@@ -289,22 +289,54 @@
   }
   W.triplanar = triplanar;
 
+  /* Buildings made in Blender arrive with a collision file listing every solid
+     box in them. We use those directly, so parapets lift you, stairs step true,
+     and nothing has an invisible margin. */
+  var COLJSON = {};
+  function loadCollision(name) {
+    return fetch('assets/models/' + name + '.col.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j) COLJSON[name] = j.boxes; })
+      .catch(function () {});
+  }
+  function placeBuilt(name, x, y, z, rot, scale) {
+    var g = place(name, x, y, z, null, rot, false, 'raw', scale);
+    if (!g) return null;
+    var boxes = COLJSON[name];
+    if (!boxes) return g;
+    var c = Math.cos(rot || 0), s2 = Math.sin(rot || 0);
+    var k = scale || 1;
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      var bx = b.c[0] * k, by = b.c[1] * k, bz = b.c[2] * k;
+      W.addBox(x + bx * c - bz * s2, y + by, z + bx * s2 + bz * c,
+               b.h[0] * k, b.h[1] * k, b.h[2] * k, rot || 0);
+    }
+    return g;
+  }
+
   /* ------------------------------------------------------------- models */
   /* size is the wanted height, unless axis is 'x' (flat things like rugs) */
-  function place(key, x, y, z, size, rot, solid, axis) {
+  function place(key, x, y, z, size, rot, solid, axis, rawScale) {
     var src = MODELS[key];
     if (!src) return null;
     var o = src.clone(true);
     var bb = new T.Box3().setFromObject(o);
     var sz = new T.Vector3(); bb.getSize(sz);
-    var ref = (axis === 'x') ? Math.max(sz.x, sz.z) : sz.y;
-    var s = size / Math.max(0.0001, ref);
+    var s;
+    if (axis === 'raw') {
+      s = rawScale || 1;
+    } else {
+      var ref = (axis === 'x') ? Math.max(sz.x, sz.z) : sz.y;
+      s = size / Math.max(0.0001, ref);
+    }
     o.scale.setScalar(s);
     bb.setFromObject(o);
-    o.position.set(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
+    if (axis === 'raw') o.position.set(0, 0, 0);
+    else o.position.set(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
     var g = new T.Group();
     g.add(o);
-    g.position.set(x, y - 0.14, z);
+    g.position.set(x, y - (axis === 'raw' ? 0.02 : 0.14), z);
     g.rotation.y = rot || 0;
     W.scene.add(g);
     if (solid) {
@@ -376,95 +408,119 @@
   /* ---------------------------------------------------------- the town */
   var TOWN = { x: 0, z: 0, y: 0, R: 118 };
 
+  /* A square town, the way a desert citadel is actually laid out:
+     four straight curtain walls, square towers at the corners and along each
+     run, and one gatehouse. Every piece is solid at its true size. */
+  var TOWNSQ = 132;                        /* half-width of the square */
   function buildTown() {
-    var R = TOWN.R, Y = TOWN.y;
-    var N = 72;
-    var segW = (2 * Math.PI * R) / N * 1.14;
-    var gateA = Math.PI / 2;               /* south gate */
-    var WH = 13.5, WD = 6.4;               /* a wall you cannot see over */
+    var Y = TOWN.y, S = TOWNSQ;
+    var WH = 13.5, WD = 6.0, T_ = 24;      /* height, thickness, tower pitch */
+    var gateA = 'south';
 
-    for (var i = 0; i < N; i++) {
-      var a = (i / N) * Math.PI * 2;
-      var da = Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA)));
-      if (da < 0.085) continue;            /* the gateway gap */
-      var x = TOWN.x + Math.cos(a) * R, z = TOWN.z + Math.sin(a) * R;
-      var yaw = -(a + Math.PI / 2);
-      /* battered base: the foot is wider than the head, as old walls are built */
-      box(segW, 3.2, WD + 1.7, x, Y + 1.6, z, M.stone2, yaw);
-      box(segW, WH - 3.2, WD, x, Y + 3.2 + (WH - 3.2) / 2, z, M.stone, yaw);
-      /* a shadow course marking the walkway line */
-      box(segW, 0.5, WD + 0.5, x, Y + WH + 0.25, z, M.stone2, yaw);
-      /* merlons: big square teeth with gaps between, like cut stone */
-      for (var k = -1; k <= 1; k++) {
-        var mx = x - Math.sin(a) * (k * segW * 0.34);
-        var mz = z + Math.cos(a) * (k * segW * 0.34);
-        box(segW * 0.30, 1.9, 1.5, mx + Math.cos(a) * (WD / 2 - 0.8), Y + WH + 1.4,
-            mz + Math.sin(a) * (WD / 2 - 0.8), M.stone, yaw, false);
+    function curtain(x0, z0, x1, z1, skipFrom, skipTo) {
+      var dx = x1 - x0, dz = z1 - z0;
+      var len = Math.hypot(dx, dz);
+      var yaw = Math.atan2(dz, dx);
+      var n = Math.ceil(len / 8);
+      var seg = len / n;
+      for (var i = 0; i < n; i++) {
+        var t = (i + 0.5) / n;
+        var cx = x0 + dx * t, cz = z0 + dz * t;
+        if (skipFrom !== undefined) {
+          var along = t * len;
+          if (along > skipFrom && along < skipTo) continue;
+        }
+        box(seg + 0.25, 3.4, WD + 1.6, cx, Y + 1.7, cz, M.stone2, -yaw);
+        box(seg + 0.25, WH - 3.4, WD, cx, Y + 3.4 + (WH - 3.4) / 2, cz, M.stone, -yaw);
+        box(seg + 0.25, 0.5, WD + 0.4, cx, Y + WH + 0.25, cz, M.stone2, -yaw);
+        /* battlements */
+        for (var k = -1; k <= 1; k += 2) {
+          box(seg * 0.34, 1.9, 1.5,
+              cx + Math.cos(yaw) * (k * seg * 0.26) + Math.sin(yaw) * (WD / 2 - 0.8),
+              Y + WH + 1.45,
+              cz + Math.sin(yaw) * (k * seg * 0.26) - Math.cos(yaw) * (WD / 2 - 0.8),
+              M.stone, -yaw, false);
+        }
+        /* the walkway, on the town side */
+        box(seg + 0.25, 0.8, 3.4,
+            cx - Math.sin(yaw) * (WD / 2 + 1.7), Y + WH - 0.4,
+            cz + Math.cos(yaw) * (WD / 2 + 1.7), M.stone2, -yaw);
+        box(seg + 0.25, 1.3, 0.7,
+            cx - Math.sin(yaw) * (WD / 2 + 3.2), Y + WH + 0.65,
+            cz + Math.cos(yaw) * (WD / 2 + 3.2), M.stone2, -yaw, false);
       }
     }
 
-    /* square towers, taller than the wall, with their own crowns */
-    for (var t = 0; t < 10; t++) {
-      var ta = (t / 10) * Math.PI * 2 + 0.32;
-      var tda = Math.abs(Math.atan2(Math.sin(ta - gateA), Math.cos(ta - gateA)));
-      if (tda < 0.28) continue;
-      var tx = TOWN.x + Math.cos(ta) * R, tz = TOWN.z + Math.sin(ta) * R;
-      var tyaw = -(ta + Math.PI / 2), TH = WH + 5.5;
-      box(11.5, 3.6, 11.5, tx, Y + 1.8, tz, M.stone2, tyaw);
-      box(10.2, TH - 3.6, 10.2, tx, Y + 3.6 + (TH - 3.6) / 2, tz, M.stone, tyaw);
-      box(11.4, 0.7, 11.4, tx, Y + TH + 0.35, tz, M.stone2, tyaw);
-      for (var m2 = 0; m2 < 4; m2++) {
+    function tower(cx, cz, yaw, big) {
+      var TH = WH + (big ? 6.5 : 4.5), w = big ? 13 : 11;
+      box(w + 1.4, 4.0, w + 1.4, cx, Y + 2.0, cz, M.stone2, yaw);
+      box(w, TH - 4.0, w, cx, Y + 4.0 + (TH - 4.0) / 2, cz, M.stone, yaw);
+      box(w + 1.2, 0.8, w + 1.2, cx, Y + TH + 0.4, cz, M.stone2, yaw);
+      for (var f = 0; f < 4; f++) {
+        var fa = yaw + f * Math.PI / 2;
         for (var q = -1; q <= 1; q++) {
-          var ma = tyaw + m2 * Math.PI / 2;
-          var ox = Math.cos(ma) * 4.9 - Math.sin(ma) * (q * 3.3);
-          var oz = Math.sin(ma) * 4.9 + Math.cos(ma) * (q * 3.3);
-          box(2.4, 1.9, 1.3, tx + ox, Y + TH + 1.35, tz + oz, M.stone, ma + Math.PI / 2, false);
+          box(2.5, 2.0, 1.4,
+              cx + Math.cos(fa) * (w / 2 + 0.4) - Math.sin(fa) * (q * w * 0.3),
+              Y + TH + 1.4,
+              cz + Math.sin(fa) * (w / 2 + 0.4) + Math.cos(fa) * (q * w * 0.3),
+              M.stone, fa, false);
         }
       }
-      torch(tx + Math.cos(ta) * 5.6, Y + WH - 1.4, tz + Math.sin(ta) * 5.6, ta);
+      torch(cx, Y + WH - 1.2, cz + w / 2 + 0.5, 0);
     }
 
-    /* the gatehouse: two solid blocks and a tunnel between them */
-    var gx = TOWN.x + Math.cos(gateA) * R, gz = TOWN.z + Math.sin(gateA) * R;
-    var GH = WH + 7;
-    [-1, 1].forEach(function (sgn) {
-      var bx = gx + sgn * 10.5;
-      box(13, 4.0, 13, bx, Y + 2.0, gz, M.stone2, 0);
-      box(11.6, GH - 4.0, 11.6, bx, Y + 4.0 + (GH - 4.0) / 2, gz, M.stone, 0);
-      box(12.8, 0.8, 12.8, bx, Y + GH + 0.4, gz, M.stone2, 0);
-      for (var q2 = -1; q2 <= 1; q2++) {
-        box(2.6, 2.0, 1.4, bx + q2 * 3.9, Y + GH + 1.5, gz + 6.0, M.stone, 0, false);
-        box(2.6, 2.0, 1.4, bx + q2 * 3.9, Y + GH + 1.5, gz - 6.0, M.stone, 0, false);
-      }
-      torch(bx + sgn * 5.6, Y + 4.4, gz + 6.4, 0);
-    });
-    /* the span over the gateway, and its arch */
-    box(21, 5.0, 12.4, gx, Y + WH - 1.0, gz, M.stone, 0);
-    box(21.6, 0.7, 12.8, gx, Y + WH + 1.75, gz, M.stone2, 0);
-    for (var q3 = -2; q3 <= 2; q3++) {
-      box(2.6, 2.0, 1.4, gx + q3 * 4.0, Y + WH + 3.0, gz + 6.0, M.stone, 0, false);
-    }
-    arch(9.4, 8.2, 12.8, gx, Y + 8.0, gz, M.stone2, 0);
-    torch(gx - 6.0, Y + 3.6, gz + 6.6, 0);
-    torch(gx + 6.0, Y + 3.6, gz + 6.6, 0);
+    /* four curtain walls, with the gateway left open in the south run */
+    var gateHalf = 6.5;
+    var southLen = S * 2;
+    curtain(-S, S, S, S, southLen / 2 - gateHalf, southLen / 2 + gateHalf);  /* south */
+    curtain(S, -S, -S, -S);                                                   /* north */
+    curtain(-S, -S, -S, S);                                                   /* west */
+    curtain(S, S, S, -S);                                                     /* east */
 
-    /* stairs up to the rampart, both sides of the gate */
-    [-1, 1].forEach(function (sgn) {
-      var sx = gx + sgn * 22, sz = gz - 7;
-      for (var st = 0; st < 19; st++) {
-        box(4.0, 0.76, 1.6, sx, Y + 0.38 + st * 0.72, sz - st * 1.5, M.stone2, 0);
-      }
-      box(4.0, 0.9, 3.4, sx, Y + 13.9, sz - 28.5, M.stone2, 0);
-    });
-    /* the rampart walkway, just inside the wall */
-    for (var wI = 0; wI < N; wI++) {
-      var wa = (wI / N) * Math.PI * 2;
-      var wx = TOWN.x + Math.cos(wa) * (R - 4.4), wz = TOWN.z + Math.sin(wa) * (R - 4.4);
-      box(segW, 0.8, 3.6, wx, Y + WH - 0.4, wz, M.stone2, -(wa + Math.PI / 2));
-      /* inner parapet so you cannot walk off the town side */
-      box(segW, 1.4, 0.7, TOWN.x + Math.cos(wa) * (R - 6.2), Y + WH + 0.9,
-          TOWN.z + Math.sin(wa) * (R - 6.2), M.stone2, -(wa + Math.PI / 2), false);
+    /* corner towers, then intermediate ones along each run */
+    [[-S, -S], [S, -S], [-S, S], [S, S]].forEach(function (c) { tower(c[0], c[1], 0, true); });
+    for (var t2 = 1; t2 <= 4; t2++) {
+      var f2 = t2 / 5;
+      tower(-S + S * 2 * f2, -S, 0, false);
+      if (Math.abs(f2 - 0.5) > 0.16) tower(-S + S * 2 * f2, S, 0, false);
+      tower(-S, -S + S * 2 * f2, 0, false);
+      tower(S, -S + S * 2 * f2, 0, false);
     }
+
+    /* the gatehouse, in the middle of the south wall */
+    var gz = S, GH = WH + 7;
+    [-1, 1].forEach(function (sgn) {
+      var bx = sgn * (gateHalf + 6.5);
+      box(14, 4.2, 14, bx, Y + 2.1, gz, M.stone2, 0);
+      box(12.6, GH - 4.2, 12.6, bx, Y + 4.2 + (GH - 4.2) / 2, gz, M.stone, 0);
+      box(13.8, 0.8, 13.8, bx, Y + GH + 0.4, gz, M.stone2, 0);
+      for (var q3 = -1; q3 <= 1; q3++) {
+        box(2.8, 2.1, 1.5, bx + q3 * 4.2, Y + GH + 1.55, gz + 6.6, M.stone, 0, false);
+        box(2.8, 2.1, 1.5, bx + q3 * 4.2, Y + GH + 1.55, gz - 6.6, M.stone, 0, false);
+      }
+      torch(bx + sgn * 6.0, Y + 4.6, gz + 7.0, 0);
+    });
+    box(gateHalf * 2 + 14, 5.2, 13, 0, Y + WH - 1.1, gz, M.stone, 0);
+    box(gateHalf * 2 + 15, 0.8, 13.4, 0, Y + WH + 1.9, gz, M.stone2, 0);
+    for (var q4 = -2; q4 <= 2; q4++) {
+      box(2.8, 2.1, 1.5, q4 * 4.3, Y + WH + 3.2, gz + 6.6, M.stone, 0, false);
+    }
+    arch(gateHalf * 2 - 0.6, 8.4, 13.4, 0, Y + 8.2, gz, M.stone2, 0);
+    torch(-gateHalf - 0.6, Y + 3.8, gz + 7.0, 0);
+    torch(gateHalf + 0.6, Y + 3.8, gz + 7.0, 0);
+
+    /* stairs to the rampart · they climb along the wall and face into the town,
+       so you walk up them the way you are already walking */
+    [[-1, 'south'], [1, 'south']].forEach(function (side) {
+      var sgn = side[0];
+      var sx = sgn * (gateHalf + 15);
+      var steps = 19, rise = WH / steps, run = 1.5;
+      for (var i = 0; i < steps; i++) {
+        box(4.2, rise + 0.12, run + 0.1,
+            sx, Y + rise / 2 + i * rise, gz - 9 - i * run, M.stone2, 0);
+      }
+      box(4.2, 0.9, 4.0, sx, Y + WH - 0.45, gz - 9 - steps * run - 1.6, M.stone2, 0);
+    });
   }
 
   /* the friday mosque · dome, minaret, mihrab, lamps */
@@ -592,66 +648,51 @@
   }
 
   /* the housing: real sculpted kasbah houses, with a few of our own that open */
-  var HOUSE_SPOTS = [
-    [-72, 18, 0.3], [-58, 46, -0.5], [-30, 64, 0.9], [6, 76, 0.2], [38, 62, -0.7],
-    [66, 40, 0.5], [78, 8, -0.2], [68, -26, 0.8], [-76, -18, -0.6], [-64, -50, 0.4],
-    [-26, -76, 0.15], [18, -80, -0.4], [54, -64, 0.7], [88, -8, 0.1], [-90, 6, -0.3],
-    [-46, 86, 0.6], [32, 94, -0.25], [-8, -98, 0.35], [-92, -40, 0.9], [92, 30, -1.1],
-    [-48, -86, 0.25], [24, -60, 1.3], [-18, 92, -0.8], [70, 74, 0.45]
-  ];
+  var BUILT = ['bh21','bh22','bh23','bh24','bh25','bh26','bh27','bh28','bh29','bh30'];
+
   function buildHouses() {
-    var Y = TOWN.y;
-    /* four of our own, hollow, so you can walk in */
-    [[-72, 18, 0.3], [38, 62, -0.7], [-26, -76, 0.15], [78, 8, -0.2]].forEach(function (s, i) {
-      var x = s[0], z = s[1], rot = s[2];
-      var w = 8 + i * 0.9, d = 7 + (i % 3), h = 4.2 + (i % 2) * 1.4;
-      var m = i % 2 ? M.brick : M.brick2;
-      var th = 0.55, doorW = 1.7;
-      box(w, h, th, x, Y + h / 2, z - d / 2, m, rot);
-      box(th, h, d, x - w / 2, Y + h / 2, z, m, rot);
-      box(th, h, d, x + w / 2, Y + h / 2, z, m, rot);
-      var side = (w - doorW) / 2;
-      box(side, h, th, x - (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
-      box(side, h, th, x + (doorW / 2 + side / 2), Y + h / 2, z + d / 2, m, rot);
-      box(doorW, h - 2.3, th, x, Y + h - (h - 2.3) / 2, z + d / 2, m, rot);
-      arch(doorW + 0.4, 1.5, th + 0.3, x, Y + 2.3, z + d / 2, M.stone2, rot);
-      door(x - doorW / 2, Y, z + d / 2, doorW, 2.2, rot, M.wood);
-      var fl = new T.Mesh(new T.PlaneGeometry(w - 1.4, d - 1.4), M.floor);
-      fl.rotation.x = -Math.PI / 2; fl.position.set(x, Y + 0.05, z);
-      W.scene.add(fl);
-      if (MODELS.carpet) place('carpet', x, Y + 0.07, z, 3.0, rot, false, 'x');
-      lamp(x, Y + h - 1.0, z, 1.2);
-      /* roof: parapet, beam ends, a stair to the top */
-      box(w + 0.6, 0.5, d + 0.6, x, Y + h + 0.25, z, m, rot);
-      beamRow2(x, z, w, d, h, rot, m);
-      for (var k = -1; k <= 1; k++) {
-        box(1.1, 0.85, 0.8, x + k * (w * 0.3), Y + h + 0.9, z + d / 2 * 0.92, m, rot, false);
-        box(1.1, 0.85, 0.8, x + k * (w * 0.3), Y + h + 0.9, z - d / 2 * 0.92, m, rot, false);
-      }
-      torch(x + w / 2 + 0.55, Y + 2.7, z + d / 2 - 0.6, rot);
-    });
-
+    /* nothing is built up front any more · the houses are made in Blender and
+       arrive with their own collision, so they are placed once loaded */
   }
 
-  /* the sculpted houses can only be planted once their files are here */
+  /* Houses laid along streets inside the square, packed the way a desert town
+     packs: rows facing the lanes, backs close together. */
   function buildSculptedHouses() {
-    var Y = TOWN.y;
-    var keys = ['ah1', 'ah2', 'ah3', 'ah4', 'ah5', 'ah6'];
-    var made = 0;
-    HOUSE_SPOTS.forEach(function (s, i) {
-      if (i % 6 === 0) return;                 /* leave room round our own */
-      var key = keys[i % keys.length];
-      if (!MODELS[key]) return;
-      var hgt = 7.5 + (i % 5) * 1.9;
-      var g = place(key, s[0], W.heightAt(s[0], s[1]), s[1], hgt, s[2] + (i % 3) * 1.1, true);
-      if (g) {
-        made++;
-        if (i % 2 === 0) torch(s[0] + 3.0, Y + 2.8, s[1] + 3.0, s[2]);
-        if (i % 3 === 0) lamp(s[0] - 2.6, Y + 3.0, s[1] + 2.6, 1.1, false);
+    var Y = TOWN.y, S = TOWNSQ, made = 0;
+    var lanes = [-S + 46, -S + 92, S - 92, S - 46];
+    var idx = 0;
+    lanes.forEach(function (lz, li) {
+      var facing = (li < 2) ? 0 : Math.PI;      /* rows face the lane between them */
+      for (var x = -S + 40; x <= S - 40; x += 15.5) {
+        if (Math.abs(x) < 16 && li >= 2) continue;   /* keep the gate road clear */
+        if (Math.abs(x) < 12) continue;
+        var jitter = ((idx * 37) % 7) / 7 - 0.5;
+        var key = BUILT[idx % BUILT.length];
+        idx++;
+        if (!MODELS[key]) continue;
+        var px = x + jitter * 2.4;
+        var pz = lz + jitter * 2.0;
+        var g = placeBuilt(key, px, Y, pz, facing + jitter * 0.14, 1.0);
+        if (g) {
+          made++;
+          if (idx % 3 === 0) torch(px + 4.6, Y + 2.9, pz - 4.0, facing);
+          if (idx % 4 === 0) lamp(px - 4.4, Y + 3.2, pz + 3.6, 1.1, false);
+        }
       }
     });
-    if (!made) W.diag('no sculpted houses were placed');
+    /* a second rank along the side walls */
+    [-S + 46, S - 46].forEach(function (lx, li) {
+      for (var z = -S + 62; z <= S - 62; z += 15.5) {
+        var key = BUILT[idx % BUILT.length];
+        idx++;
+        if (!MODELS[key]) continue;
+        var g = placeBuilt(key, lx, Y, z, li ? -Math.PI / 2 : Math.PI / 2, 1.0);
+        if (g) made++;
+      }
+    });
+    if (!made) W.diag('no houses were placed');
   }
+
   /* protruding roof beams, the signature of the style */
   function beamRow2(x, z, w, d, h, rot, m) {
     var count = Math.max(3, Math.round(w / 0.9));
@@ -1176,11 +1217,11 @@
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
-    W.addFlat(TOWN.x, TOWN.z, TOWN.R + 14, TOWN.y, 70);
+    W.addFlat(TOWN.x, TOWN.z, TOWNSQ + 30, TOWN.y, 90);
 
-    W.addRoad(0, TOWN.R - 6, 0, TOWN.R + 230, 8.5);
-    W.addRoad(0, TOWN.R + 120, 210, TOWN.R + 300, 7);
-    W.SPAWN = { x: 0, z: TOWN.R + 46 };
+    W.addRoad(0, TOWNSQ - 6, 0, TOWNSQ + 240, 9.0);
+    W.addRoad(0, TOWNSQ + 130, 220, TOWNSQ + 310, 7);
+    W.SPAWN = { x: 0, z: TOWNSQ + 52 };
     W.SPAWN_YAW = 0;
     W.SHOTS = {
       '1': { x: 0, z: TOWN.R + 70, yaw: 0, pitch: -0.02, h: 2.4 },
@@ -1200,25 +1241,20 @@
     buildLibrary(34, 36);
     buildHouses();
 
-    /* lamplight along the streets */
-    for (var sl = 0; sl < 10; sl++) {
-      var sa = (sl / 10) * Math.PI * 2 + 0.25;
-      var sr = 62 + (sl % 3) * 16;
-      var sx = Math.cos(sa) * sr, sz = Math.sin(sa) * sr;
-      cyl(0.12, 0.16, 3.2, 8, sx, TOWN.y + 1.6, sz, M.dark);
-      lamp(sx, TOWN.y + 3.5, sz, 1.35);
-    }
-    for (var wt = 0; wt < 10; wt++) {
-      var wa = (wt / 10) * Math.PI * 2 + 0.9;
-      torch(Math.cos(wa) * (TOWN.R - 6.4), TOWN.y + 2.9, Math.sin(wa) * (TOWN.R - 6.4), wa + Math.PI);
+    /* lamps down the lanes of the square town */
+    for (var lx = -TOWNSQ + 30; lx <= TOWNSQ - 30; lx += 34) {
+      for (var lz = -TOWNSQ + 68; lz <= TOWNSQ - 68; lz += 46) {
+        cyl(0.13, 0.17, 3.4, 8, lx, TOWN.y + 1.7, lz, M.dark);
+        lamp(lx, TOWN.y + 3.7, lz, 1.3);
+      }
     }
 
-    loadModels(['ah1', 'ah2', 'ah3', 'ah4', 'ah5', 'ah6', 'mosque_orn',
+    Promise.all(BUILT.map(loadCollision));
+    loadModels(BUILT.concat(['mosque_orn',
       'palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
-      'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
-      'house_a', 'house_b', 'house_c'], function () {
+      'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small']), function () {
         /* things that need the models */
         buildSculptedHouses();
         /* the friday mosque */
