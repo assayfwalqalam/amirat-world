@@ -546,7 +546,7 @@
 
   /* a desert camp: open tents around a fire */
   function buildCamp(cx, cz, n) {
-    var Y = W.heightAt(cx, cz);
+    var Y = Math.max(W.heightAt(cx, cz), W.WATER_Y + 2.2);
     W.addFlat(cx, cz, 16, Y, 22);
     for (var i = 0; i < n; i++) {
       var a = (i / n) * Math.PI * 2 + 0.4;
@@ -626,7 +626,7 @@
 
   /* a cave mouth in the rock, lit from within */
   function buildCave(cx, cz) {
-    var Y = W.heightAt(cx, cz);
+    var Y = Math.max(W.heightAt(cx, cz), W.WATER_Y + 2.2);
     W.addFlat(cx, cz, 16, Y, 34);
     var R = 13.5, H = 8.5;
 
@@ -835,9 +835,9 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.62, 0.46, 0xdfe9cf);
+      var c1 = makeCard('assets/grass_card.png', 0.68, 1.05, 0xdfe9cf);
       cardGeo = c1.g; cardMat = c1.m;
-      var c2 = makeCard('assets/reed_card.png', 0.5, 1.15, 0xd8e6c6);
+      var c2 = makeCard('assets/reed_card.png', 0.42, 1.75, 0xd8e6c6);
       reedGeo = c2.g; reedMat = c2.m;
     }
     function sowCards(geo, m, count, sMin, sMax) {
@@ -879,7 +879,7 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(2600 * (0.25 + cb.grass) * (W.vegScale || 1)), 0.7, 1.9);
+    sowCards(cardGeo, cardMat, Math.round(700 * (0.25 + cb.grass) * (W.vegScale || 1)), 0.85, 1.7);
     sowCards(reedGeo, reedMat, Math.round(500 * (0.2 + cb.grass) * (W.vegScale || 1)), 0.7, 1.7);
     var near = (seg === undefined) || seg >= 32;
     if (near) {
@@ -931,6 +931,45 @@
     return out;
   };
 
+  /* a dense carpet of grass that travels with you · the only way a lawn reads */
+  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 46;
+  function initLawn() {
+    if (!cardGeo) {
+      var c1 = makeCard('assets/grass_card.png', 0.68, 1.05, 0xdfe9cf);
+      cardGeo = c1.g; cardMat = c1.m;
+      var c2 = makeCard('assets/reed_card.png', 0.42, 1.75, 0xd8e6c6);
+      reedGeo = c2.g; reedMat = c2.m;
+    }
+    var n = W.TIER === 2 ? 24000 : (W.TIER === 1 ? 9000 : 3000);
+    lawn = new T.InstancedMesh(cardGeo, cardMat, n);
+    lawn.name = 'lawn';
+    lawn.frustumCulled = false;
+    W.scene.add(lawn);
+  }
+  function refreshLawn(p) {
+    if (!lawn) return;
+    var dummy = new T.Object3D();
+    var k = 0, tries = lawn.instanceMatrix.array.length / 16;
+    for (var i = 0; i < tries; i++) {
+      var sd = (Math.round(p.x / 8) * 73856093) ^ (Math.round(p.z / 8) * 19349663) ^ (i * 83492791);
+      var a = hashU(sd) * 6.283;
+      var r = Math.sqrt(hashU(sd ^ 0x9e3779b9)) * LAWN_R;
+      var gx = p.x + Math.cos(a) * r, gz = p.z + Math.sin(a) * r;
+      var h = W.heightAt(gx, gz);
+      var w = W.groundWeights(gx, gz, h);
+      if (h < W.WATER_Y + 0.12 || w.g < 0.28 || w.r > 0.6) continue;
+      var sc = (0.8 + hashU(sd ^ 0x85ebca6b) * 0.9) * (0.55 + 0.75 * w.g);
+      dummy.position.set(gx, h - 0.07, gz);
+      dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
+      dummy.scale.set(sc, sc, sc);
+      dummy.updateMatrix();
+      lawn.setMatrixAt(k++, dummy.matrix);
+    }
+    lawn.count = k;
+    lawn.instanceMatrix.needsUpdate = true;
+    lawnAt.copy(p);
+  }
+
   /* ------------------------------------------------------- interaction */
   W.interact = function (W) {
     var p = W.getPos();
@@ -950,6 +989,8 @@
     for (var i = 0; i < winds.length; i++) winds[i].value = t;
     var cp = W.cam.position;
     driveLights(t);
+    var pp = W.getPos();
+    if (lawn && (Math.abs(pp.x - lawnAt.x) > 11 || Math.abs(pp.z - lawnAt.z) > 11)) refreshLawn(pp);
     var flameFrame = 1 - (Math.floor((t * 15) % 8) + 1) / 8;
     for (var q = 0; q < flameTex.length; q++) flameTex[q].offset.y = 1 - (Math.floor((t * 15 + q * 2.7) % 8) + 1) / 8;
     for (var f = 0; f < fires.length; f++) {
@@ -981,6 +1022,7 @@
     initMats();
     initFire();
     initPool();
+    initLawn();
 
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);

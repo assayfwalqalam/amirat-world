@@ -82,14 +82,14 @@
     var b = W.biomeAt(x, z);
     /* the land rides above the water table · only carved basins flood */
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
-    var h = (cont - 0.28) * 175;
+    var h = (cont - 0.13) * 165;
 
     /* dunes ride on a warped field so their crests wander instead of marching */
     var wx = x + fbm(x * 0.0013 + 21.4, z * 0.0013 - 8.2, 2) * 260;
     var wz = z + fbm(x * 0.0011 - 5.6, z * 0.0011 + 14.9, 2) * 260;
     var dune = ridged(wx * 0.0040 + 7.7, wz * 0.0034 - 3.3, 3);
     var dune2 = ridged(wx * 0.0011 - 2.2, wz * 0.0013 + 5.5, 2);
-    h += ((dune - 0.5) * 22 + (dune2 - 0.5) * 30) * (1 - b.grass) * (1 - b.rock * 0.7);
+    h += ((dune - 0.5) * 16 + (dune2 - 0.5) * 21) * (1 - b.grass) * (1 - b.rock * 0.7);
 
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
     h += Math.pow(Math.max(0, hill), 1.9) * 165 * b.rock;
