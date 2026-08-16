@@ -302,6 +302,19 @@ nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 bsdf.inputs["Roughness"].default_value = 0.94
+tex_path = os.path.abspath(os.path.join(ASSETS, "t_wood_d.jpg"))
+tn = None
+if os.path.exists(tex_path):
+    img = bpy.data.images.load(tex_path)
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    mixc = nt.nodes.new('ShaderNodeMixRGB')
+    mixc.blend_type = 'MULTIPLY'
+    mixc.inputs['Fac'].default_value = 1.0
+    mixc.inputs['Color2'].default_value = (TINT[0] * 2.6, TINT[1] * 2.6, TINT[2] * 2.6, 1)
+    nt.links.new(tn.outputs['Color'], mixc.inputs['Color1'])
+    nt.links.new(mixc.outputs['Color'], bsdf.inputs['Base Color'])
+
 ob.data.materials.clear()
 ob.data.materials.append(mat)
 
@@ -328,6 +341,17 @@ me = ob.data
 me.calc_loop_triangles()
 print("RESULT %s verts=%d tris=%d colliders=%d"
       % (STYLE, len(me.vertices), len(me.loop_triangles), len(COLLIDERS)))
+
+if tn is not None:
+    tn.image.pack()
+    vcn = nt.nodes.new('ShaderNodeVertexColor')
+    vcn.layer_name = "ao"
+    mixa = nt.nodes.new('ShaderNodeMixRGB')
+    mixa.blend_type = 'MULTIPLY'
+    mixa.inputs['Fac'].default_value = 1.0
+    nt.links.new(mixc.outputs['Color'], mixa.inputs['Color1'])
+    nt.links.new(vcn.outputs['Color'], mixa.inputs['Color2'])
+    nt.links.new(mixa.outputs['Color'], bsdf.inputs['Base Color'])
 
 bpy.ops.object.select_all(action='DESELECT')
 ob.select_set(True)

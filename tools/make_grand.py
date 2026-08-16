@@ -427,29 +427,42 @@ for i in range(12):
     spot('roof', math.cos(a) * 26, math.sin(a) * 26, TOP + 1.2, 2.0, 2.0)
 
 # =============================================================== assemble
-ALL = stone + leaf
-n_stone = len(stone)
-bpy.ops.object.select_all(action='DESELECT')
-for o in ALL:
-    o.select_set(True)
-bpy.context.view_layer.objects.active = stone[0]
-bpy.ops.object.join()
-ob = bpy.context.active_object
-ob.name = "grand"
-weld(ob, 0.0006)
+# Two objects, two material slots. Guessing which vertices are planting from
+# their position turned the whole platform green -- the terraces and the stair
+# sit at the same heights as the beds. Keep the planting separate instead.
+def join_list(objs, name):
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    ob = bpy.context.active_object
+    ob.name = name
+    return ob
 
+
+stone_ob = join_list(stone, "grand_stone")
+weld(stone_ob, 0.0006)
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.uv.cube_project(cube_size=3.2)
 bpy.ops.object.mode_set(mode='OBJECT')
 
-mat = bpy.data.materials.new("grand")
-mat.use_nodes = True
-nt = mat.node_tree
+leaf_ob = join_list(leaf, "grand_leaf")
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.remove_doubles(threshold=0.01)
+bpy.ops.uv.cube_project(cube_size=1.2)
+bpy.ops.object.mode_set(mode='OBJECT')
+
+mat_stone = bpy.data.materials.new("grand_stone")
+mat_stone.use_nodes = True
+nt = mat_stone.node_tree
 bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Roughness"].default_value = 0.95
-ob.data.materials.clear()
-ob.data.materials.append(mat)
+stone_ob.data.materials.clear()
+stone_ob.data.materials.append(mat_stone)
+
 tex_path = os.path.abspath(os.path.join(ASSETS, "t_ashlar_d.jpg"))
 tn = None
 if os.path.exists(tex_path):
@@ -458,54 +471,36 @@ if os.path.exists(tex_path):
     tn.image = img
     nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
 
-while len(ob.data.color_attributes):
-    ob.data.color_attributes.remove(ob.data.color_attributes[0])
-ob.data.color_attributes.active_color = ob.data.color_attributes.new(
-    name="ao", type='FLOAT_COLOR', domain='CORNER')
-scene.render.bake.target = 'VERTEX_COLORS'
-scene.render.bake.margin = 2
-bpy.ops.object.select_all(action='DESELECT')
-ob.select_set(True)
-bpy.context.view_layer.objects.active = ob
-try:
-    bpy.ops.object.bake(type='AO')
-except Exception as e:
-    print("bake failed:", e)
+mat_leaf = bpy.data.materials.new("grand_leaf")
+mat_leaf.use_nodes = True
+lb = mat_leaf.node_tree.nodes["Principled BSDF"]
+lb.inputs["Base Color"].default_value = (0.085, 0.19, 0.062, 1)
+lb.inputs["Roughness"].default_value = 0.88
+leaf_ob.data.materials.clear()
+leaf_ob.data.materials.append(mat_leaf)
 
-# Tint: warm limewash for the stone, and green wherever a vertex sits inside
-# one of the planted volumes. One material, two readings, no second texture.
-me = ob.data
-me.calc_loop_triangles()
-data = me.color_attributes["ao"].data
-zmax_leaf = {}
-verts = me.vertices
-
-
-def is_leafy(co):
-    # planted mass sits on the terraces, outside the hall footprint
-    if abs(co.x) < HW / 2 + 2 and abs(co.y) < HD / 2 + 2:
-        return False
-    if co.z > TOP + 2.5:
-        return False
-    for i, (side, z0, h) in enumerate(TIERS[:-1]):
-        top_z = z0 + h + 0.9
-        if top_z - 0.6 < co.z < top_z + 6.5:
-            return True
-        if z0 - 0.2 < co.z < top_z and (abs(co.x) > TIERS[i + 1][0] / 2 or abs(co.y) > TIERS[i + 1][0] / 2):
-            return True
-    return False
-
-
-for poly in me.polygons:
-    for li in poly.loop_indices:
-        vi = me.loops[li].vertex_index
-        co = verts[vi].co
-        ao = 0.30 + 0.66 * data[li].color[0]
-        if is_leafy(co):
-            g = random.uniform(0.86, 1.14)
-            data[li].color = (ao * 0.30 * g, ao * 0.62 * g, ao * 0.24 * g, 1.0)
-        else:
-            data[li].color = (ao * 1.0, ao * 0.955, ao * 0.878, 1.0)
+for ob_i, tone in ((stone_ob, (1.0, 0.955, 0.878)), (leaf_ob, None)):
+    while len(ob_i.data.color_attributes):
+        ob_i.data.color_attributes.remove(ob_i.data.color_attributes[0])
+    ob_i.data.color_attributes.active_color = ob_i.data.color_attributes.new(
+        name="ao", type='FLOAT_COLOR', domain='CORNER')
+    scene.render.bake.target = 'VERTEX_COLORS'
+    scene.render.bake.margin = 2
+    bpy.ops.object.select_all(action='DESELECT')
+    ob_i.select_set(True)
+    bpy.context.view_layer.objects.active = ob_i
+    try:
+        bpy.ops.object.bake(type='AO')
+        data = ob_i.data.color_attributes["ao"].data
+        for i in range(len(data)):
+            ao = 0.30 + 0.66 * data[i].color[0]
+            if tone:
+                data[i].color = (ao * tone[0], ao * tone[1], ao * tone[2], 1.0)
+            else:
+                g = 0.82 + 0.36 * random.random()
+                data[i].color = (ao * g, ao * g * 1.06, ao * g * 0.86, 1.0)
+    except Exception as e:
+        print("bake failed:", e)
 
 if tn is not None:
     tn.image.pack()
@@ -517,6 +512,16 @@ if tn is not None:
     nt.links.new(tn.outputs['Color'], mix.inputs['Color1'])
     nt.links.new(vc.outputs['Color'], mix.inputs['Color2'])
     nt.links.new(mix.outputs['Color'], bsdf.inputs['Base Color'])
+
+bpy.ops.object.select_all(action='DESELECT')
+stone_ob.select_set(True)
+leaf_ob.select_set(True)
+bpy.context.view_layer.objects.active = stone_ob
+bpy.ops.object.join()
+ob = bpy.context.active_object
+ob.name = "grand"
+me = ob.data
+me.calc_loop_triangles()
 
 print("RESULT grand verts=%d tris=%d colliders=%d spots=%d"
       % (len(me.vertices), len(me.loop_triangles), len(COLLIDERS), len(SPOTS)))
