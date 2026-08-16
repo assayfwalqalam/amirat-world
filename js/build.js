@@ -835,9 +835,9 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.68, 1.05, 0xdfe9cf);
+      var c1 = makeCard('assets/grass_card.png', 0.46, 0.42, 0xd7e3c6);
       cardGeo = c1.g; cardMat = c1.m;
-      var c2 = makeCard('assets/reed_card.png', 0.42, 1.75, 0xd8e6c6);
+      var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
     function sowCards(geo, m, count, sMin, sMax) {
@@ -932,15 +932,15 @@
   };
 
   /* a dense carpet of grass that travels with you · the only way a lawn reads */
-  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 46;
+  var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 34;
   function initLawn() {
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.68, 1.05, 0xdfe9cf);
+      var c1 = makeCard('assets/grass_card.png', 0.46, 0.42, 0xd7e3c6);
       cardGeo = c1.g; cardMat = c1.m;
-      var c2 = makeCard('assets/reed_card.png', 0.42, 1.75, 0xd8e6c6);
+      var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
-    var n = W.TIER === 2 ? 24000 : (W.TIER === 1 ? 9000 : 3000);
+    var n = W.TIER === 2 ? 13000 : (W.TIER === 1 ? 5000 : 1800);
     lawn = new T.InstancedMesh(cardGeo, cardMat, n);
     lawn.name = 'lawn';
     lawn.frustumCulled = false;
@@ -958,7 +958,7 @@
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
       if (h < W.WATER_Y + 0.12 || w.g < 0.28 || w.r > 0.6) continue;
-      var sc = (0.8 + hashU(sd ^ 0x85ebca6b) * 0.9) * (0.55 + 0.75 * w.g);
+      var sc = (0.55 + hashU(sd ^ 0x85ebca6b) * 0.7) * (0.55 + 0.7 * w.g);
       dummy.position.set(gx, h - 0.07, gz);
       dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
       dummy.scale.set(sc, sc, sc);
