@@ -154,7 +154,7 @@
     setTimeout(function () { try { sessionStorage.removeItem('lowq'); } catch (e) {} }, 20000);
 
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x1a1630, 0.00125);
+    scene.fog = new THREE.FogExp2(0x1d1937, 0.00105);
     cam = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.12, 6000);
     clock = new THREE.Clock();
     W.scene = scene; W.cam = cam; W.renderer = renderer;
@@ -245,8 +245,10 @@
 
   /* ------------------------------------------------------------- lights */
   function initLights() {
-    scene.add(new THREE.HemisphereLight(0x4b4788, 0x14111f, 0.42));
-    var moon = new THREE.DirectionalLight(0xccd2ff, 0.72);
+    /* moonlight from above, and the whole sky as a soft fill · nothing reads pure black */
+    scene.add(new THREE.HemisphereLight(0x6a6cb4, 0x2b2540, 0.85));
+    scene.add(new THREE.AmbientLight(0x3b3a63, 0.30));
+    var moon = new THREE.DirectionalLight(0xccd2ff, 0.88);
     moon.position.copy(moonDir).multiplyScalar(900);
     scene.add(moon);
   }

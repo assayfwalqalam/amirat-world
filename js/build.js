@@ -146,7 +146,7 @@
     for (var i = 0; i < steps; i++) {
       var a = Math.PI * (i + 0.5) / steps;
       var bx = -Math.cos(a) * w / 2, by = Math.sin(a) * (h * 0.5);
-      var bw = (Math.PI * w / 2) / steps * 1.25;
+      var bw = (Math.PI * w / 2) / steps * 1.55;
       var seg = new T.Mesh(new T.BoxGeometry(bw, 0.55, d), m || M.stone);
       var c = Math.cos(rot || 0), s = Math.sin(rot || 0);
       seg.position.set(x + bx * c, y + by, z + bx * s);
@@ -264,12 +264,26 @@
   }
   W.place = place;
 
+  /* models arrive a few at a time, and a failure is retried before giving up */
   function loadModels(list, done) {
     loader = new T.GLTFLoader();
-    var left = list.length;
-    if (!left) { done(); return; }
-    list.forEach(function (n) {
-      loader.load('assets/models/' + n + '.glb', function (g) {
+    var queue = list.slice(), active = 0, left = list.length, MAX = 4;
+    var loadEl = document.getElementById('load');
+
+    function finish() {
+      if (--left === 0) {
+        if (loadEl) loadEl.style.display = 'none';
+        done();
+      } else if (loadEl && loadEl.style.display !== 'none') {
+        loadEl.textContent = 'Building the world… ' + Math.round((1 - left / list.length) * 100) + '%';
+      }
+      pump();
+    }
+
+    function fetchOne(name, tries) {
+      active++;
+      loader.load('assets/models/' + name + '.glb', function (g) {
+        active--;
         g.scene.traverse(function (o) {
           if (o.isMesh) {
             o.castShadow = false; o.receiveShadow = false;
@@ -279,13 +293,20 @@
             }
           }
         });
-        MODELS[n] = g.scene;
-        if (--left === 0) done();
+        MODELS[name] = g.scene;
+        finish();
       }, undefined, function () {
-        W.diag('model missing: ' + n);
-        if (--left === 0) done();
+        active--;
+        if (tries < 2) { setTimeout(function () { fetchOne(name, tries + 1); }, 500 + tries * 900); }
+        else { W.diag('model missing: ' + name); finish(); }
       });
-    });
+    }
+
+    function pump() {
+      while (active < MAX && queue.length) fetchOne(queue.shift(), 0);
+    }
+    if (!left) { done(); return; }
+    pump();
   }
 
   /* ---------------------------------------------------------- the town */
@@ -601,50 +622,50 @@
   /* a cave mouth in the rock, lit from within */
   function buildCave(cx, cz) {
     var Y = W.heightAt(cx, cz);
-    W.addFlat(cx, cz, 15, Y, 30);
-    var rockMat = mat('assets/g_rock_d.jpg', 0x8d8272, 1, [1, 1]);
-    var R = 14, H = 9;
-    var N = 22;
+    W.addFlat(cx, cz, 16, Y, 34);
+    var R = 13.5, H = 8.5;
+
+    /* the cavity: dark rock seen from inside, so it reads as depth */
+    var caveIn = new T.MeshStandardMaterial({ map: W.tex('assets/g_rock_d.jpg', true, true), color: 0x6d6152, roughness: 1, side: T.BackSide });
+    var inner = new T.Mesh(new T.CylinderGeometry(R - 1.2, R - 0.6, H, 22, 1, true), caveIn);
+    inner.position.set(cx, Y + H / 2, cz);
+    W.scene.add(inner);
+    var roof = new T.Mesh(new T.SphereGeometry(R - 0.8, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), caveIn);
+    roof.scale.set(1, 0.42, 1);
+    roof.position.set(cx, Y + H - 0.6, cz);
+    W.scene.add(roof);
+
+    /* the mound: boulders heaped into a hill, with a gap for the mouth */
+    var N = 20;
     for (var i = 0; i < N; i++) {
       var a = (i / N) * Math.PI * 2;
       var toMouth = Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2)));
-      if (toMouth < 0.30) continue;
-      var jitter = 0.75 + 0.5 * ((i * 37) % 7) / 7;
-      var hh = H * jitter;
-      var rr = R + Math.sin(i * 2.3) * 1.6;
-      var x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr;
-      var seg = box(R * 2 * Math.PI / N * 1.5, hh, 6.2 * jitter, x, Y + hh / 2 - 0.6, z, rockMat, -a);
-      seg.rotation.z = (((i * 53) % 11) / 11 - 0.5) * 0.16;
-      seg.rotation.x = (((i * 29) % 9) / 9 - 0.5) * 0.12;
+      if (toMouth < 0.34) continue;
+      var key = ['rock_a', 'rock_b', 'rock_c'][i % 3];
+      if (!MODELS[key]) continue;
+      var rr = R + 1.0 + ((i * 31) % 5) * 0.4;
+      var sc = 10 + ((i * 17) % 6);
+      place(key, cx + Math.cos(a) * rr, Y - 1.6, cz + Math.sin(a) * rr, sc, a * 1.7);
+      W.addBox(cx + Math.cos(a) * rr, Y + H / 2, cz + Math.sin(a) * rr, 3.4, H / 2 + 2, 3.4, 0);
     }
-    /* the roof: a low rock dome, and boulders heaped over it */
-    var cap = new T.Mesh(new T.SphereGeometry(R + 1.4, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), rockMat);
-    cap.position.set(cx, Y + H - 2.2, cz);
-    cap.scale.set(1, 0.52, 1);
-    W.scene.add(cap);
-    W.addBox(cx, Y + H + 0.6, cz, R * 0.86, 2.2, R * 0.86, 0);
-    for (var b = 0; b < 9; b++) {
-      var ba = b * 1.42, br = R * (0.30 + 0.5 * ((b * 17) % 5) / 5);
-      var key = ['rock_a', 'rock_b', 'rock_c'][b % 3];
-      if (MODELS[key]) {
-        place(key, cx + Math.cos(ba) * br, Y + H - 2.6 + ((b % 3) * 0.5), cz + Math.sin(ba) * br,
-              4 + (b % 4) * 2.2, ba);
-      }
+    for (var b = 0; b < 8; b++) {
+      var ba = b * 1.62, br = R * (0.22 + 0.42 * ((b * 13) % 5) / 5);
+      var k2 = ['rock_b', 'rock_a', 'rock_c'][b % 3];
+      if (MODELS[k2]) place(k2, cx + Math.cos(ba) * br, Y + H - 3.4 + (b % 3) * 0.7, cz + Math.sin(ba) * br, 7 + (b % 3) * 2.4, ba);
     }
-    /* boulders framing the mouth */
-    if (MODELS.rock_c) place('rock_c', cx - 5.6, Y - 0.5, cz + R - 0.5, 7.5, 0.6);
-    if (MODELS.rock_a) place('rock_a', cx + 5.6, Y - 0.5, cz + R - 0.5, 7.0, 2.4);
-    /* a lintel of rock over the opening */
-    box(9.5, 2.6, 5.4, cx, Y + 6.4, cz + R - 0.4, rockMat, 0);
+    W.addBox(cx, Y + H + 2.2, cz, R * 0.8, 2.4, R * 0.8, 0);
+    if (MODELS.rock_c) place('rock_c', cx - 6.4, Y - 1.2, cz + R + 0.6, 9, 0.6);
+    if (MODELS.rock_a) place('rock_a', cx + 6.4, Y - 1.2, cz + R + 0.6, 8.5, 2.4);
+    if (MODELS.rock_b) place('rock_b', cx, Y + 4.6, cz + R + 1.2, 7, 1.1);
 
-    var fl = new T.Mesh(new T.CircleGeometry(R - 1, 24), M.floor);
+    var fl = new T.Mesh(new T.CircleGeometry(R - 1.4, 24), M.floor);
     fl.rotation.x = -Math.PI / 2; fl.position.set(cx, Y + 0.05, cz);
     W.scene.add(fl);
-    torch(cx - 6.0, Y + 2.7, cz - 3, 0.6);
-    torch(cx + 6.0, Y + 2.7, cz - 3, -0.6);
-    fire(cx, Y + 0.25, cz - 6.5, 1.5, 1.8);
-    if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.6, 3.4, 0.3, false, 'x');
-    if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.6, 0.42, 0.3, false, 'x');
+    torch(cx - 5.6, Y + 2.7, cz - 2.5, 0.6);
+    torch(cx + 5.6, Y + 2.7, cz - 2.5, -0.6);
+    fire(cx, Y + 0.25, cz - 6.0, 1.5, 1.8);
+    if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.2, 3.4, 0.3, false, 'x');
+    if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.2, 0.42, 0.3, false, 'x');
     return { x: cx, z: cz, y: Y };
   }
 
