@@ -126,12 +126,19 @@
   var LOWQ = false;
   try { LOWQ = sessionStorage.getItem('lowq') === '1'; } catch (e) {}
 
+  /* small screens and modest devices get a lighter world, automatically */
+  var mem = navigator.deviceMemory || 4;
+  var small = Math.min(innerWidth, innerHeight) < 560 || 'ontouchstart' in window;
+  var TIER = LOWQ ? 0 : (small || mem < 4 ? 1 : 2);
+  W.TIER = TIER;
+  W.vegScale = TIER === 2 ? 1 : (TIER === 1 ? 0.55 : 0.3);
+
   W.start = function () {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: !LOWQ, powerPreference: 'high-performance' });
     } catch (err) { W.diag('WebGL unavailable: ' + err.message); return; }
     renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(LOWQ ? 1 : Math.min(devicePixelRatio, 1.9));
+    renderer.setPixelRatio(TIER === 2 ? Math.min(devicePixelRatio, 1.9) : (TIER === 1 ? Math.min(devicePixelRatio, 1.5) : 1));
     renderer.setClearColor(0x0a0916);
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -307,14 +314,15 @@
 
   /* --------------------------------------------------- terrain chunking */
   var CH = 192;
-  var RINGS = [
-    { r: 1, seg: 44 },
-    { r: 2, seg: 22 },
-    { r: 3, seg: 12 },
-    { r: 4, seg: 8 },
-    { r: 6, seg: 5 },
-    { r: 9, seg: 3 }
+  var RINGS = TIER === 2 ? [
+    { r: 1, seg: 44 }, { r: 2, seg: 22 }, { r: 3, seg: 12 },
+    { r: 4, seg: 8 }, { r: 6, seg: 5 }, { r: 9, seg: 3 }
+  ] : TIER === 1 ? [
+    { r: 1, seg: 32 }, { r: 2, seg: 16 }, { r: 3, seg: 9 }, { r: 5, seg: 5 }, { r: 7, seg: 3 }
+  ] : [
+    { r: 1, seg: 24 }, { r: 2, seg: 12 }, { r: 4, seg: 6 }, { r: 6, seg: 3 }
   ];
+  var VEG_SEG = TIER === 2 ? 22 : (TIER === 1 ? 16 : 999);
   var chunks = new Map();
   var pending = [];
 
@@ -398,7 +406,7 @@
     m.frustumCulled = true;
     scene.add(m);
     var rec = { mesh: m, seg: seg, veg: null, ci: ci, cj: cj };
-    if (seg >= 22 && W.scatter) rec.veg = W.scatter(W, ci, cj, CH);
+    if (seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, ci, cj, CH);
     return rec;
   }
 
@@ -407,8 +415,10 @@
     rec.mesh.geometry.dispose();
     if (rec.veg) {
       for (var i = 0; i < rec.veg.length; i++) {
-        scene.remove(rec.veg[i]);
-        if (rec.veg[i].dispose) rec.veg[i].dispose();
+        var v = rec.veg[i];
+        scene.remove(v);
+        if (v.dispose) v.dispose();
+        if (v.userData && v.userData.col) W.removeBox(v.userData.col);
       }
     }
   }
@@ -418,12 +428,14 @@
     chunks.forEach(function (rec) {
       if (rec.veg) {
         for (var i = 0; i < rec.veg.length; i++) {
-          scene.remove(rec.veg[i]);
-          if (rec.veg[i].dispose) rec.veg[i].dispose();
+          var v = rec.veg[i];
+          scene.remove(v);
+          if (v.dispose) v.dispose();
+          if (v.userData && v.userData.col) W.removeBox(v.userData.col);
         }
         rec.veg = null;
       }
-      if (rec.seg >= 22 && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH);
+      if (rec.seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH);
     });
   };
 
@@ -503,6 +515,8 @@
     }
     return b;
   };
+  /* colliders that belong to streamed chunks go away with them */
+  W.removeBox = function (b) { if (b) b.dead = true; };
   W.nearBoxes = function (x, z) {
     var out = [], seen = {};
     for (var dx = -1; dx <= 1; dx++) {
@@ -639,7 +653,7 @@
     var feet = p.y - PH, head = p.y;
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
-      if (head < b.y0 || feet > b.y1) continue;
+      if (b.dead || head < b.y0 || feet > b.y1) continue;
       var dx = p.x - b.cx, dz = p.z - b.cz;
       var lx = dx * b.c + dz * b.s;
       var lz = -dx * b.s + dz * b.c;

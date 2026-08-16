@@ -258,7 +258,7 @@
       var wb = new T.Box3().setFromObject(g);
       var ws = new T.Vector3(); wb.getSize(ws);
       var wc = new T.Vector3(); wb.getCenter(wc);
-      W.addBox(wc.x, wc.y, wc.z, ws.x * 0.40, ws.y / 2, ws.z * 0.40, 0);
+      g.userData.col = W.addBox(wc.x, wc.y, wc.z, ws.x * 0.40, ws.y / 2, ws.z * 0.40, 0);
     }
     return g;
   }
@@ -524,39 +524,62 @@
     W.addFlat(cx, cz, 16, Y, 22);
     for (var i = 0; i < n; i++) {
       var a = (i / n) * Math.PI * 2 + 0.4;
-      var tx = cx + Math.cos(a) * 9.5, tz = cz + Math.sin(a) * 9.5;
-      var ty = Y;
-      /* four poles and a slanted canopy, open to the fire */
-      var ph = 2.5;
-      [[-3, -2.6], [3, -2.6], [-3.4, 2.8], [3.4, 2.8]].forEach(function (p, k) {
-        var px = tx + p[0] * Math.cos(a) - p[1] * Math.sin(a);
-        var pz = tz + p[0] * Math.sin(a) + p[1] * Math.cos(a);
-        cyl(0.09, 0.11, k < 2 ? ph : ph * 0.72, 6, px, ty + (k < 2 ? ph : ph * 0.72) / 2, pz, M.wood);
+      var tx = cx + Math.cos(a) * 10.5, tz = cz + Math.sin(a) * 10.5;
+      var g = new T.Group();
+      g.position.set(tx, Y, tz);
+      g.rotation.y = -a + Math.PI / 2;   /* the open side faces the fire */
+      W.scene.add(g);
+
+      var W2 = 7.0, D2 = 5.6, front = 2.55, back = 1.55;
+      /* poles */
+      [[-W2 / 2, -D2 / 2, front], [W2 / 2, -D2 / 2, front],
+       [-W2 / 2, D2 / 2, back], [W2 / 2, D2 / 2, back]].forEach(function (p2) {
+        var pole = new T.Mesh(new T.CylinderGeometry(0.075, 0.095, p2[2], 6), M.wood);
+        pole.position.set(p2[0], p2[2] / 2, p2[1]);
+        g.add(pole);
       });
-      var canopy = new T.Mesh(new T.PlaneGeometry(7.2, 6.4, 6, 6), M.cloth);
-      var cp = canopy.geometry.attributes.position;
-      for (var v = 0; v < cp.count; v++) {
-        var vx = cp.getX(v), vy = cp.getY(v);
-        cp.setZ(v, Math.sin(vx * 0.9) * 0.16 + Math.cos(vy * 1.1) * 0.14);
+      /* ridge pole across the open front */
+      var ridge = new T.Mesh(new T.CylinderGeometry(0.06, 0.06, W2, 6), M.wood);
+      ridge.rotation.z = Math.PI / 2;
+      ridge.position.set(0, front, -D2 / 2);
+      g.add(ridge);
+
+      /* the goat-hair roof, sagging between its poles */
+      var roof = new T.PlaneGeometry(W2, D2, 8, 6);
+      var rp = roof.attributes.position;
+      for (var v = 0; v < rp.count; v++) {
+        var ux = rp.getX(v) / W2 + 0.5, uy = rp.getY(v) / D2 + 0.5;
+        var lift = front + (back - front) * uy;
+        var sag = -Math.sin(ux * Math.PI) * 0.22 * (0.4 + uy);
+        rp.setZ(v, lift + sag);
       }
-      canopy.geometry.computeVertexNormals();
-      canopy.material.side = T.DoubleSide;
-      canopy.rotation.set(-Math.PI / 2 + 0.24, 0, 0);
-      canopy.position.set(tx, ty + ph - 0.25, tz);
-      canopy.rotation.y = 0;
-      var wrap = new T.Group(); wrap.add(canopy);
-      wrap.position.set(0, 0, 0);
-      canopy.position.set(tx, ty + ph - 0.2, tz);
-      W.scene.add(canopy);
-      /* back wall of cloth */
-      var back = new T.Mesh(new T.PlaneGeometry(7.0, 2.2), M.cloth);
-      back.material.side = T.DoubleSide;
-      var bx = tx + Math.cos(a) * 2.7, bz = tz + Math.sin(a) * 2.7;
-      back.position.set(bx, ty + 1.1, bz);
-      back.rotation.y = -a + Math.PI / 2;
-      W.scene.add(back);
-      /* rug under the tent */
-      if (MODELS.carpet) place('carpet', tx, ty + 0.03, tz, 3.2, a, false, 'x');
+      roof.rotateX(-Math.PI / 2);
+      roof.computeVertexNormals();
+      var roofM = new T.Mesh(roof, M.cloth);
+      roofM.material.side = T.DoubleSide;
+      g.add(roofM);
+
+      /* back wall and one side, leaving the front open */
+      var back1 = new T.Mesh(new T.PlaneGeometry(W2, back), M.cloth);
+      back1.material.side = T.DoubleSide;
+      back1.position.set(0, back / 2, D2 / 2);
+      g.add(back1);
+      var side1 = new T.Mesh(new T.PlaneGeometry(D2, back * 0.92), M.cloth);
+      side1.material.side = T.DoubleSide;
+      side1.rotation.y = Math.PI / 2;
+      side1.position.set(-W2 / 2, back * 0.46, 0);
+      g.add(side1);
+
+      /* guy ropes */
+      [[-W2 / 2, -D2 / 2 - 1.5], [W2 / 2, -D2 / 2 - 1.5]].forEach(function (r2) {
+        var rope = new T.Mesh(new T.CylinderGeometry(0.02, 0.02, 3.0, 4), M.dark);
+        rope.position.set(r2[0] * 0.92, front * 0.55, (r2[1] + (-D2 / 2)) / 2 + 0.6);
+        rope.rotation.x = 0.85;
+        g.add(rope);
+      });
+
+      W.addBox(tx, Y + 1.2, tz, 3.6, 1.2, 2.9, -a + Math.PI / 2);
+      if (MODELS.carpet) place('carpet', tx, Y + 0.04, tz, 3.0, -a + Math.PI / 2, false, 'x');
     }
     /* the campfire, ringed with stones */
     for (var s = 0; s < 9; s++) {
@@ -575,41 +598,53 @@
     return { x: cx, z: cz, y: Y };
   }
 
-  /* a cave mouth in the rocks, lit from within */
+  /* a cave mouth in the rock, lit from within */
   function buildCave(cx, cz) {
     var Y = W.heightAt(cx, cz);
-    W.addFlat(cx, cz, 14, Y, 26);
-    var R = 13, H = 8.5;
-    /* a ring of rock walls with one opening = the mouth */
-    var N = 26;
+    W.addFlat(cx, cz, 15, Y, 30);
+    var rockMat = mat('assets/g_rock_d.jpg', 0x8d8272, 1, [1, 1]);
+    var R = 14, H = 9;
+    var N = 22;
     for (var i = 0; i < N; i++) {
       var a = (i / N) * Math.PI * 2;
-      if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.22) continue;
-      var x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-      var hh = H + Math.sin(i * 1.7) * 1.4;
-      box(R * 2 * Math.PI / N * 1.3, hh, 4.6, x, Y + hh / 2, z, M.stone2, -a);
+      var toMouth = Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2)));
+      if (toMouth < 0.30) continue;
+      var jitter = 0.75 + 0.5 * ((i * 37) % 7) / 7;
+      var hh = H * jitter;
+      var rr = R + Math.sin(i * 2.3) * 1.6;
+      var x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr;
+      var seg = box(R * 2 * Math.PI / N * 1.5, hh, 6.2 * jitter, x, Y + hh / 2 - 0.6, z, rockMat, -a);
+      seg.rotation.z = (((i * 53) % 11) / 11 - 0.5) * 0.16;
+      seg.rotation.x = (((i * 29) % 9) / 9 - 0.5) * 0.12;
     }
-    /* roof slab and boulders piled on it */
-    var roof = new T.Mesh(new T.CylinderGeometry(R + 2.6, R + 1.2, 3.2, 16), M.stone2);
-    roof.position.set(cx, Y + H + 1.2, cz);
-    W.scene.add(roof);
-    W.addBox(cx, Y + H + 1.2, cz, R + 1.0, 1.6, R + 1.0, 0);
-    for (var b = 0; b < 7; b++) {
-      var ba = b * 1.7;
+    /* the roof: a low rock dome, and boulders heaped over it */
+    var cap = new T.Mesh(new T.SphereGeometry(R + 1.4, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), rockMat);
+    cap.position.set(cx, Y + H - 2.2, cz);
+    cap.scale.set(1, 0.52, 1);
+    W.scene.add(cap);
+    W.addBox(cx, Y + H + 0.6, cz, R * 0.86, 2.2, R * 0.86, 0);
+    for (var b = 0; b < 9; b++) {
+      var ba = b * 1.42, br = R * (0.30 + 0.5 * ((b * 17) % 5) / 5);
       var key = ['rock_a', 'rock_b', 'rock_c'][b % 3];
-      if (MODELS[key]) place(key, cx + Math.cos(ba) * (R * 0.55), Y + H + 2.6, cz + Math.sin(ba) * (R * 0.55), 3 + (b % 3), ba);
+      if (MODELS[key]) {
+        place(key, cx + Math.cos(ba) * br, Y + H - 2.6 + ((b % 3) * 0.5), cz + Math.sin(ba) * br,
+              4 + (b % 4) * 2.2, ba);
+      }
     }
-    /* mouth arch */
-    arch(7, 5.2, 5.0, cx, Y + 5.0, cz + R, M.stone2, 0);
-    /* inside: floor, torches, a pool of light */
+    /* boulders framing the mouth */
+    if (MODELS.rock_c) place('rock_c', cx - 5.6, Y - 0.5, cz + R - 0.5, 7.5, 0.6);
+    if (MODELS.rock_a) place('rock_a', cx + 5.6, Y - 0.5, cz + R - 0.5, 7.0, 2.4);
+    /* a lintel of rock over the opening */
+    box(9.5, 2.6, 5.4, cx, Y + 6.4, cz + R - 0.4, rockMat, 0);
+
     var fl = new T.Mesh(new T.CircleGeometry(R - 1, 24), M.floor);
     fl.rotation.x = -Math.PI / 2; fl.position.set(cx, Y + 0.05, cz);
     W.scene.add(fl);
-    torch(cx - 5.5, Y + 2.6, cz - 3, 0.6);
-    torch(cx + 5.5, Y + 2.6, cz - 3, -0.6);
-    fire(cx, Y + 0.25, cz - 6, 1.5, 1.8);
-    if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.4, 3.4, 0.3, false, 'x');
-    if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.4, 0.42, 0.3, false, 'x');
+    torch(cx - 6.0, Y + 2.7, cz - 3, 0.6);
+    torch(cx + 6.0, Y + 2.7, cz - 3, -0.6);
+    fire(cx, Y + 0.25, cz - 6.5, 1.5, 1.8);
+    if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.6, 3.4, 0.3, false, 'x');
+    if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.6, 0.42, 0.3, false, 'x');
     return { x: cx, z: cz, y: Y };
   }
 
@@ -686,9 +721,17 @@
   }
   W.windify = windify;
 
+  function hashU(n) {
+    n = (n ^ 61) ^ (n >>> 16);
+    n = (n + (n << 3)) | 0;
+    n = n ^ (n >>> 4);
+    n = Math.imul(n, 0x27d4eb2d);
+    n = n ^ (n >>> 15);
+    return (n >>> 0) / 4294967296;
+  }
   function rng(a, b, c) {
-    var n = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453;
-    return n - Math.floor(n);
+    var n = (Math.round(a * 131) * 73856093) ^ (Math.round(b * 131) * 19349663) ^ (Math.round(c * 977) * 83492791);
+    return hashU(n | 0);
   }
 
   /* what grows in one chunk */
@@ -698,18 +741,21 @@
     var dummy = new T.Object3D();
 
     function sow(key, count, pick, scaleMin, scaleMax) {
+      count = Math.round(count * (W.vegScale || 1));
       var src = vegSource(key);
       if (!src || count <= 0) return;
       var im = new T.InstancedMesh(src.g, src.m, count);
       var n = 0;
+      var salt = key.charCodeAt(0) * 7919 + key.length * 104729;
       for (var i = 0; i < count; i++) {
-        var rx = ox + rng(ci * 7 + i, cj * 13, 1.7) * CH;
-        var rz = oz + rng(ci * 3 + i, cj * 11, 5.3) * CH;
+        var sd = (ci * 73856093) ^ (cj * 19349663) ^ ((i + salt) * 83492791);
+        var rx = ox + hashU(sd) * CH;
+        var rz = oz + hashU(sd ^ 0x9e3779b9) * CH;
         var h = W.heightAt(rx, rz);
         if (!pick(rx, rz, h)) continue;
-        var s = scaleMin + rng(i, ci + cj, 9.1) * (scaleMax - scaleMin);
+        var s = scaleMin + hashU(sd ^ 0x85ebca6b) * (scaleMax - scaleMin);
         dummy.position.set(rx, h - 0.04, rz);
-        dummy.rotation.set(0, rng(i, ci, 2.2) * 6.283, 0);
+        dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
         dummy.scale.set(s, s, s);
         dummy.updateMatrix();
         im.setMatrixAt(n++, dummy.matrix);
@@ -746,7 +792,7 @@
     sow('rock_d', Math.round(7 * (0.3 + cb.rock)), stony, 1.0, 3.2);
 
     /* trees and palms, sparse and deliberate */
-    var treeN = Math.round(3 * cb.grass + 1);
+    var treeN = Math.max(1, Math.round((3 * cb.grass + 1) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -764,7 +810,10 @@
       }
       if (!key || !MODELS[key]) continue;
       var g = place(key, tx, th - 0.25, tz, sc, rng(tx, tz, 9) * 6.283);
-      if (g) out.push(g);
+      if (g) {
+        g.userData.col = W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
+        out.push(g);
+      }
     }
     /* boulders that you cannot walk through */
     for (var b = 0; b < 2; b++) {
@@ -774,7 +823,7 @@
       if (bh < W.WATER_Y + 1 || bw.r < 0.3) continue;
       var bk = ['rock_a', 'rock_b', 'rock_c'][b % 3];
       if (!MODELS[bk]) continue;
-      var bg = place(bk, bx, bh - 0.4, bz, 2.4 + rng(bx, bz, 3) * 5.5, rng(bx, bz, 4) * 6.283);
+      var bg = place(bk, bx, bh - 0.4, bz, 2.4 + rng(bx, bz, 3) * 5.5, rng(bx, bz, 4) * 6.283, true);
       if (bg) out.push(bg);
     }
     return out;
@@ -841,10 +890,10 @@
       '1': { x: 0, z: TOWN.R + 70, yaw: 0, pitch: -0.02, h: 2.4 },
       '2': { x: 2, z: 40, yaw: 0.62, pitch: -0.02 },
       '3': { x: 0, z: -(TOWN.R - 3.2), yaw: 0, pitch: -0.20, h: 10.6 },
-      '4': { x: 300, z: 396, yaw: 3.14, pitch: -0.03 },
-      '5': { x: 430, z: -244, yaw: 3.14, pitch: -0.05 },
-      '6': { x: -360, z: 268, yaw: 3.14, pitch: -0.02 },
-      '7': { x: -34, z: 2, yaw: 3.14, pitch: 0.05 },
+      '4': { x: 300, z: 400, yaw: 0, pitch: -0.03 },
+      '5': { x: 430, z: -228, yaw: 0, pitch: -0.05 },
+      '6': { x: -360, z: 285, yaw: 0, pitch: -0.02 },
+      '7': { x: -34, z: -6, yaw: 0, pitch: 0.06 },
       '8': { x: 60, z: 300, yaw: 2.2, pitch: -0.16, h: 130, fly: true }
     };
 
