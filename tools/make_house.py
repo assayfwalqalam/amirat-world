@@ -23,6 +23,7 @@ scene.cycles.device = 'CPU'
 scene.cycles.samples = 12
 
 COLLIDERS = []          # every solid the player can stand on or walk into
+SPOTS = []              # flat places where the game may set down props
 
 
 def solid(sx, sy, sz, loc, collide=True):
@@ -166,6 +167,7 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
 
 # ground floor, with its room
 shell += storey(0, 0, W, D, 0, H1, True, random.randint(1, 2))
+SPOTS.append({"c": [0, 0.3, 0], "r": [round(W / 2 - 1.2, 2), round(D / 2 - 1.2, 2)], "k": "room"})
 floor = solid(W - T * 2, D - T * 2, 0.3, (0, 0, 0.15))
 erode(floor, levels=1, fine=0.02, broad=0.03)
 shell.append(floor)
@@ -183,8 +185,9 @@ if has_upper:
     shell.append(roof2)
 
 
-def parapet(cx, cy, w, d, z, h, t):
-    """A raised roof edge. Solid, so standing on it lifts you."""
+def parapet(cx, cy, w, d, z, h, t, rail=True):
+    """A raised roof edge. Solid, so standing on it lifts you.
+       Above it goes a timber rail, the way a terrace is fenced."""
     out = []
     out.append(solid(w + t * 2, t, h, (cx, cy + d / 2 + t / 2, z + h / 2)))
     out.append(solid(w + t * 2, t, h, (cx, cy - d / 2 - t / 2, z + h / 2)))
@@ -192,6 +195,22 @@ def parapet(cx, cy, w, d, z, h, t):
     out.append(solid(t, d, h, (cx - w / 2 - t / 2, cy, z + h / 2)))
     for o in out:
         erode(o, levels=1, fine=0.02, broad=0.03)
+    if rail:
+        for sy in (-1, 1):
+            n = max(4, int(w / 0.62))
+            for i in range(n):
+                bx = cx - w / 2 + (i + 0.5) * (w / n)
+                timber.append(solid(0.07, 0.07, 0.62, (bx, cy + sy * (d / 2 + t / 2), z + h + 0.31), False))
+            timber.append(solid(w + t * 2, 0.09, 0.09, (cx, cy + sy * (d / 2 + t / 2), z + h + 0.63), False))
+        for sx in (-1, 1):
+            n2 = max(3, int(d / 0.62))
+            for i in range(n2):
+                bz = cy - d / 2 + (i + 0.5) * (d / n2)
+                timber.append(solid(0.07, 0.07, 0.62, (cx + sx * (w / 2 + t / 2), bz, z + h + 0.31), False))
+            timber.append(solid(0.09, d, 0.09, (cx + sx * (w / 2 + t / 2), cy, z + h + 0.63), False))
+    # the terrace itself is somewhere props may stand
+    SPOTS.append({"c": [round(cx, 2), round(z, 2), round(-cy, 2)],
+                  "r": [round(w / 2 - 0.7, 2), round(d / 2 - 0.7, 2)], "k": "roof"})
     return out
 
 
@@ -236,16 +255,25 @@ for i in range(random.randint(1, 3)):
     timber.append(solid(0.36, 0.07, 1.0, (sx2, -D / 2 + 0.2, sz2), False))
 
 # balcony over the door
-if random.random() < 0.72:
-    by = -D / 2 - 0.4
+if random.random() < 0.85:
+    BW = random.uniform(3.6, 4.6)
+    BD = 1.75
+    by = -D / 2 - BD / 2 + 0.15
     bz = top_z + 0.1
-    shell.append(solid(2.7, 1.05, 0.16, (dx, by, bz)))
-    for i in range(8):
-        timber.append(solid(0.075, 0.075, 0.62, (dx - 1.2 + i * 0.34, by - 0.44, bz + 0.39), False))
-    timber.append(solid(2.7, 0.12, 0.1, (dx, by - 0.44, bz + 0.75), False))
+    shell.append(solid(BW, BD, 0.18, (dx, by, bz)))
+    # a rail all the way round the open sides
+    n = max(6, int(BW / 0.4))
+    for i in range(n):
+        timber.append(solid(0.075, 0.075, 0.72, (dx - BW / 2 + (i + 0.5) * (BW / n), by - BD / 2, bz + 0.45), False))
+    timber.append(solid(BW, 0.11, 0.11, (dx, by - BD / 2, bz + 0.84), False))
     for sx in (-1, 1):
-        timber.append(cyl(0.055, 0.95, (dx + sx * 1.15, by + 0.15, bz - 0.4),
-                          rot=(math.radians(56), 0, 0), verts=6))
+        for i in range(3):
+            timber.append(solid(0.075, 0.075, 0.72, (dx + sx * BW / 2, by - BD / 2 + (i + 0.5) * (BD / 3), bz + 0.45), False))
+        timber.append(solid(0.11, BD, 0.11, (dx + sx * BW / 2, by, bz + 0.84), False))
+        timber.append(cyl(0.06, 1.15, (dx + sx * (BW / 2 - 0.25), by + 0.1, bz - 0.5),
+                          rot=(math.radians(54), 0, 0), verts=6))
+    SPOTS.append({"c": [round(dx, 2), round(bz + 0.09, 2), round(-by, 2)],
+                  "r": [round(BW / 2 - 0.5, 2), round(BD / 2 - 0.35, 2)], "k": "balcony"})
 
 # ------------------------------------------------------------- assemble
 for o in shell:
@@ -316,5 +344,5 @@ bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
                           export_apply=True, export_yup=True)
 
 with open(os.path.splitext(OUT)[0] + ".col.json", "w") as f:
-    json.dump({"boxes": COLLIDERS}, f)
+    json.dump({"boxes": COLLIDERS, "spots": SPOTS}, f)
 print("WROTE", OUT)

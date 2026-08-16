@@ -15,43 +15,79 @@
 
   /* every flame and lamp registers here; a small pool of real lights
      follows whichever are nearest, so the shaders stay cheap everywhere */
+  /* Fire and lamplight.
+     A small pool of real lights follows whichever flames are nearest, because a
+     scene cannot afford one light per flame. The pool used to snap from source
+     to source as you walked, which is what made things flare suddenly. Now a
+     light only changes what it serves once it has faded out, and fades back in
+     on the new one, so the light in a street changes the way light does. */
   var EMIT = [];
   var POOL = [];
-  var POOL_N = 6;
+  var POOL_N = 8;
+  var MAX_D2 = 5200;
+
   function initPool() {
     for (var i = 0; i < POOL_N; i++) {
-      var l = new T.PointLight(0xffa445, 0, 26, 1.9);
+      var l = new T.PointLight(0xffa445, 0, 26, 2);
       l.position.set(0, -9999, 0);
       W.scene.add(l);
-      POOL.push(l);
+      POOL.push({ light: l, src: null, fade: 0 });
     }
   }
-  function driveLights(t) {
+
+  function flicker(e, t) {
+    if (e.steady) return 0.94 + 0.06 * Math.sin(t * 2.6 + e.ph);
+    /* a candle-like wander: slow body, quick edge, never a strobe */
+    return 0.86
+      + 0.09 * Math.sin(t * 3.1 + e.ph)
+      + 0.05 * Math.sin(t * 7.7 + e.ph * 1.7);
+  }
+
+  function driveLights(t, dt) {
     var cp = W.cam.position;
     for (var i = 0; i < EMIT.length; i++) {
       var e = EMIT[i];
       var dx = e.x - cp.x, dy = e.y - cp.y, dz = e.z - cp.z;
       e.d2 = dx * dx + dy * dy + dz * dz;
+      e.lit = flicker(e, t);
+      e.claimed = false;
     }
-    /* partial selection of the nearest few */
-    var best = [];
-    for (var k = 0; k < EMIT.length; k++) {
-      var e2 = EMIT[k];
-      if (e2.d2 > 6400) continue;
-      if (best.length < POOL_N) { best.push(e2); best.sort(function (a, b) { return a.d2 - b.d2; }); }
-      else if (e2.d2 < best[POOL_N - 1].d2) { best[POOL_N - 1] = e2; best.sort(function (a, b) { return a.d2 - b.d2; }); }
-    }
+
+    /* keep what each light already serves, if it is still worth serving */
     for (var p = 0; p < POOL_N; p++) {
-      var L = POOL[p], src = best[p];
-      if (!src) { L.intensity = 0; continue; }
-      var fl = src.steady
-        ? 0.92 + 0.08 * Math.sin(t * 3.1 + src.ph)
-        : 0.72 + 0.28 * (0.5 + 0.5 * (Math.sin(t * 11 + src.ph) * 0.5 + Math.sin(t * 23.3 + src.ph * 2) * 0.3 + Math.sin(t * 4.1 + src.ph) * 0.2));
+      var slot = POOL[p];
+      if (slot.src && slot.src.d2 < MAX_D2 * 1.6) slot.src.claimed = true;
+      else slot.leaving = true;
+    }
+
+    /* find the nearest unclaimed emitters for any free slots */
+    for (var p2 = 0; p2 < POOL_N; p2++) {
+      var s2 = POOL[p2];
+      if (s2.src && !s2.leaving) continue;
+      if (s2.fade > 0.02) continue;               /* still fading out; wait */
+      var best = null;
+      for (var k = 0; k < EMIT.length; k++) {
+        var e2 = EMIT[k];
+        if (e2.claimed || e2.d2 > MAX_D2) continue;
+        if (!best || e2.d2 < best.d2) best = e2;
+      }
+      if (best) { best.claimed = true; s2.src = best; s2.leaving = false; }
+      else if (s2.leaving) { s2.src = null; s2.leaving = false; }
+    }
+
+    for (var p3 = 0; p3 < POOL_N; p3++) {
+      var sl = POOL[p3];
+      var want = (sl.src && !sl.leaving) ? 1 : 0;
+      sl.fade += (want - sl.fade) * Math.min(1, dt * 2.4);
+      var L = sl.light;
+      if (!sl.src || sl.fade < 0.01) { L.intensity = 0; continue; }
+      var src = sl.src;
       L.color.setHex(src.col);
       L.distance = src.reach;
       L.position.set(src.x, src.y, src.z);
-      L.intensity = src.base * fl;
-      src.lit = fl;
+      /* dim with distance as well, so nothing pops as it enters range */
+      var range = 1 - W.sstep(MAX_D2 * 0.55, MAX_D2, src.d2);
+      L.intensity = src.base * src.lit * sl.fade * range;
     }
   }
 
@@ -292,11 +328,15 @@
   /* Buildings made in Blender arrive with a collision file listing every solid
      box in them. We use those directly, so parapets lift you, stairs step true,
      and nothing has an invisible margin. */
-  var COLJSON = {};
+  var COLJSON = {}, SPOTJSON = {};
   function loadCollision(name) {
     return fetch('assets/models/' + name + '.col.json')
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { if (j) COLJSON[name] = j.boxes; })
+      .then(function (j) {
+        if (!j) return;
+        COLJSON[name] = j.boxes;
+        if (j.spots) SPOTJSON[name] = j.spots;
+      })
       .catch(function () {});
   }
   function placeBuilt(name, x, y, z, rot, scale) {
@@ -415,6 +455,54 @@
     pump();
   }
 
+  /* The clutter of a lived-in town. Each building carries a list of flat places
+     where things may stand, and every house gets a different set. */
+  var PROPS_ROOF = ['p_carpet', 'p_cushions', 'p_table', 'p_stool', 'p_chest', 'p_books',
+                    'p_scrolls', 'p_inkset', 'p_bowl', 'p_bread', 'p_pot', 'p_plantpot',
+                    'p_broom', 'p_basket', 'p_waterjug', 'p_oillamp', 'p_jars',
+                    'p_ropecoil', 'p_firewood', 'p_crates', 'p_sacks', 'p_barrel'];
+  var PROPS_ARMS = ['p_spears', 'p_swordrack', 'p_bowarrows'];
+  var PROPS_ROOM = ['p_carpet', 'p_cushions', 'p_table', 'p_stool', 'p_chest', 'p_books',
+                    'p_scrolls', 'p_inkset', 'p_bowl', 'p_pot', 'p_waterjug', 'p_basket'];
+  var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
+                      'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood',
+                      'p_plantpot', 'p_basket', 'p_waterjug'];
+  var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET, ['p_brazier', 'p_well']);
+
+  function propOn(list, seed, x, y, z, rot, scale) {
+    var key = list[Math.floor(hashU(seed) * list.length) % list.length];
+    if (!MODELS[key]) return null;
+    var g = placeBuilt(key, x, y, z, rot, scale || 1);
+    return g;
+  }
+
+  /* fill one building's flat places with a different set each time */
+  function dressBuilding(name, bx, by, bz, brot, scale, seedBase) {
+    var spots = SPOTJSON[name];
+    if (!spots) return;
+    var c = Math.cos(brot), s2 = Math.sin(brot);
+    for (var i = 0; i < spots.length; i++) {
+      var sp = spots[i];
+      var n = sp.k === 'room' ? 3 : (sp.k === 'balcony' ? 2 : 4);
+      for (var j = 0; j < n; j++) {
+        var sd = (seedBase * 2654435761) ^ ((i * 40503 + j * 7919) | 0);
+        var u = (hashU(sd) - 0.5) * 2, v = (hashU(sd ^ 0x51ab) - 0.5) * 2;
+        var lx = (sp.c[0] + u * sp.r[0]) * scale;
+        var lz = (sp.c[2] + v * sp.r[1]) * scale;
+        var ly = sp.c[1] * scale;
+        var wx = bx + lx * c - lz * s2;
+        var wz = bz + lx * s2 + lz * c;
+        var list = sp.k === 'room' ? PROPS_ROOM
+                 : (hashU(sd ^ 0x99) > 0.86 ? PROPS_ARMS : PROPS_ROOF);
+        propOn(list, sd, wx, by + ly, wz, hashU(sd ^ 0x77) * 6.283, 1);
+        /* a lamp burning on some terraces */
+        if (sp.k !== 'room' && j === 0 && hashU(sd ^ 0x1234) > 0.55) {
+          lamp(wx, by + ly + 0.9, wz, 0.85, false);
+        }
+      }
+    }
+  }
+
   /* ---------------------------------------------------------- the town */
   var TOWN = { x: 0, z: 0, y: 0, R: 118 };
 
@@ -478,10 +566,11 @@
       var sx = sgn * (GATE_HALF + 17);
       var steps = 19, rise = 13.5 / steps, run = 1.5;
       for (var i = 0; i < steps; i++) {
+        /* the lowest step stands furthest from the wall; you climb toward it */
         box(4.2, rise + 0.14, run + 0.12, sx, Y + rise / 2 + i * rise,
-            S - 10 - i * run, M.stone2, 0);
+            S - 12 - (steps - 1 - i) * run, M.stone2, 0);
       }
-      box(4.2, 0.9, 4.2, sx, Y + 13.5 - 0.45, S - 10 - steps * run - 1.8, M.stone2, 0);
+      box(4.2, 0.9, 4.4, sx, Y + 13.5 - 0.45, S - 12 + 2.2, M.stone2, 0);
     });
 
     /* torches along the rampart */
@@ -618,6 +707,7 @@
 
   /* the housing: real sculpted kasbah houses, with a few of our own that open */
   var BUILT = ['bh21','bh22','bh23','bh24','bh25','bh26','bh27','bh28','bh29','bh30'];
+  var HOUSE_SCALE = 1.38;
 
   function buildHouses() {
     /* nothing is built up front any more · the houses are made in Blender and
@@ -628,7 +718,7 @@
      packs: rows facing the lanes, backs close together. */
   function buildSculptedHouses() {
     var Y = TOWN.y, S = TOWNSQ, made = 0, idx = 0;
-    var LOT = 15.5, STREET = 11.0;
+    var LOT = 21.0, STREET = 13.5;
     var block = LOT * 2 + STREET;          /* two rows back to back, then a street */
 
     /* keep clear of the mosque, the well and the gate road */
@@ -650,11 +740,21 @@
           idx++;
           if (!MODELS[key]) continue;
           var j = ((idx * 37) % 9) / 9 - 0.5;
-          var g = placeBuilt(key, x + j * 1.6, Y, z + j * 1.2, facing + j * 0.10, 1.0);
+          var px = x + j * 1.6, pz = z + j * 1.2, prot = facing + j * 0.10;
+          var g = placeBuilt(key, px, Y, pz, prot, HOUSE_SCALE);
           if (g) {
             made++;
-            if (idx % 5 === 0) torch(x + 5.2, Y + 2.9, z + (facing ? -5.0 : 5.0), facing);
-            if (idx % 7 === 0) lamp(x - 4.6, Y + 3.3, z + (facing ? -4.4 : 4.4), 1.1, false);
+            dressBuilding(key, px, Y, pz, prot, HOUSE_SCALE, idx * 31 + 7);
+            if (idx % 4 === 0) torch(px + 6.4, Y + 2.9, pz + (facing ? -6.6 : 6.6), facing);
+            if (idx % 6 === 0) lamp(px - 5.8, Y + 3.3, pz + (facing ? -5.6 : 5.6), 1.0, false);
+            /* goods stacked against the house, out in the street */
+            for (var q = 0; q < 2; q++) {
+              var sd2 = (idx * 7919 + q * 104729) | 0;
+              if (hashU(sd2) < 0.45) continue;
+              var ax = px + (hashU(sd2 ^ 0x3) - 0.5) * 11;
+              var az = pz + (facing ? -1 : 1) * (7.6 + hashU(sd2 ^ 0x5) * 2.4);
+              propOn(PROPS_STREET, sd2, ax, Y, az, hashU(sd2 ^ 0x9) * 6.283, 1);
+            }
           }
         }
       }
@@ -1131,7 +1231,7 @@
   W.tick = function (W, dt, t) {
     for (var i = 0; i < winds.length; i++) winds[i].value = t;
     var cp = W.cam.position;
-    driveLights(t);
+    driveLights(t, dt);
     var pp = W.getPos();
     if (lawn && (Math.abs(pp.x - lawnAt.x) > 11 || Math.abs(pp.z - lawnAt.z) > 11)) refreshLawn(pp);
     var flameFrame = 1 - (Math.floor((t * 15) % 8) + 1) / 8;
@@ -1201,8 +1301,8 @@
       }
     }
 
-    Promise.all(BUILT.concat(WALL_KIT).map(loadCollision));
-    loadModels(BUILT.concat(WALL_KIT).concat(['mosque_orn',
+    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
+    loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(['mosque_orn',
       'palm', 'lantern', 'quran', 'mashaf', 'carpet', 'well', 'doors',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
