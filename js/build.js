@@ -92,7 +92,7 @@
     M.dark = new T.MeshStandardMaterial({ color: 0x241a12, roughness: 1 });
     M.metal = new T.MeshStandardMaterial({ color: 0x2a2118, roughness: 0.45, metalness: 0.7 });
     M.gold = new T.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.3, metalness: 0.9 });
-    M.win = new T.MeshBasicMaterial({ color: 0xffab52, toneMapped: false });
+    M.win = new T.MeshBasicMaterial({ color: 0xffc271, toneMapped: false });
     M.winOff = new T.MeshBasicMaterial({ color: 0x0a0b16 });
     M.floor = surf('t_floor', 0xb9a184, { nrm: 0.8 });
   }
@@ -184,17 +184,17 @@
   function fire(x, y, z, scale, power) {
     scale = scale || 1; power = power === undefined ? 1 : power;
     var tx = flameTex[fires.length % 3];
-    var m = new T.Mesh(new T.PlaneGeometry(0.5 * scale, 0.78 * scale),
+    var m = new T.Mesh(new T.PlaneGeometry(0.78 * scale, 1.24 * scale),
       new T.MeshBasicMaterial({ map: tx, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.96 }));
-    m.position.set(x, y + 0.36 * scale, z);
+    m.position.set(x, y + 0.56 * scale, z);
     W.scene.add(m);
 
-    var core = new T.Mesh(new T.PlaneGeometry(1.5 * scale, 1.5 * scale),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffc070, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.5 }));
-    core.position.set(x, y + 0.3 * scale, z);
+    var core = new T.Mesh(new T.PlaneGeometry(2.3 * scale, 2.3 * scale),
+      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffb154, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.78 }));
+    core.position.set(x, y + 0.45 * scale, z);
     W.scene.add(core);
 
-    var f = { m: m, core: core, base: 2.3 * power, reach: 26 * Math.sqrt(power),
+    var f = { m: m, core: core, base: 4.6 * power, reach: 34 * Math.sqrt(power),
               x: x, y: y + 0.55 * scale, z: z, col: 0xffa445,
               ph: Math.random() * 10, sc: scale, frame: 0, lit: 1 };
     fires.push(f);
@@ -203,11 +203,11 @@
   }
   /* a hanging lamp: warm pool of light that fades at its reach */
   function lamp(x, y, z, power, model) {
-    var g = new T.Mesh(new T.PlaneGeometry(1.05, 1.05),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.62 }));
+    var g = new T.Mesh(new T.PlaneGeometry(1.7, 1.7),
+      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.85 }));
     g.position.set(x, y, z);
     W.scene.add(g);
-    var e = { g: g, base: power || 1.5, reach: 22, x: x, y: y, z: z, col: 0xffb367,
+    var e = { g: g, base: (power || 1.5) * 2.1, reach: 28, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
     lamps.push(e);
     EMIT.push(e);
@@ -224,10 +224,10 @@
     var cup = new T.Mesh(new T.CylinderGeometry(0.13, 0.08, 0.2, 8), M.metal);
     cup.position.set(x, y + 0.44, z);
     W.scene.add(cup);
-    fire(x, y + 0.5, z, 0.95, 1.15);
-    var ray = new T.Mesh(new T.PlaneGeometry(2.5, 3.4),
-      new T.MeshBasicMaterial({ map: W.tex('assets/ray.png', true), color: 0xffbe72, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.2 }));
-    ray.position.set(x, y - 1.0, z);
+    fire(x, y + 0.52, z, 1.25, 1.5);
+    var ray = new T.Mesh(new T.PlaneGeometry(3.4, 4.6),
+      new T.MeshBasicMaterial({ map: W.tex('assets/ray.png', true), color: 0xffc57e, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.3 }));
+    ray.position.set(x, y - 1.4, z);
     ray.rotation.y = rot || 0;
     W.scene.add(ray);
   }
@@ -550,16 +550,26 @@
       torch(x + w / 2 + 0.55, Y + 2.7, z + d / 2 - 0.6, rot);
     });
 
-    /* the rest of the town is built from the sculpted houses */
+  }
+
+  /* the sculpted houses can only be planted once their files are here */
+  function buildSculptedHouses() {
+    var Y = TOWN.y;
     var keys = ['house_a', 'house_b', 'house_c', 'kasbah'];
+    var made = 0;
     HOUSE_SPOTS.forEach(function (s, i) {
       if (i % 6 === 0) return;                 /* leave room round our own */
       var key = keys[i % keys.length];
       if (!MODELS[key]) return;
       var hgt = 9 + (i % 4) * 2.6;
       var g = place(key, s[0], W.heightAt(s[0], s[1]), s[1], hgt, s[2] + (i % 3) * 1.1, true);
-      if (g && i % 3 === 0) lamp(s[0] + 2.4, Y + 2.6, s[1] + 2.4, 0.9, false);
+      if (g) {
+        made++;
+        if (i % 2 === 0) torch(s[0] + 3.0, Y + 2.8, s[1] + 3.0, s[2]);
+        if (i % 3 === 0) lamp(s[0] - 2.6, Y + 3.0, s[1] + 2.6, 1.1, false);
+      }
     });
+    if (!made) W.diag('no sculpted houses were placed');
   }
   /* protruding roof beams, the signature of the style */
   function beamRow2(x, z, w, d, h, rot, m) {
@@ -1127,6 +1137,7 @@
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
       'house_a', 'house_b', 'house_c', 'kasbah'], function () {
         /* things that need the models */
+        buildSculptedHouses();
         if (MODELS.well) place('well', 6, W.heightAt(6, 8), 8, 3.4, 0.4, true);
         lamp(6, TOWN.y + 3.4, 8, 1.3, false);
         if (MODELS.house_a) place('house_a', -86, W.heightAt(-86, -70), -70, 11, 0.6, true);

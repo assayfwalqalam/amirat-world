@@ -171,6 +171,7 @@
     clock = new THREE.Clock();
     W.scene = scene; W.cam = cam; W.renderer = renderer;
 
+    initPost();
     initSky();
     initGround();
     initWater();
@@ -179,6 +180,25 @@
     initPlayer();
     startLoop();
   };
+
+  /* ------------------------------------------------------------- bloom */
+  /* every flame, lamp and window blooms into the night, as real light does */
+  var composer = null;
+  function initPost() {
+    if (TIER < 1 || typeof THREE.EffectComposer !== 'function' || typeof THREE.UnrealBloomPass !== 'function') return;
+    try {
+      composer = new THREE.EffectComposer(renderer);
+      composer.addPass(new THREE.RenderPass(scene, cam));
+      var bloom = new THREE.UnrealBloomPass(
+        new THREE.Vector2(innerWidth, innerHeight),
+        TIER === 2 ? 0.72 : 0.5,   /* strength */
+        0.85,                       /* radius */
+        0.62                        /* threshold: only bright things glow */
+      );
+      composer.addPass(bloom);
+      W.bloom = bloom;
+    } catch (e) { composer = null; W.diag('bloom off: ' + e.message); }
+  }
 
   /* ---------------------------------------------------------------- tex */
   var texWaits = [];
@@ -753,7 +773,7 @@
     hbT += dt;
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
     step(dt);
-    renderer.render(scene, cam);
+    if (composer) composer.render(); else renderer.render(scene, cam);
     frames++;
     if (hbT > 1) {
       hbT = 0;
@@ -786,6 +806,7 @@
     cam.aspect = innerWidth / innerHeight;
     cam.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    if (composer) composer.setSize(innerWidth, innerHeight);
     wake();
   });
 })();
