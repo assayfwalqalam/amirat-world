@@ -729,16 +729,21 @@
   /* re-sow every loaded chunk once the models have arrived */
   W.refreshVeg = function () {
     chunks.forEach(function (rec) {
-      if (rec.veg) {
-        for (var i = 0; i < rec.veg.length; i++) {
-          var v = rec.veg[i];
-          scene.remove(v);
-          if (v.dispose) v.dispose();
-          if (v.userData && v.userData.col) W.removeBox(v.userData.col);
+      try {
+        if (rec.veg) {
+          for (var i = 0; i < rec.veg.length; i++) {
+            var v = rec.veg[i];
+            scene.remove(v);
+            if (v.dispose) v.dispose();
+            if (v.userData && v.userData.col) W.removeBox(v.userData.col);
+          }
+          rec.veg = null;
         }
-        rec.veg = null;
+        if (rec.seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH, rec.seg);
+      } catch (e) {
+        /* one chunk may fail; the world may not go bald for it */
+        W.diag && W.diag('veg: ' + e.message);
       }
-      if (rec.seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, rec.ci, rec.cj, CH, rec.seg);
     });
   };
 

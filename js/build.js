@@ -1520,6 +1520,15 @@
     return found;
   }
   var VEG = {};
+  /* ground-cover shading law: blades take the terrain's own light. Normals
+     all point up, so a tuft and the soil beneath it read as one surface. */
+  function normalsUp(g) {
+    var na = g.attributes.normal;
+    if (!na) return g;
+    for (var i = 0; i < na.count; i++) na.setXYZ(i, 0, 1, 0);
+    na.needsUpdate = true;
+    return g;
+  }
   function vegSource(key) {
     if (VEG[key]) return VEG[key];          /* never cache a miss */
     var src = MODELS[key];
@@ -1622,6 +1631,7 @@
     var ox = ci * CH, oz = cj * CH;
     var dummy = new T.Object3D();
 
+    var TINT_KEYS = { 'grass_a': 1, 'grass_b': 1, 'plant/tuft_1': 1, 'plant/tuft_2': 1, 'bush_dry': 1 };
     function sow(key, count, pick, scaleMin, scaleMax) {
       count = Math.round(count * (W.vegScale || 1));
       var src = vegSource(key);
@@ -1645,6 +1655,7 @@
       if (!n) { im.dispose(); return; }
       im.count = n;
       im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
       im.frustumCulled = true;
       W.scene.add(im);
       out.push(im);
@@ -1652,22 +1663,30 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xffffff);
+      var c1 = makeCard('assets/grass_card.png', 0.46, 0.26, 0xffffff);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
     }
     /* the tuft wears the ground's own colour: dry gold where the land is dry,
        meadow green where it is green, drifting in the same big patches */
-    var LT_DRY = [1.18, 0.98, 0.56], LT_GRN = [0.74, 0.84, 0.50];
+    /* the blade sprite is painted FROM the terrain sheet, so the tint only
+       repeats the shader's own modulation: green side (0.90,1.0,0.78) with
+       the big tone patches, dry side pulled to straw (1.30,1.06,0.60) */
     function landTint(x, z, g, sd) {
       var t = W.sstep(0.44, 0.76, g);
-      var patch = 0.78 + 0.5 * W.fbm(x * 0.0021 + 3.1, z * 0.0021 - 8.7, 2);
-      var j = 0.9 + hashU((sd ^ 0x51f) | 0) * 0.22;
+      var tone = 0.74 + 0.52 * W.fbm(x * 0.00072 + 0.37, z * 0.00072 + 0.11, 2);
+      var tone2 = 0.62 + 0.55 * W.fbm(x * 0.0172 + 0.2, z * 0.0172 + 0.7, 2);
+      var j = 0.92 + hashU((sd ^ 0x51f) | 0) * 0.16;
+      var gr = [0.90 * tone2, 1.00 * tone2, 0.78 * tone2];
+      var dr = [1.30 * 0.9, 1.06 * 0.9, 0.60 * 0.9];
+      /* the ground shader has its own night curve; the cards do not -- this
+         lift closes the measured 50% gap between fur and soil */
+      var L = 1.42 * tone * j;
       return [
-        (LT_DRY[0] + (LT_GRN[0] - LT_DRY[0]) * t) * patch * j,
-        (LT_DRY[1] + (LT_GRN[1] - LT_DRY[1]) * t) * patch * j,
-        (LT_DRY[2] + (LT_GRN[2] - LT_DRY[2]) * t) * patch * j
+        (dr[0] + (gr[0] - dr[0]) * t) * L,
+        (dr[1] + (gr[1] - dr[1]) * t) * L,
+        (dr[2] + (gr[2] - dr[2]) * t) * L
       ];
     }
     function sowReeds(geo, m, count) {
@@ -1708,7 +1727,7 @@
         if (hashU(sd ^ 0x3d7) > 0.12 + 0.88 * w.g) continue;
         if (W.flatAt(rx, rz) > 0.30 || W.roadAt(rx, rz) > 0.35) continue;
         var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.55 + 0.7 * w.g);
-        dummy.position.set(rx, h - 0.06, rz);
+        dummy.position.set(rx, h - 0.07, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
         dummy.scale.set(sc, sc, sc);
         dummy.updateMatrix();
@@ -1741,7 +1760,7 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(7000 * (0.40 + cb.grass) * (W.vegScale || 1)), 1.0, 2.1);
+    sowCards(cardGeo, cardMat, Math.round(9500 * (0.40 + cb.grass) * (W.vegScale || 1)), 0.8, 1.45);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
