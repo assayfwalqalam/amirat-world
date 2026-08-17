@@ -555,12 +555,21 @@
           'vec3 gA = texture2D(tGrass, wxz * 0.098).rgb;',
           'vec3 gA2 = texture2D(tGrass, wxz * -0.074 + vec2(0.53, 0.21)).rgb;',
           'gA = mix(gA, gA2, smoothstep(0.34, 0.66, macro2));',
+          'vec3 gA3 = texture2D(tGrass, wxz * 0.041 + vec2(0.83, 0.47)).rgb;',
+          'gA = mix(gA, gA3, smoothstep(0.30, 0.62, fine));',
           'vec3 gB = texture2D(tGrass, wxz * 0.0172 + vec2(0.2, 0.7)).rgb;',
-          'vec3 grass = gA * (0.60 + 0.85 * gB.g);',
-          'grass *= (0.86 + 0.30 * macro);',
+          /* the green meadow: tone drifts in big soft patches, never in tiles */
+          'vec3 grass = gA * (0.62 + 0.80 * gB.g);',
+          'grass *= vec3(0.90, 1.0, 0.78) * (0.74 + 0.52 * macro2);',
+          /* the dry grassland: the same sheet pulled to straw gold */
+          'vec3 dry = mix(vec3(dot(gA, vec3(0.33, 0.5, 0.17))), gA, 0.30);',
+          'dry *= vec3(1.30, 1.06, 0.60) * (0.80 + 0.45 * macro);',
           'float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);',
           'float wRock = clamp(vColor.g + smoothstep(0.30, 0.62, slope) - 0.10 * vColor.r, 0.0, 1.0);',
-          'vec3 col = mix(sand, grass, clamp(vColor.r * (0.85 + 0.3 * fine), 0.0, 1.0));',
+          /* one ramp for all land: bare sand only where nothing grows at all */
+          'float gW = clamp(vColor.r * (0.85 + 0.3 * fine), 0.0, 1.0);',
+          'vec3 col = mix(sand, dry, smoothstep(0.06, 0.38, gW));',
+          'col = mix(col, grass, smoothstep(0.44, 0.76, gW));',
           'col = mix(col, rock, wRock);',
           /* Scree on the steep faces and gravel in the hollows. Rock does not
              lie evenly: it collects where it falls and washes out of where
@@ -593,7 +602,7 @@
           '  vec3 fine2 = texture2D(tGrav, wxz * 3.1).rgb;',
           '  vec3 grit  = texture2D(tGrav, wxz * 1.35).rgb;',
           '  float g = grain.r * 0.48 + grit.r * 0.30 + fine2.r * 0.22;',
-          '  col *= mix(1.0, 0.72 + 0.56 * g, nearW * 0.5);',
+          '  col *= mix(1.0, 0.80 + 0.40 * g, nearW * 0.38);',
           '}',
           /* Moonlight is blue, and photographed daylight sand is far too bright
              to stand in for ground at night: left alone it reads as lit

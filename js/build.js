@@ -1436,8 +1436,9 @@
       }
       else if (st.k === 'spawn') {
         W.SPAWN = { x: x, z: z + 6 };
-        /* an ?at= inspection visit outranks the map's start point */
-        if (W.camState && !new URLSearchParams(location.search).get('at')) {
+        /* any inspection visit (?at= or ?shot=) outranks the map's start */
+        var qq = new URLSearchParams(location.search);
+        if (W.camState && !qq.get('at') && !qq.get('shot')) {
           W.camState({ x: x, y: W.heightAt(x, z + 6) + 1.9, z: z + 6 });
         }
       }
@@ -1651,10 +1652,23 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xd2dfbe);
+      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xffffff);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
+    }
+    /* the tuft wears the ground's own colour: dry gold where the land is dry,
+       meadow green where it is green, drifting in the same big patches */
+    var LT_DRY = [1.18, 0.98, 0.56], LT_GRN = [0.74, 0.84, 0.50];
+    function landTint(x, z, g, sd) {
+      var t = W.sstep(0.44, 0.76, g);
+      var patch = 0.78 + 0.5 * W.fbm(x * 0.0021 + 3.1, z * 0.0021 - 8.7, 2);
+      var j = 0.9 + hashU((sd ^ 0x51f) | 0) * 0.22;
+      return [
+        (LT_DRY[0] + (LT_GRN[0] - LT_DRY[0]) * t) * patch * j,
+        (LT_DRY[1] + (LT_GRN[1] - LT_DRY[1]) * t) * patch * j,
+        (LT_DRY[2] + (LT_GRN[2] - LT_DRY[2]) * t) * patch * j
+      ];
     }
     function sowReeds(geo, m, count) {
       if (!count) return;
@@ -1682,24 +1696,32 @@
     function sowCards(geo, m, count, sMin, sMax) {
       if (!count) return;
       var im = new T.InstancedMesh(geo, m, count);
+      var col3 = new T.Color();
       var n = 0;
       for (var i = 0; i < count; i++) {
         var sd = (ci * 73856093) ^ (cj * 19349663) ^ ((i + 5501) * 83492791);
         var rx = ox + hashU(sd) * CH, rz = oz + hashU(sd ^ 0x9e3779b9) * CH;
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
-        if (h < W.WATER_Y + 0.15 || w.g < 0.30 || w.r > 0.55) continue;
+        if (h < W.WATER_Y + 0.15 || w.g < 0.10 || w.r > 0.55) continue;
+        /* thin out with the growth, never a hard edge */
+        if (hashU(sd ^ 0x3d7) > 0.12 + 0.88 * w.g) continue;
         if (W.flatAt(rx, rz) > 0.30 || W.roadAt(rx, rz) > 0.35) continue;
-        var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.6 + 0.7 * w.g);
+        var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.55 + 0.7 * w.g);
         dummy.position.set(rx, h - 0.06, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
         dummy.scale.set(sc, sc, sc);
         dummy.updateMatrix();
-        im.setMatrixAt(n++, dummy.matrix);
+        im.setMatrixAt(n, dummy.matrix);
+        var lt = landTint(rx, rz, w.g, sd);
+        col3.setRGB(lt[0], lt[1], lt[2]);
+        im.setColorAt(n, col3);
+        n++;
       }
       if (!n) { im.dispose(); return; }
       im.count = n;
       im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
       W.scene.add(im);
       out.push(im);
     }
@@ -1707,7 +1729,7 @@
     var cb = W.biomeAt(ox + CH / 2, oz + CH / 2);
     var lush = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
-      return h > W.WATER_Y + 0.25 && w.g > 0.22 && w.r < 0.5 && W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
+      return h > W.WATER_Y + 0.25 && w.g > 0.45 && w.r < 0.5 && W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
     };
     var dry = function (x, z, h) {
       var w = W.groundWeights(x, z, h);
@@ -1719,7 +1741,7 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(5600 * (0.34 + cb.grass) * (W.vegScale || 1)), 1.0, 2.1);
+    sowCards(cardGeo, cardMat, Math.round(7000 * (0.40 + cb.grass) * (W.vegScale || 1)), 1.0, 2.1);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
@@ -1744,7 +1766,7 @@
           var fh2 = W.heightAt(fx2, fz2);
           if (!lush(fx2, fz2, fh2)) continue;
           var fg2 = place(fkey, fx2, fh2 - 0.05, fz2,
-                          1.1 + hashU((cs ^ (fi2 * 31)) | 0) * 0.8,
+                          0.72 + hashU((cs ^ (fi2 * 31)) | 0) * 0.45,
                           hashU((cs ^ (fi2 * 17)) | 0) * 6.283);
           if (fg2) out.push(fg2);
         }
