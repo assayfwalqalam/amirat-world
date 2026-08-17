@@ -20,6 +20,8 @@ GROUPS = [
     ("Vehicles",    [r"^veh/"]),
     ("Camp",        [r"^camp/"]),
     ("War",         [r"^war/"]),
+    ("Military structures", [r"^mil/"]),
+    ("Military vehicles",   [r"^veh/(humvee|landrover|technical|wreck_car|wreck_truck)$"]),
     ("Books",       [r"^book/"]),
     ("Fences",      [r"^fence/"]),
     ("Market stalls", [r"^stall/"]),

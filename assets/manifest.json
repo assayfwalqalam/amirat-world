@@ -228,6 +228,14 @@
    "name": "Vehicles",
    "items": [
     {
+     "k": "veh/humvee",
+     "n": "Humvee"
+    },
+    {
+     "k": "veh/landrover",
+     "n": "Landrover"
+    },
+    {
      "k": "veh/minibus",
      "n": "Minibus"
     },
@@ -236,8 +244,20 @@
      "n": "Pickup"
     },
     {
+     "k": "veh/technical",
+     "n": "Technical"
+    },
+    {
      "k": "veh/truck",
      "n": "Truck"
+    },
+    {
+     "k": "veh/wreck_car",
+     "n": "Wreck car"
+    },
+    {
+     "k": "veh/wreck_truck",
+     "n": "Wreck truck"
     }
    ]
   },
@@ -280,6 +300,47 @@
     {
      "k": "war/rpg",
      "n": "Rpg"
+    }
+   ]
+  },
+  {
+   "name": "Military structures",
+   "items": [
+    {
+     "k": "mil/boom_barrier",
+     "n": "Boom barrier"
+    },
+    {
+     "k": "mil/chainlink",
+     "n": "Chainlink"
+    },
+    {
+     "k": "mil/checkpoint",
+     "n": "Checkpoint"
+    },
+    {
+     "k": "mil/hesco",
+     "n": "Hesco"
+    },
+    {
+     "k": "mil/jersey",
+     "n": "Jersey"
+    },
+    {
+     "k": "mil/sandbags",
+     "n": "Sandbags"
+    },
+    {
+     "k": "mil/twall",
+     "n": "Twall"
+    },
+    {
+     "k": "mil/watchtower_metal",
+     "n": "Watchtower metal"
+    },
+    {
+     "k": "mil/watchtower_wood",
+     "n": "Watchtower wood"
     }
    ]
   },
