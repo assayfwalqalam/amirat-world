@@ -177,7 +177,11 @@
        BENCH   flat shelves cut into the slopes, which is what stops a hill
                looking like a heap of sand */
     var mountain = ridged(x * 0.00031 - 55.2, z * 0.00031 + 71.8, 4);
-    var mMask = sstep(0.52, 0.86, fbm(x * 0.00019 + 13.7, z * 0.00019 - 41.2, 3));
+    var mm0 = fbm(x * 0.00019 + 13.7, z * 0.00019 - 41.2, 3);
+    var mMask = sstep(0.52, 0.86, mm0);
+    /* the foothill skirt: mountains announce themselves long before the wall */
+    var skirt = sstep(0.40, 0.88, mm0);
+    h += skirt * skirt * 46;
     if (mMask > 0.004) {
       var m2 = ridged(x * 0.00082 + 9.4, z * 0.00082 - 3.1, 3);
       var peak = Math.pow(Math.max(0, mountain - 0.30) / 0.70, 1.55);
@@ -209,7 +213,10 @@
     var hill = fbm(x * 0.0021 - 12.5, z * 0.0021 + 8.8, 4);
     h += Math.pow(Math.max(0, hill), 1.9) * 165 * b.rock;
 
-    h += (fbm(x * 0.0065, z * 0.0065, 3) - 0.5) * 9 * b.grass;
+    /* the rolling ground: long soft swells everywhere the wall is not,
+       the way a meadow or a steppe actually lies */
+    h += (fbm(x * 0.0032 + 4.9, z * 0.0032 - 9.1, 3) - 0.5) * 26 * (1 - mMask);
+    h += (fbm(x * 0.0065, z * 0.0065, 3) - 0.5) * 15 * (1 - mMask * 0.7);
     h += (fbm(x * 0.021, z * 0.021, 2) - 0.5) * 2.2;
 
     var low = sstep(46, 5, h);
