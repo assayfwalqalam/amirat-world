@@ -40,6 +40,21 @@ drifts and rivers of bloom. Raise lushness and realistic-tree counts. Bring
 hills and mountains to the Bannerlord bar: rolling grass swells, real rock
 walls. Proof: same-angle side-by-side crops vs the reference screenshots.
 
+**Added by the owner — the war workshop (build now, deploy in Phase 6):**
+- Weapons in the Afghan Ursilat vein, Arma as inspiration, 90%: the AK
+  first, and its family — RPG, mortar, mounted turrets for vehicles.
+- More vehicles: British and American military types specifically, plus
+  damaged, ruined, unusable wrecks. 90%.
+- The enemy structures, started AND finished now: walls, sentry towers,
+  metal guard towers, barred fences and walls, the boom barrier that rises
+  for vehicles, checkpoints, camp and outpost pieces — the western-military-
+  in-an-Afghan-land look of that region's wars. Deep dive into Arma and the
+  Ursilat-style game modes for reference. 90%.
+- Freedom granted: any building, vehicle, weapon or prop may be added
+  unasked, so long as it passes the rule.
+- NOTHING is placed in the world yet — everything stands at ONE test site
+  only, until Phase 6.
+
 ### Phase 2 — The crown: hill, castle, gold domes
 Raise the great hill under the town. Build the castle above it in whiter
 ashlar: enormous walls, huge towers — fantasy-grade scale, dwarfing the
@@ -60,6 +75,12 @@ one brush pixel ≈ 100–200 m. Streaming keeps memory flat like Minecraft:
 only the near world exists; a far ring of simplified terrain carries the
 horizon. Performance proven on modest hardware before shipping.
 
+**Added by the owner: the sculpting table.** Beyond painting, a tool where
+he morphs and shapes the land HIMSELF in as much detail as he can — raising
+ridges, carving valleys, smoothing, flattening, pulling coastlines — with
+the finishing touches (erosion, detail, naturalness) applied automatically
+after his hand. Made amazing; this is his primary world-shaping instrument.
+
 ### Phase 4 — The living places
 Places that open and reward entering: palace halls, libraries, caves, special
 houses, islands, the insides of huge trees. Camps, ruins and watch-places
@@ -74,8 +95,9 @@ weapons — with glows and a real acquisition moment. Swimming and deep diving:
 corals, reefs, great shells holding pearls that serve one of the 'ulūm.
 
 ### Phase 6 — The sword
-Weapons with real feel (weapon-raised view, no hands shown), aim, recoil,
-ammunition. Destruction in honest stages: cracked walls, rubble, falling
+The Phase-1 war workshop deploys: weapons get real feel (weapon-raised view,
+no hands shown), aim, recoil, ammunition; the enemy structures spread from
+the test site into generated holds. Destruction in honest stages: cracked walls, rubble, falling
 chunks. Enemy holds generated across the wilds like Minecraft's outposts;
 occasional battles; loot on victory. **Gate: the owner's ruling on enemies
 and aniconism decides the form enemies take.**
