@@ -64,32 +64,41 @@ def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None):
     return (x, y, z), (dx, dy, dz)
 
 
+def card(at, size):
+    """One leaf-cluster card, freely tilted; the texture does the rest."""
+    bpy.ops.mesh.primitive_plane_add(size=1, location=at)
+    ob = bpy.context.active_object
+    ob.scale = (size, size, 1)
+    ob.rotation_euler = (random.uniform(0.7, 2.4),      # mostly upright-ish
+                         random.uniform(0, 6.283),
+                         random.uniform(0, 6.283))
+    bpy.ops.object.transform_apply(scale=True, rotation=True)
+    leaf.append(ob)
+    return ob
+
+
 def crown(at, r, squash=0.72, n=None):
-    """A cloud of leaf masses round a point."""
-    n = n or max(7, int(r * 9))
+    """A cloud of leaf cards round a point, the way the reference trees do it."""
+    n = n or max(9, int(r * 11))
     for _ in range(n):
         a = random.uniform(0, 6.283)
-        el = random.uniform(-0.4, 1.2)
-        rr = random.uniform(0, r * 0.62)
+        el = random.uniform(-0.35, 1.2)
+        rr = random.uniform(0, r * 0.72)
         cx = at[0] + math.cos(a) * math.cos(el) * rr
         cy = at[1] + math.sin(a) * math.cos(el) * rr
         cz = at[2] + math.sin(el) * rr * squash
-        cr = random.uniform(r * 0.3, r * 0.48)
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=cr, location=(cx, cy, cz),
-                                             segments=8, ring_count=5)
-        ob = bpy.context.active_object
-        for v in ob.data.vertices:
-            v.co.z *= squash
-            v.co.x += random.uniform(-cr * 0.22, cr * 0.22)
-            v.co.y += random.uniform(-cr * 0.22, cr * 0.22)
-            v.co.z += random.uniform(-cr * 0.18, cr * 0.18)
-        leaf.append(ob)
+        card((cx, cy, cz), random.uniform(r * 0.55, r * 0.95))
 
 
 GREEN = {
-    "olive": (0.20, 0.26, 0.15), "plane": (0.14, 0.26, 0.10),
-    "cypress": (0.08, 0.155, 0.085), "tamarisk": (0.20, 0.27, 0.155),
-    "fig": (0.115, 0.23, 0.09), "giant": (0.13, 0.245, 0.10),
+    "olive": (0.80, 0.86, 0.66), "plane": (0.82, 1.0, 0.72),
+    "cypress": (0.38, 0.52, 0.40), "tamarisk": (0.84, 0.95, 0.70),
+    "fig": (0.70, 0.95, 0.62), "giant": (0.78, 0.98, 0.70),
+}[KIND]
+LEAFTEX = {
+    "olive": "leafcard_fine.png", "tamarisk": "leafcard_fine.png",
+    "cypress": "leafcard_fine.png", "plane": "leafcard_broad.png",
+    "fig": "leafcard_broad2.png", "giant": "leafcard_broad.png",
 }[KIND]
 
 if KIND == "olive":
@@ -118,22 +127,14 @@ elif KIND == "cypress":
     H = random.uniform(7.0, 10.0)
     limb((0, 0, 0), (0, 0, 1), H * 0.3, 0.22, 0.12, crook=0.12)
     # the whole tree is one tall narrow flame of foliage
-    n = int(H * 3)
+    n = int(H * 6)
     for i in range(n):
         t = i / float(n)
         rr = (0.9 - 0.72 * t) * (1.0 + random.uniform(-0.14, 0.14))
         z = H * 0.14 + t * H * 0.86
         a = random.uniform(0, 6.283)
-        bpy.ops.mesh.primitive_uv_sphere_add(
-            radius=max(0.2, rr * 0.5),
-            location=(math.cos(a) * rr * 0.3, math.sin(a) * rr * 0.3, z),
-            segments=7, ring_count=5)
-        ob = bpy.context.active_object
-        for v in ob.data.vertices:
-            v.co.z *= 1.5
-            v.co.x += random.uniform(-0.08, 0.08)
-            v.co.y += random.uniform(-0.08, 0.08)
-        leaf.append(ob)
+        card((math.cos(a) * rr * 0.35, math.sin(a) * rr * 0.35, z),
+             random.uniform(0.7, 1.25) * (0.7 + rr * 0.5))
     rec((0, 0, H * 0.4), 0.35, 0.35, H * 0.4)
 
 elif KIND == "tamarisk":
@@ -199,17 +200,58 @@ def join_and_colour(objs, name, tint, jitter_amt):
     return ob
 
 
+def join_leaf_cards(objs, tint):
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    ob = bpy.context.active_object
+    ob.name = "leaf"
+    me = ob.data
+    while len(me.color_attributes):
+        me.color_attributes.remove(me.color_attributes[0])
+    col = me.color_attributes.new(name="ao", type='FLOAT_COLOR', domain='CORNER')
+    me.color_attributes.active_color = col
+    for poly in me.polygons:
+        g = 1.0 + random.uniform(-0.22, 0.22)
+        for li in poly.loop_indices:
+            col.data[li].color = (min(1.0, tint[0] * g), min(1.0, tint[1] * g),
+                                  min(1.0, tint[2] * g), 1.0)
+    m = bpy.data.materials.new("leafcards")
+    m.use_nodes = True
+    m.blend_method = 'CLIP'
+    m.alpha_threshold = 0.32
+    m.use_backface_culling = False
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = 0.9
+    path = os.path.abspath(os.path.join(ASSETS, "src", LEAFTEX))
+    img = bpy.data.images.load(path)
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    vcn = nt.nodes.new('ShaderNodeVertexColor')
+    vcn.layer_name = "ao"
+    mix = nt.nodes.new('ShaderNodeMixRGB')
+    mix.blend_type = 'MULTIPLY'
+    mix.inputs['Fac'].default_value = 1.0
+    nt.links.new(tn.outputs['Color'], mix.inputs['Color1'])
+    nt.links.new(vcn.outputs['Color'], mix.inputs['Color2'])
+    nt.links.new(mix.outputs['Color'], b.inputs['Base Color'])
+    nt.links.new(tn.outputs['Alpha'], b.inputs['Alpha'])
+    img.pack()
+    ob.data.materials.clear()
+    ob.data.materials.append(m)
+    return ob
+
+
 w_ob = join_and_colour(wood, "wood", (0.155, 0.115, 0.085), 0.12)
-l_ob = join_and_colour(leaf, "leaf", GREEN, 0.28)
+l_ob = join_leaf_cards(leaf, GREEN)
 bpy.ops.object.select_all(action='DESELECT')
 w_ob.select_set(True)
 l_ob.select_set(True)
-bpy.context.view_layer.objects.active = w_ob
-bpy.ops.object.join()
-ob = bpy.context.active_object
-ob.name = KIND
-
-mat = bpy.data.materials.new(KIND)
+# the wood keeps its own bark material; the join then carries both slots
+mat = bpy.data.materials.new("bark")
 mat.use_nodes = True
 nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
@@ -217,8 +259,13 @@ bsdf.inputs["Roughness"].default_value = 0.9
 vc = nt.nodes.new('ShaderNodeVertexColor')
 vc.layer_name = "ao"
 nt.links.new(vc.outputs['Color'], bsdf.inputs['Base Color'])
-ob.data.materials.clear()
-ob.data.materials.append(mat)
+w_ob.data.materials.clear()
+w_ob.data.materials.append(mat)
+
+bpy.context.view_layer.objects.active = w_ob
+bpy.ops.object.join()
+ob = bpy.context.active_object
+ob.name = KIND
 
 me = ob.data
 me.calc_loop_triangles()

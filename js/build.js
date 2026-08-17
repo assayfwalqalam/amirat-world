@@ -1359,6 +1359,91 @@
     return { x: cx, z: cz, y: Y };
   }
 
+  /* Places stamped on the hand-drawn map stand up in the world. */
+  function buildMapSites() {
+    var MP = W.MAPW;
+    if (!MP || !MP.sites) return;
+    MP.sites.forEach(function (st, si) {
+      var x = st.x, z = st.z;
+      var y = W.heightAt(x, z);
+      var sd = (si * 48611 + 977) | 0;
+      if (st.k === 'camp') { buildCamp(x, z, 3); }
+      else if (st.k === 'cave') { buildCave(x, z); }
+      else if (st.k === 'bustan') { buildBustan(x, z); }
+      else if (st.k === 'village') {
+        for (var i = 0; i < 6; i++) {
+          var a = i / 6 * 6.283 + hashU((sd ^ i) | 0);
+          var r = 14 + hashU((sd ^ (i * 31)) | 0) * 16;
+          var hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r;
+          var key = 'bh' + (21 + ((si * 7 + i) % 10));
+          if (MODELS[key]) {
+            var rot = hashU((sd ^ (i * 91)) | 0) * 6.283;
+            placeBuilt(key, hx, W.heightAt(hx, hz), hz, rot, 1);
+            dressBuilding(key, hx, W.heightAt(hx, hz), hz, rot, 1, sd ^ i);
+          }
+        }
+        torchPost(x, W.heightAt(x, z), z);
+      }
+      else if (st.k === 'mosque') {
+        var mk = 'mosque/small_' + (1 + (si % 2));
+        if (MODELS[mk]) placeBuilt(mk, x, y, z, hashU(sd) * 6.283, 1);
+      }
+      else if (st.k === 'tower') {
+        var tk = ['minaret/square', 'minaret/round', 'minaret/octagon'][si % 3];
+        if (MODELS[tk]) placeBuilt(tk, x, y, z, 0, 1);
+        torchPost(x + 3, W.heightAt(x + 3, z), z);
+      }
+      else if (st.k === 'ruin') {
+        for (var rn = 0; rn < 4; rn++) {
+          var ra = hashU((sd ^ (rn * 17)) | 0) * 6.283;
+          var rx = x + Math.cos(ra) * (3 + rn * 2.4), rz = z + Math.sin(ra) * (3 + rn * 2);
+          if (MODELS['bound/ruin']) placeBuilt('bound/ruin', rx, W.heightAt(rx, rz) - 0.1, rz, ra, 1);
+        }
+      }
+      else if (st.k === 'graves') {
+        for (var gn = 0; gn < 14; gn++) {
+          var gx = x + (gn % 5) * 2.2 - 4.4 + hashU((sd ^ gn) | 0) * 0.8;
+          var gz = z + Math.floor(gn / 5) * 2.8 - 2.8 + hashU((sd ^ (gn * 7)) | 0) * 0.8;
+          if (MODELS.rock_small) place('rock_small', gx, W.heightAt(gx, gz) - 0.05, gz,
+                                      0.5 + hashU((sd ^ (gn * 3)) | 0) * 0.3,
+                                      hashU((sd ^ (gn * 11)) | 0) * 6.283);
+        }
+      }
+      else if (st.k === 'quarry') {
+        for (var qn = 0; qn < 6; qn++) {
+          var qa = hashU((sd ^ (qn * 13)) | 0) * 6.283;
+          var qx = x + Math.cos(qa) * (4 + qn * 2), qz = z + Math.sin(qa) * (4 + qn * 1.6);
+          var qk = ['rock_a', 'rock_b', 'rock_c'][qn % 3];
+          if (MODELS[qk]) place(qk, qx, W.heightAt(qx, qz) - 0.8, qz, 4 + qn, qa);
+        }
+      }
+      else if (st.k === 'harbor') {
+        if (MODELS['fence/plank_1']) {
+          for (var hn = 0; hn < 3; hn++) {
+            placeBuilt('fence/plank_1', x + hn * 3.6, y + 0.1, z, 0, 1);
+          }
+        }
+        if (MODELS.p_crates) placeBuilt('p_crates', x + 2, y, z + 2, 0.6, 1);
+        if (MODELS.p_barrels) placeBuilt('p_barrels', x - 2, y, z + 1.5, 1.9, 1);
+      }
+      else if (st.k === 'spring') {
+        for (var sn = 0; sn < 8; sn++) {
+          var sa = sn / 8 * 6.283;
+          var sx2 = x + Math.cos(sa) * 3.2, sz2 = z + Math.sin(sa) * 3.2;
+          if (MODELS['plant/reed_1']) place('plant/reed_1', sx2, W.heightAt(sx2, sz2) - 0.1, sz2,
+                                            1.1 + hashU((sd ^ sn) | 0) * 0.5, sa);
+        }
+      }
+      else if (st.k === 'spawn') {
+        W.SPAWN = { x: x, z: z + 6 };
+        /* an ?at= inspection visit outranks the map's start point */
+        if (W.camState && !new URLSearchParams(location.search).get('at')) {
+          W.camState({ x: x, y: W.heightAt(x, z + 6) + 1.9, z: z + 6 });
+        }
+      }
+    });
+  }
+
   /* the bustan: a walled orchard. Giant trees five to seven storeys tall
      stand in loose rows over fig and olive, ringed by low mud walls. */
   function buildBustan(cx, cz) {
@@ -1640,10 +1725,30 @@
     if (near) {
       sow('grass_a', Math.round(100 * (0.35 + cb.grass)), lush, 0.8, 1.7);
       sow('grass_b', Math.round(112 * (0.3 + cb.grass)), lush, 0.7, 1.5);
-      sow('fl_orange', Math.round(150 * (0.2 + cb.grass)), lush, 0.9, 1.7);
-      sow('fl_yellow', Math.round(110 * (0.2 + cb.grass)), lush, 0.9, 1.7);
-      sow('fl_purple', Math.round(40 * (0.15 + cb.grass)), lush, 0.9, 1.6);
-      sow('fl_white', Math.round(16 * (0.15 + cb.grass)), lush, 0.9, 1.6);
+      /* flower meadows: a few strong clumps per chunk, each one colour,
+         so the bloom reads as a patch of colour from far off */
+      var FLK = ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white', 'fl_orange', 'fl_yellow'];
+      var nCl = Math.round((2 + 3 * cb.grass) * (W.vegScale || 1));
+      for (var fc = 0; fc < nCl; fc++) {
+        var cs = (ci * 48611 + cj * 75377 + fc * 30011) | 0;
+        var ccx = ox + hashU(cs) * CH, ccz = oz + hashU(cs ^ 0x77f) * CH;
+        var ch2 = W.heightAt(ccx, ccz);
+        if (!lush(ccx, ccz, ch2)) continue;
+        var fkey = FLK[Math.floor(hashU(cs ^ 0x1b3) * FLK.length) % FLK.length];
+        if (!MODELS[fkey]) continue;
+        var per = 16 + Math.floor(hashU(cs ^ 0x9e1) * 18);
+        for (var fi2 = 0; fi2 < per; fi2++) {
+          var fa = hashU((cs ^ (fi2 * 7919)) | 0) * 6.283;
+          var fr = Math.pow(hashU((cs ^ (fi2 * 104729)) | 0), 0.6) * 7.5;
+          var fx2 = ccx + Math.cos(fa) * fr, fz2 = ccz + Math.sin(fa) * fr;
+          var fh2 = W.heightAt(fx2, fz2);
+          if (!lush(fx2, fz2, fh2)) continue;
+          var fg2 = place(fkey, fx2, fh2 - 0.05, fz2,
+                          1.1 + hashU((cs ^ (fi2 * 31)) | 0) * 0.8,
+                          hashU((cs ^ (fi2 * 17)) | 0) * 6.283);
+          if (fg2) out.push(fg2);
+        }
+      }
     }
     sow('bush_dry', Math.round(24 * (1 - cb.grass)), dry, 0.8, 1.7);
     sow('rock_d', Math.round(9 * (0.3 + cb.rock)), stony, 0.8, 2.2);
@@ -1654,7 +1759,7 @@
       sow('plant/tuft_2', Math.round(32 * (0.3 + cb.grass)), lush, 0.9, 1.5);
       sow('plant/poppy_1', Math.round(11 * (0.2 + cb.grass)), lush, 0.9, 1.3);
       sow('plant/lavender_1', Math.round(9 * (0.2 + cb.grass)), lush, 0.9, 1.3);
-      sow('plant/shrub_1', Math.round(8 * (0.25 + cb.grass)), lush, 0.9, 1.5);
+      sow('plant/shrub_1', Math.round((8 + 26 * fMask) * (0.25 + cb.grass)), lush, 0.9, 1.5);
       sow('plant/blossom_1', Math.round(5 * (0.2 + cb.grass)), lush, 0.9, 1.4);
       sow('plant/thistle_1', Math.round(9 * (1 - cb.grass)), dry, 0.9, 1.3);
       sow('plant/aloe_1', Math.round(7 * (1 - cb.grass)), dry, 0.9, 1.3);
@@ -1674,7 +1779,15 @@
        of palms and planes is nothing that grows anywhere. */
     var zc = W.groundWeights(ox + CH / 2, oz + CH / 2, W.heightAt(ox + CH / 2, oz + CH / 2));
     var palmChunk = zc.w > 0.33;
-    var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (W.vegScale || 1)));
+    /* the light forests: big soft patches of woodland out in the country */
+    var fMask = W.sstep(0.58, 0.74, W.fbm((ox + CH / 2) * 0.00052 + 91.3,
+                                          (oz + CH / 2) * 0.00052 - 17.9, 3));
+    if (W.mapForest) fMask = Math.max(fMask, W.mapForest(ox + CH / 2, oz + CH / 2));
+    if (W.mapPalm && W.mapPalm(ox + CH / 2, oz + CH / 2) > 0.4) palmChunk = true;
+    var townD2 = Math.hypot(ox + CH / 2, oz + CH / 2);
+    if (townD2 < 210) fMask = 0;                    /* the town keeps its air */
+    var forest = !palmChunk && fMask > 0.02;
+    var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (1 + 5.5 * fMask) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -1691,7 +1804,7 @@
             key = 'palm'; sc = 8 + rng(tx, tz, 7) * 5;
           }
         }
-      } else if (w.g > 0.55 && own > 0.5) {
+      } else if (forest ? (w.g > 0.30) : (w.g > 0.55 && own > 0.5)) {
         var TS = ['tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
                   'tree/fig_1', 'tree/fig_2',
                   'tree/cypress_1', 'tree/cypress_2'];
@@ -1962,6 +2075,7 @@
         buildCave(-360, 250);
         buildOasis(300, 330);
         buildBustan(195, 245);
+        buildMapSites();
 
         if (W.refreshVeg) W.refreshVeg();
       });

@@ -105,6 +105,41 @@
     return { grass: g, rock: r };
   };
 
+  /* ------------------------------------------------ the hand-drawn map
+     If the map table sent a world (localStorage amirat_worldmap), its grids
+     steer the land: painted mountains rise, painted seas flood, painted
+     green grows, painted forests thicken, painted roads run. */
+  var MAPW = null;
+  try {
+    var mraw = localStorage.getItem('amirat_worldmap');
+    if (mraw) {
+      var mj = JSON.parse(mraw);
+      if (mj && mj.n && mj.elev) {
+        MAPW = { n: mj.n, world: mj.world || 4096, sites: mj.sites || [] };
+        ['elev', 'water', 'green', 'forest', 'palm', 'road'].forEach(function (k) {
+          MAPW[k] = new Float32Array(mj[k] || []);
+        });
+        W.MAPW = MAPW;
+      }
+    }
+  } catch (e) { MAPW = null; }
+
+  function mapAt(grid, x, z) {
+    if (!MAPW || !grid || !grid.length) return 0;
+    var n = MAPW.n;
+    var u = (x / MAPW.world + 0.5) * (n - 1);
+    var v = (z / MAPW.world + 0.5) * (n - 1);
+    if (u < 0 || v < 0 || u > n - 1 || v > n - 1) return grid === MAPW.elev ? 128 : 0;
+    var u0 = Math.floor(u), v0 = Math.floor(v);
+    var u1 = Math.min(n - 1, u0 + 1), v1 = Math.min(n - 1, v0 + 1);
+    var fu = u - u0, fv = v - v0;
+    var a = grid[v0 * n + u0] * (1 - fu) + grid[v0 * n + u1] * fu;
+    var b2 = grid[v1 * n + u0] * (1 - fu) + grid[v1 * n + u1] * fu;
+    return a * (1 - fv) + b2 * fv;
+  }
+  W.mapForest = MAPW ? function (x, z) { return mapAt(MAPW.forest, x, z) / 255; } : null;
+  W.mapPalm = MAPW ? function (x, z) { return mapAt(MAPW.palm, x, z) / 255; } : null;
+
   W.heightAt = function (x, z) {
     var b = W.biomeAt(x, z);
     /* the land rides above the water table · only carved basins flood */
@@ -194,6 +229,15 @@
       var d = Math.sqrt((x - f.x) * (x - f.x) + (z - f.z) * (z - f.z));
       h = lerp(f.y, h, sstep(f.r, f.r + f.b, d));
     }
+    if (MAPW) {
+      var me = mapAt(MAPW.elev, x, z);
+      h += (me - 128) * 0.55;
+      var mw = mapAt(MAPW.water, x, z);
+      if (mw > 110) {
+        var sink = WATER_Y - 1.6 - (mw - 110) * 0.045;
+        h = Math.min(h, sink);
+      }
+    }
     return h;
   };
 
@@ -228,6 +272,10 @@
       var v = 1 - sstep(r.w * 0.55, r.w, d);
       if (v > best) best = v;
     }
+    if (MAPW) {
+      var mr = mapAt(MAPW.road, x, z) / 255;
+      if (mr > best) best = Math.min(1, mr * 1.2);
+    }
     return best;
   };
 
@@ -236,6 +284,10 @@
     var b = W.biomeAt(x, z);
     var wet = sstep(26.0, 0.2, h - WATER_Y);
     var grass = Math.min(1, Math.max(b.grass, wet * 0.92));
+    if (MAPW) {
+      grass = Math.min(1, Math.max(grass, mapAt(MAPW.green, x, z) / 255));
+      wet = Math.min(1, Math.max(wet, mapAt(MAPW.palm, x, z) / 255 * 0.8));
+    }
     var rock = Math.min(1, b.rock * 0.9 + sstep(120, 190, h) * 0.7);
     /* ground that has been built on or walked over is packed earth, not meadow */
     var built = Math.max(W.flatAt ? W.flatAt(x, z) : 0, W.roadAt ? W.roadAt(x, z) : 0);
@@ -826,6 +878,17 @@
 
     /* fixed viewpoints, for inspecting the world */
     var q = new URLSearchParams(location.search);
+    var at = q.get('at');            /* ?at=x,z,h · stand anywhere, for inspection */
+    if (at) {
+      var pa = at.split(',').map(Number);
+      pos.set(pa[0] || 0, W.heightAt(pa[0] || 0, pa[1] || 0) + (pa[2] || PH), pa[1] || 0);
+      if (q.get('yaw')) yaw = Number(q.get('yaw'));
+      if (q.get('fly')) fly = true;
+      var so2 = document.getElementById('start');
+      if (so2) so2.classList.add('off');
+      W.SHOT_MODE = true;
+      W.setIdle(1e9);
+    }
     var shot = q.get('shot');
     if (shot) {
       var P = W.SHOTS && W.SHOTS[shot];

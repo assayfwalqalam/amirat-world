@@ -1,0 +1,436 @@
+<!doctype html>
+<!-- The map table: draw the world by hand and the game builds it.
+     Layers paint into hidden canvases; Send to game writes compact numeric
+     grids (128x128) + site markers to localStorage, which world.js reads. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>خريطة العالم · the map table</title>
+<style>
+  :root { --ink: #2a2118; --line: #c9b48f; --paper: #efe3c8; --panel: #1f1b16; --gold: #e0a13c; }
+  html, body { margin: 0; height: 100%; background: #171310; color: #e8dcc0;
+               font: 14px/1.45 Georgia, 'Times New Roman', serif; }
+  #wrap { display: flex; height: 100%; }
+  #side { width: 268px; background: var(--panel); padding: 12px; overflow-y: auto;
+          border-right: 1px solid #3a322a; flex: none; }
+  h1 { font-size: 17px; margin: 2px 0 10px; color: var(--gold); font-weight: normal; }
+  .grp { margin: 10px 0 4px; font-size: 11px; letter-spacing: 1.6px; color: #a8977a;
+         text-transform: uppercase; }
+  .brushes { display: flex; flex-wrap: wrap; gap: 4px; }
+  .br { padding: 5px 8px; border: 1px solid #3a322a; border-radius: 4px; cursor: pointer;
+        background: #241f19; font-size: 12.5px; user-select: none; }
+  .br .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+            margin-right: 5px; vertical-align: -1px; }
+  .br.on { border-color: var(--gold); background: #322a1e; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: none; width: 74px; font-size: 12.5px; color: #bfae8e; }
+  input[type=range] { flex: 1; }
+  button { background: #241f19; color: #e8dcc0; border: 1px solid #3a322a;
+           border-radius: 4px; padding: 6px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+  button:hover { border-color: var(--gold); }
+  button.primary { background: #3a2f1c; border-color: var(--gold); color: #f0d9a8; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  #stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+  #map { background: var(--paper); cursor: crosshair; border: 1px solid #3a322a;
+         image-rendering: auto; max-width: calc(100% - 32px); max-height: calc(100% - 32px); }
+  #hint { position: absolute; left: 16px; bottom: 10px; font-size: 12px; color: #a8977a; }
+  #scalebar { position: absolute; right: 20px; bottom: 12px; font-size: 12px; color: #6b5c44; }
+  .note { font-size: 11.5px; color: #8d7c60; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="side">
+    <h1>the map table</h1>
+    <div class="note">Draw the world. The middle circle is the town that already stands, for scale. Send it to the game when it pleases you.</div>
+
+    <div class="grp">water</div>
+    <div class="brushes" id="bWater"></div>
+    <div class="grp">the land</div>
+    <div class="brushes" id="bLand"></div>
+    <div class="grp">the green</div>
+    <div class="brushes" id="bGreen"></div>
+    <div class="grp">roads</div>
+    <div class="brushes" id="bRoad"></div>
+    <div class="grp">places (click to stamp)</div>
+    <div class="brushes" id="bSite"></div>
+    <div class="grp">tools</div>
+    <div class="brushes" id="bTool"></div>
+
+    <div class="row"><label>brush size</label><input id="size" type="range" min="4" max="80" value="26"></div>
+    <div class="row"><label>strength</label><input id="flow" type="range" min="20" max="100" value="100"></div>
+
+    <div class="btns">
+      <button id="undo">Undo</button>
+      <button id="clear">Clear all</button>
+      <button id="save">Save</button>
+      <button id="load">Load</button>
+    </div>
+    <div class="btns">
+      <button id="expo">Export file</button>
+      <button id="impo">Import file</button>
+      <input id="file" type="file" accept=".json" style="display:none">
+    </div>
+    <div class="btns">
+      <button id="send" class="primary">Send to game ▶</button>
+      <button id="unsend">Back to plain world</button>
+    </div>
+    <div class="note" id="status"></div>
+  </div>
+  <div id="stage">
+    <canvas id="map" width="768" height="768"></canvas>
+    <div id="hint">left-drag paint · right-drag erase · places: click to set, right-click near one to remove</div>
+    <div id="scalebar">one square = 32 m · the map is 4.1 km across</div>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var S = 768;                 /* painting resolution */
+  var WORLD = 4096;            /* metres across the whole map */
+  var TOWN_R = 132;            /* the standing town, for the scale circle */
+
+  /* hidden layers: each holds one meaning, greys 0..255 */
+  function layer() {
+    var c = document.createElement('canvas');
+    c.width = c.height = S;
+    var x = c.getContext('2d', { willReadFrequently: true });
+    x.fillStyle = '#000'; x.fillRect(0, 0, S, S);
+    return { c: c, x: x };
+  }
+  var L = {
+    elev: layer(),     /* 128 = plain · higher = hills/mountains · lower = basins */
+    water: layer(),    /* sea, lakes, rivers */
+    green: layer(),    /* lushness */
+    forest: layer(),   /* woodland patches */
+    palm: layer(),     /* palm groves */
+    road: layer()      /* tracks */
+  };
+  L.elev.x.fillStyle = 'rgb(128,128,128)'; L.elev.x.fillRect(0, 0, S, S);
+
+  var SITES = [];       /* {k, x, z} world metres */
+
+  /* ------------------------------------------------- the brush book */
+  var BR = [
+    { g: 'bWater', k: 'sea',      n: 'sea',          sw: '#27476b', layer: 'water', v: 255, also: { l: 'elev', v: 30 } },
+    { g: 'bWater', k: 'lake',     n: 'lake',         sw: '#3c6f9c', layer: 'water', v: 255, also: { l: 'elev', v: 78 } },
+    { g: 'bWater', k: 'river',    n: 'river',        sw: '#5b93c8', layer: 'water', v: 255, line: 1, also: { l: 'elev', v: 92 } },
+    { g: 'bWater', k: 'marsh',    n: 'marsh · reeds', sw: '#4e7a68', layer: 'water', v: 140, also: { l: 'green', v: 200 } },
+    { g: 'bLand', k: 'mount',     n: 'mountains',    sw: '#6e6258', layer: 'elev', v: 255 },
+    { g: 'bLand', k: 'hill',      n: 'hills',        sw: '#9b8768', layer: 'elev', v: 190 },
+    { g: 'bLand', k: 'plain',     n: 'plain',        sw: '#c9b48f', layer: 'elev', v: 128 },
+    { g: 'bLand', k: 'basin',     n: 'low basin',    sw: '#b0a48d', layer: 'elev', v: 100 },
+    { g: 'bLand', k: 'dunes',     n: 'dunes',        sw: '#d9c08c', layer: 'elev', v: 152 },
+    { g: 'bLand', k: 'salt',      n: 'salt flat',    sw: '#e6e0d2', layer: 'elev', v: 118, also: { l: 'green', v: 0 } },
+    { g: 'bGreen', k: 'lush',     n: 'oasis · lush', sw: '#5f8a45', layer: 'green', v: 255 },
+    { g: 'bGreen', k: 'forest',   n: 'light forest', sw: '#3d6136', layer: 'forest', v: 255, also: { l: 'green', v: 210 } },
+    { g: 'bGreen', k: 'palmy',    n: 'palm grove',   sw: '#4c7a52', layer: 'palm', v: 255, also: { l: 'green', v: 190 } },
+    { g: 'bGreen', k: 'fields',   n: 'fields',       sw: '#7a9a4e', layer: 'green', v: 170 },
+    { g: 'bRoad', k: 'road',      n: 'road · track', sw: '#8a6f4e', layer: 'road', v: 255, line: 1 },
+    { g: 'bSite', k: 'village',   n: 'village',      sw: '#c99a3c', site: 1 },
+    { g: 'bSite', k: 'mosque',    n: 'mosque',       sw: '#e0cfa0', site: 1 },
+    { g: 'bSite', k: 'bustan',    n: 'bustan',       sw: '#6f9a50', site: 1 },
+    { g: 'bSite', k: 'camp',      n: 'camp',         sw: '#a2836a', site: 1 },
+    { g: 'bSite', k: 'cave',      n: 'cave',         sw: '#5a5148', site: 1 },
+    { g: 'bSite', k: 'ruin',      n: 'ruin',         sw: '#8d8272', site: 1 },
+    { g: 'bSite', k: 'tower',     n: 'watchtower',   sw: '#b0a08a', site: 1 },
+    { g: 'bSite', k: 'harbor',    n: 'harbour',      sw: '#4e7a9c', site: 1 },
+    { g: 'bSite', k: 'quarry',    n: 'quarry',       sw: '#7c7468', site: 1 },
+    { g: 'bSite', k: 'spring',    n: 'spring',       sw: '#6fa5c8', site: 1 },
+    { g: 'bSite', k: 'graves',    n: 'graveyard',    sw: '#9a9284', site: 1 },
+    { g: 'bSite', k: 'spawn',     n: 'you start here', sw: '#e05c4f', site: 1 },
+    { g: 'bTool', k: 'erase',     n: 'eraser',       sw: '#111', erase: 1 },
+    { g: 'bTool', k: 'smooth',    n: 'soften',       sw: '#777', smooth: 1 }
+  ];
+  var cur = BR[10];   /* start on lush */
+
+  BR.forEach(function (b) {
+    var el = document.createElement('div');
+    el.className = 'br';
+    el.innerHTML = '<span class="sw" style="background:' + b.sw + '"></span>' + b.n;
+    el.onclick = function () {
+      document.querySelectorAll('.br.on').forEach(function (q) { q.classList.remove('on'); });
+      el.classList.add('on');
+      cur = b;
+    };
+    b.el = el;
+    document.getElementById(b.g).appendChild(el);
+  });
+  BR[10].el.classList.add('on');
+
+  /* --------------------------------------------------- undo history */
+  var HIST = [];
+  function snap() {
+    if (HIST.length > 24) HIST.shift();
+    var st = { sites: JSON.stringify(SITES) };
+    for (var k in L) st[k] = L[k].x.getImageData(0, 0, S, S);
+    HIST.push(st);
+  }
+  function undo() {
+    var st = HIST.pop();
+    if (!st) return;
+    SITES = JSON.parse(st.sites);
+    for (var k in L) L[k].x.putImageData(st[k], 0, 0);
+    draw();
+  }
+
+  /* --------------------------------------------------- painting */
+  var map = document.getElementById('map');
+  var ctx = map.getContext('2d');
+  var painting = false, erasing = false, last = null;
+
+  function evPos(e) {
+    var r = map.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * S / r.width, y: (e.clientY - r.top) * S / r.height };
+  }
+  function dab(p, b, erase) {
+    var sz = +document.getElementById('size').value;
+    var flow = +document.getElementById('flow').value / 100;
+    var tgt = L[b.layer];
+    var v = erase ? (b.layer === 'elev' ? 128 : 0) : b.v;
+    var g = tgt.x;
+    g.globalAlpha = flow;
+    g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')';
+    g.beginPath();
+    g.arc(p.x, p.y, (b.line ? sz * 0.35 : sz), 0, 6.283);
+    g.fill();
+    g.globalAlpha = 1;
+    if (b.also && !erase) {
+      var t2 = L[b.also.l], v2 = b.also.v;
+      t2.x.globalAlpha = flow * 0.9;
+      t2.x.fillStyle = 'rgb(' + v2 + ',' + v2 + ',' + v2 + ')';
+      t2.x.beginPath();
+      t2.x.arc(p.x, p.y, (b.line ? sz * 0.45 : sz * 1.05), 0, 6.283);
+      t2.x.fill();
+      t2.x.globalAlpha = 1;
+    }
+  }
+  function smoothAt(p) {
+    var sz = +document.getElementById('size').value;
+    ['elev', 'green', 'forest', 'water', 'palm'].forEach(function (k) {
+      var lx = L[k].x;
+      var x0 = Math.max(0, p.x - sz), y0 = Math.max(0, p.y - sz);
+      var w = Math.min(S - x0, sz * 2), h = Math.min(S - y0, sz * 2);
+      if (w < 4 || h < 4) return;
+      var im = lx.getImageData(x0, y0, w, h);
+      var sm = document.createElement('canvas');
+      sm.width = w; sm.height = h;
+      var sx = sm.getContext('2d');
+      sx.putImageData(im, 0, 0);
+      lx.save();
+      lx.beginPath();
+      lx.arc(p.x, p.y, sz, 0, 6.283);
+      lx.clip();
+      lx.filter = 'blur(4px)';
+      lx.drawImage(sm, x0, y0);
+      lx.restore();
+      lx.filter = 'none';
+    });
+  }
+  function toWorld(p) { return { x: (p.x / S - 0.5) * WORLD, z: (p.y / S - 0.5) * WORLD }; }
+
+  map.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  map.addEventListener('pointerdown', function (e) {
+    map.setPointerCapture(e.pointerId);
+    var p = evPos(e);
+    erasing = (e.button === 2) || cur.erase;
+    if (cur.site && !cur.erase) {
+      snap();
+      var w = toWorld(p);
+      if (e.button === 2) {         /* remove the nearest stamp */
+        var bi = -1, bd = 90 * 90;
+        SITES.forEach(function (s2, i) {
+          var d = (s2.x - w.x) * (s2.x - w.x) + (s2.z - w.z) * (s2.z - w.z);
+          if (d < bd) { bd = d; bi = i; }
+        });
+        if (bi >= 0) SITES.splice(bi, 1);
+      } else {
+        if (cur.k === 'spawn') SITES = SITES.filter(function (s2) { return s2.k !== 'spawn'; });
+        SITES.push({ k: cur.k, x: Math.round(w.x), z: Math.round(w.z) });
+      }
+      draw();
+      return;
+    }
+    snap();
+    painting = true;
+    last = p;
+    if (cur.smooth) smoothAt(p); else dab(p, cur, erasing);
+    draw();
+  });
+  map.addEventListener('pointermove', function (e) {
+    if (!painting) return;
+    var p = evPos(e);
+    /* stroke: dab along the segment so fast moves stay solid */
+    var dx = p.x - last.x, dy = p.y - last.y;
+    var n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 4));
+    for (var i = 1; i <= n; i++) {
+      var q = { x: last.x + dx * i / n, y: last.y + dy * i / n };
+      if (cur.smooth) smoothAt(q); else dab(q, cur, erasing);
+    }
+    last = p;
+    draw();
+  });
+  addEventListener('pointerup', function () { painting = false; });
+
+  /* --------------------------------------------------- the composite */
+  function draw() {
+    var w = ctx;
+    w.fillStyle = '#efe3c8';
+    w.fillRect(0, 0, S, S);
+    var e = L.elev.x.getImageData(0, 0, S, S).data;
+    var wa = L.water.x.getImageData(0, 0, S, S).data;
+    var g = L.green.x.getImageData(0, 0, S, S).data;
+    var f = L.forest.x.getImageData(0, 0, S, S).data;
+    var pm = L.palm.x.getImageData(0, 0, S, S).data;
+    var rd = L.road.x.getImageData(0, 0, S, S).data;
+    var out = w.createImageData(S, S);
+    var o = out.data;
+    for (var i = 0; i < S * S; i++) {
+      var k4 = i * 4;
+      var ev = e[k4], wv = wa[k4], gv = g[k4], fv = f[k4], pv = pm[k4], rv = rd[k4];
+      var r, gg, b;
+      /* land base by height */
+      if (ev <= 118) { r = 205; gg = 190; b = 160; }
+      else if (ev < 140) { r = 224; gg = 208; b = 172; }
+      else if (ev < 205) { r = 188; gg = 166; b = 128; }
+      else { r = 132; gg = 120; b = 108; }
+      if (ev > 235) { r = 158; gg = 152; b = 148; }         /* high rock */
+      /* green over it */
+      if (gv > 30) {
+        var gm = gv / 255;
+        r = r * (1 - gm * 0.75) + 108 * gm * 0.75;
+        gg = gg * (1 - gm * 0.55) + 148 * gm * 0.55;
+        b = b * (1 - gm * 0.8) + 74 * gm * 0.8;
+      }
+      if (fv > 60) { r = r * 0.55 + 38 * 0.45; gg = gg * 0.6 + 84 * 0.4; b = b * 0.55 + 40 * 0.45; }
+      if (pv > 60) { r = r * 0.6 + 56 * 0.4; gg = gg * 0.65 + 108 * 0.35; b = b * 0.6 + 62 * 0.4; }
+      /* water on top */
+      if (wv > 200) { r = 47; gg = 82; b = 122; }
+      else if (wv > 90) { r = r * 0.45 + 62 * 0.55; gg = gg * 0.5 + 96 * 0.5; b = b * 0.45 + 122 * 0.55; }
+      if (rv > 90) { r = 128; gg = 100; b = 70; }
+      o[k4] = r; o[k4 + 1] = gg; o[k4 + 2] = b; o[k4 + 3] = 255;
+    }
+    w.putImageData(out, 0, 0);
+    /* the grid, faint */
+    w.strokeStyle = 'rgba(60,45,25,0.10)';
+    w.lineWidth = 1;
+    for (var gx = 0; gx <= S; gx += S / 32) {
+      w.beginPath(); w.moveTo(gx, 0); w.lineTo(gx, S); w.stroke();
+      w.beginPath(); w.moveTo(0, gx); w.lineTo(S, gx); w.stroke();
+    }
+    /* the standing town, for scale */
+    var tr = TOWN_R / WORLD * S;
+    w.strokeStyle = 'rgba(90,60,20,0.6)';
+    w.setLineDash([4, 3]);
+    w.beginPath(); w.arc(S / 2, S / 2, tr, 0, 6.283); w.stroke();
+    w.setLineDash([]);
+    w.fillStyle = 'rgba(90,60,20,0.8)';
+    w.font = '11px Georgia';
+    w.fillText('the town', S / 2 - 22, S / 2 - tr - 4);
+    /* sites */
+    SITES.forEach(function (s2) {
+      var px = (s2.x / WORLD + 0.5) * S, py = (s2.z / WORLD + 0.5) * S;
+      var b2 = BR.find(function (q) { return q.k === s2.k; });
+      w.fillStyle = b2 ? b2.sw : '#c99a3c';
+      w.beginPath(); w.arc(px, py, 5, 0, 6.283); w.fill();
+      w.strokeStyle = '#241f19'; w.lineWidth = 1.5; w.stroke();
+      w.fillStyle = '#241f19';
+      w.font = '10px Georgia';
+      w.fillText(b2 ? b2.n.split(' ')[0] : s2.k, px + 7, py + 3);
+    });
+  }
+
+  /* ------------------------------------------------ save · load · send */
+  function packLayer(lay, n) {
+    /* downsample to n x n plain numbers */
+    var sm = document.createElement('canvas');
+    sm.width = sm.height = n;
+    var sx = sm.getContext('2d');
+    sx.drawImage(lay.c, 0, 0, n, n);
+    var d = sx.getImageData(0, 0, n, n).data;
+    var out = new Array(n * n);
+    for (var i = 0; i < n * n; i++) out[i] = d[i * 4];
+    return out;
+  }
+  function fullState() {
+    var st = { v: 1, world: WORLD, sites: SITES, layers: {} };
+    for (var k in L) st.layers[k] = L[k].c.toDataURL('image/png');
+    return st;
+  }
+  function restore(st) {
+    SITES = st.sites || [];
+    var keys = Object.keys(L), left = keys.length;
+    keys.forEach(function (k) {
+      var img = new Image();
+      img.onload = function () {
+        L[k].x.clearRect(0, 0, S, S);
+        L[k].x.drawImage(img, 0, 0, S, S);
+        if (--left === 0) draw();
+      };
+      img.onerror = function () { if (--left === 0) draw(); };
+      img.src = (st.layers && st.layers[k]) || '';
+    });
+  }
+  function status(t) { document.getElementById('status').textContent = t; }
+
+  document.getElementById('undo').onclick = undo;
+  document.getElementById('clear').onclick = function () {
+    snap();
+    for (var k in L) {
+      L[k].x.fillStyle = (k === 'elev') ? 'rgb(128,128,128)' : '#000';
+      L[k].x.fillRect(0, 0, S, S);
+    }
+    SITES = [];
+    draw();
+  };
+  document.getElementById('save').onclick = function () {
+    localStorage.setItem('amirat_mapdraft', JSON.stringify(fullState()));
+    status('draft saved in this browser');
+  };
+  document.getElementById('load').onclick = function () {
+    var st = localStorage.getItem('amirat_mapdraft');
+    if (!st) { status('no saved draft'); return; }
+    restore(JSON.parse(st));
+    status('draft loaded');
+  };
+  document.getElementById('expo').onclick = function () {
+    var a = document.createElement('a');
+    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(fullState()));
+    a.download = 'worldmap.json';
+    a.click();
+  };
+  document.getElementById('impo').onclick = function () { document.getElementById('file').click(); };
+  document.getElementById('file').addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { restore(JSON.parse(rd.result)); status('imported'); };
+    rd.readAsText(f);
+  });
+  document.getElementById('send').onclick = function () {
+    var N = 128;
+    var pack = {
+      v: 1, world: WORLD, n: N, sites: SITES,
+      elev: packLayer(L.elev, N),
+      water: packLayer(L.water, N),
+      green: packLayer(L.green, N),
+      forest: packLayer(L.forest, N),
+      palm: packLayer(L.palm, N),
+      road: packLayer(L.road, N)
+    };
+    localStorage.setItem('amirat_worldmap', JSON.stringify(pack));
+    localStorage.setItem('amirat_mapdraft', JSON.stringify(fullState()));
+    status('sent · open the game and the land will follow your map');
+  };
+  document.getElementById('unsend').onclick = function () {
+    localStorage.removeItem('amirat_worldmap');
+    status('the game is back on its own land');
+  };
+
+  var draft = localStorage.getItem('amirat_mapdraft');
+  if (draft) { try { restore(JSON.parse(draft)); status('draft loaded'); } catch (e) { draw(); } }
+  else draw();
+})();
+</script>
+</body>
+</html>
