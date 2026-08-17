@@ -1445,6 +1445,66 @@
     });
   }
 
+  /* The war workshop's proving ground: one arranged outpost far out in the
+     flat desert, shown only under ?site=1, so none of it touches the world
+     until it is deployed for real. Objects only -- never crew. */
+  function buildTestSite() {
+    var SITE = ['war/ak', 'war/rpg', 'war/mortar', 'war/dshk',
+                'mil/hesco', 'mil/sandbags', 'mil/twall', 'mil/jersey',
+                'mil/chainlink', 'mil/boom_barrier', 'mil/checkpoint',
+                'mil/watchtower_wood', 'mil/watchtower_metal',
+                'veh/humvee', 'veh/landrover', 'veh/technical',
+                'veh/wreck_car', 'veh/wreck_truck'];
+    var CX = 800, CZ = -800;
+    Promise.all(SITE.map(loadCollision));
+    loadModels(SITE, function () {
+      var Y = function (x, z) { return W.heightAt(x, z); };
+      /* a lit standard so the site is findable at night */
+      torchPost(CX, Y(CX, CZ), CZ);
+      lamp(CX, Y(CX, CZ) + 4, CZ, 2.0);
+      /* the perimeter: a line of hescos, then T-walls, with a gate */
+      for (var i = 0; i < 5; i++) {
+        var hx = CX - 24 + i * 10;
+        if (i !== 2) placeBuilt('mil/hesco', hx, Y(hx, CZ - 20), CZ - 20, 0, 1);
+      }
+      for (var t = 0; t < 4; t++) {
+        var tx = CX - 18 + t * 12;
+        placeBuilt('mil/twall', tx, Y(tx, CZ + 20), CZ + 20, Math.PI / 2, 1);
+      }
+      /* the gate: boom barrier + checkpoint + two jerseys */
+      placeBuilt('mil/boom_barrier', CX - 4, Y(CX - 4, CZ - 20), CZ - 20, 0, 1);
+      placeBuilt('mil/checkpoint', CX + 4, Y(CX + 4, CZ - 24), CZ - 24, Math.PI, 1);
+      placeBuilt('mil/jersey', CX - 6, Y(CX - 6, CZ - 16), CZ - 16, 0.3, 1);
+      placeBuilt('mil/jersey', CX + 6, Y(CX + 6, CZ - 16), CZ - 16, -0.3, 1);
+      /* the towers at two corners */
+      placeBuilt('mil/watchtower_wood', CX - 26, Y(CX - 26, CZ - 22), CZ - 22, 0.6, 1);
+      placeBuilt('mil/watchtower_metal', CX + 26, Y(CX + 26, CZ - 22), CZ - 22, -0.6, 1);
+      /* sandbag positions and a chainlink run inside */
+      placeBuilt('mil/sandbags', CX - 14, Y(CX - 14, CZ + 4), CZ + 4, 0.2, 1);
+      placeBuilt('mil/sandbags', CX + 12, Y(CX + 12, CZ + 6), CZ + 6, -0.4, 1);
+      for (var f = 0; f < 3; f++) {
+        placeBuilt('mil/chainlink', CX - 30, Y(CX - 30, CZ - 6 + f * 2.5), CZ - 6 + f * 2.5, Math.PI / 2, 1);
+      }
+      /* the motor pool: the vehicles parked in a row inside the wire */
+      var veh = ['veh/humvee', 'veh/landrover', 'veh/technical', 'veh/wreck_car', 'veh/wreck_truck'];
+      for (var v = 0; v < veh.length; v++) {
+        var vx = CX - 20 + v * 10;
+        placeBuilt(veh[v], vx, Y(vx, CZ), CZ, Math.PI * 0.5 + (v % 2) * 0.1, 1);
+      }
+      /* the weapons on a display line, raised on low blocks, lit */
+      var wpn = ['war/ak', 'war/rpg', 'war/dshk', 'war/mortar'];
+      for (var w = 0; w < wpn.length; w++) {
+        var wx = CX - 6 + w * 4;
+        var wz = CZ + 12;
+        box(1.6, 0.5, 0.7, wx, Y(wx, wz) + 0.35, wz, M.stone2, 0);   // a stand
+        placeBuilt(wpn[w], wx, Y(wx, wz) + 0.75, wz, 0, wpn[w] === 'war/mortar' ? 1 : 1.6);
+      }
+      lamp(CX, Y(CX, CZ + 12) + 2.4, CZ + 12, 1.4);
+      W.SITE = { x: CX, z: CZ, y: Y(CX, CZ) };
+      W.diag('');
+    });
+  }
+
   /* the bustan: a walled orchard. Giant trees five to seven storeys tall
      stand in loose rows over fig and olive, ringed by low mud walls. */
   function buildBustan(cx, cz) {
@@ -2130,7 +2190,8 @@
       '11': { x: 6, z: 34, yaw: 0.0, pitch: -0.06, h: 2.3 },      /* the well market  */
       '12': { x: 0, z: TOWNSQ - 6, yaw: 0.0, pitch: -0.04, h: 2.5 }, /* inside the gate */
       '13': { x: 58, z: -32, yaw: 3.02, pitch: -0.04, h: 2.3 },   /* the east square  */
-      '14': { x: 0, z: 470, yaw: 0.0, pitch: -0.10, h: 120, fly: true } /* the oasis from above */
+      '14': { x: 0, z: 470, yaw: 0.0, pitch: -0.10, h: 120, fly: true }, /* the oasis from above */
+      '15': { x: 800, z: -770, yaw: 3.14159, pitch: -0.04, h: 2.4 }  /* the war test site */
     };
 
     buildTown();
@@ -2199,6 +2260,7 @@
         buildOasis(300, 330);
         buildBustan(195, 245);
         buildMapSites();
+        if (new URLSearchParams(location.search).get('site')) buildTestSite();
 
         if (W.refreshVeg) W.refreshVeg();
       });
