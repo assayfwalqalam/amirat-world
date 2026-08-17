@@ -142,6 +142,14 @@
     {
      "k": "m_mosque",
      "n": "Mosque"
+    },
+    {
+     "k": "mosque/small_1",
+     "n": "Small 1"
+    },
+    {
+     "k": "mosque/small_2",
+     "n": "Small 2"
     }
    ]
   },
@@ -163,6 +171,106 @@
     {
      "k": "w_tower_big",
      "n": "Tower big"
+    }
+   ]
+  },
+  {
+   "name": "Minarets",
+   "items": [
+    {
+     "k": "minaret/octagon",
+     "n": "Octagon"
+    },
+    {
+     "k": "minaret/round",
+     "n": "Round"
+    },
+    {
+     "k": "minaret/square",
+     "n": "Square"
+    }
+   ]
+  },
+  {
+   "name": "Boundary walls",
+   "items": [
+    {
+     "k": "bound/corner",
+     "n": "Corner"
+    },
+    {
+     "k": "bound/end",
+     "n": "End"
+    },
+    {
+     "k": "bound/gateposts",
+     "n": "Gateposts"
+    },
+    {
+     "k": "bound/high",
+     "n": "High"
+    },
+    {
+     "k": "bound/low",
+     "n": "Low"
+    },
+    {
+     "k": "bound/mid",
+     "n": "Mid"
+    },
+    {
+     "k": "bound/ruin",
+     "n": "Ruin"
+    }
+   ]
+  },
+  {
+   "name": "Vehicles",
+   "items": [
+    {
+     "k": "veh/minibus",
+     "n": "Minibus"
+    },
+    {
+     "k": "veh/pickup",
+     "n": "Pickup"
+    },
+    {
+     "k": "veh/truck",
+     "n": "Truck"
+    }
+   ]
+  },
+  {
+   "name": "Books",
+   "items": [
+    {
+     "k": "book/case",
+     "n": "Case"
+    },
+    {
+     "k": "book/laid",
+     "n": "Laid"
+    },
+    {
+     "k": "book/open",
+     "n": "Open"
+    },
+    {
+     "k": "book/pair",
+     "n": "Pair"
+    },
+    {
+     "k": "book/row",
+     "n": "Row"
+    },
+    {
+     "k": "book/shelfrow",
+     "n": "Shelfrow"
+    },
+    {
+     "k": "book/stack",
+     "n": "Stack"
     }
    ]
   },
@@ -196,6 +304,14 @@
     {
      "k": "fence/picket",
      "n": "Picket"
+    },
+    {
+     "k": "fence/plank",
+     "n": "Plank"
+    },
+    {
+     "k": "fence/plankgate",
+     "n": "Plankgate"
     },
     {
      "k": "fence/post",
@@ -552,6 +668,46 @@
     {
      "k": "palm",
      "n": "Palm"
+    },
+    {
+     "k": "tree/cypress_1",
+     "n": "Cypress 1"
+    },
+    {
+     "k": "tree/cypress_2",
+     "n": "Cypress 2"
+    },
+    {
+     "k": "tree/fig_1",
+     "n": "Fig 1"
+    },
+    {
+     "k": "tree/fig_2",
+     "n": "Fig 2"
+    },
+    {
+     "k": "tree/olive_1",
+     "n": "Olive 1"
+    },
+    {
+     "k": "tree/olive_2",
+     "n": "Olive 2"
+    },
+    {
+     "k": "tree/plane_1",
+     "n": "Plane 1"
+    },
+    {
+     "k": "tree/plane_2",
+     "n": "Plane 2"
+    },
+    {
+     "k": "tree/tamarisk_1",
+     "n": "Tamarisk 1"
+    },
+    {
+     "k": "tree/tamarisk_2",
+     "n": "Tamarisk 2"
     },
     {
      "k": "tree_anc",

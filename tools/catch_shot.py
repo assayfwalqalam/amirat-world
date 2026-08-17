@@ -12,12 +12,13 @@ From the page:
 import base64
 import os
 import re
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Catch(BaseHTTPRequestHandler):
+    timeout = 20   # a dead connection may not freeze the server
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "*")
@@ -61,4 +62,4 @@ class Catch(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print("catching frames on http://localhost:8899", flush=True)
-    HTTPServer(("127.0.0.1", 8899), Catch).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", 8899), Catch).serve_forever()

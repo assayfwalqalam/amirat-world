@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Single-asset inspector. ?m=tree/olive_1 loads assets/models/tree/olive_1.glb,
+     frames it from three angles, and POSTs the shots to the catch server.
+     Local harness only; not part of the game. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>asset view</title>
+<style>html,body{margin:0;height:100%;background:#202024;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<script src="js/three.min.js"></script>
+<script src="js/GLTFLoader.js"></script>
+<script>
+var q = new URLSearchParams(location.search);
+var KEY = q.get('m') || 'p_pot';
+/* fixed size: the pane may be hidden, where innerWidth reads 0 */
+var VW = 1280, VH = 760;
+var renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(VW, VH);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fa7c4);
+var camera = new THREE.PerspectiveCamera(46, VW / VH, 0.05, 500);
+
+var sun = new THREE.DirectionalLight(0xffe2c0, 2.1);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbdd0e8, 0x6b5a41, 0.75));
+
+var R = 6, CTR = new THREE.Vector3(), ready = false;
+new THREE.GLTFLoader().load('assets/models/' + KEY + '.glb', function (g) {
+  var root = g.scene;
+  root.traverse(function (o) {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = true;
+      if (o.material && o.material.map) o.material.map.anisotropy = 8;
+    }
+  });
+  scene.add(root);
+  var bb = new THREE.Box3().setFromObject(root);
+  bb.getCenter(CTR);
+  var sz = bb.getSize(new THREE.Vector3());
+  R = Math.max(sz.x, sz.y, sz.z);
+  var d = 30 * R;
+  sun.position.set(CTR.x + R * 1.6, CTR.y + R * 1.9, CTR.z - R * 1.2);
+  sun.target.position.copy(CTR); scene.add(sun.target);
+  sun.shadow.camera.left = -R * 1.6; sun.shadow.camera.right = R * 1.6;
+  sun.shadow.camera.top = R * 1.6; sun.shadow.camera.bottom = -R * 1.6;
+  sun.shadow.camera.far = R * 8;
+  var ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(R * 12, R * 12),
+    new THREE.MeshStandardMaterial({ color: 0x8a7357, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = bb.min.y;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  ready = true;
+  document.title = 'loaded';
+});
+
+/* place camera at an angle a (deg), elevation e (0..1), zoom z (mult) */
+window.look = function (a, e, z) {
+  a = a * Math.PI / 180;
+  var rr = R * (z || 1.55);
+  camera.position.set(CTR.x + Math.cos(a) * rr, CTR.y + R * (e === undefined ? 0.45 : e), CTR.z + Math.sin(a) * rr);
+  camera.lookAt(CTR);
+  renderer.render(scene, camera);
+  return renderer.domElement.toDataURL('image/png');
+};
+window.isReady = function () { return ready; };
+(function loop() { requestAnimationFrame(loop); if (ready) renderer.render(scene, camera); })();
+</script>
+</body>
+</html>

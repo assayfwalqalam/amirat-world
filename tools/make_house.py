@@ -384,7 +384,14 @@ house.data.materials.clear()
 house.data.materials.append(mat)
 
 # about two buildings in five wear the banded pakhsa wall
-tex_name = "t_adobe2_d.jpg" if ((SEED * 2654435761) % 100) < 40 else "t_adobe_d.jpg"
+_w = (SEED * 2654435761) % 100
+# all six walls he approved: plain 24, banded 24, light 12, dark 14, darkdom 12, mix 14
+if _w < 24:   tex_name = "t_adobe_d.jpg"
+elif _w < 48: tex_name = "t_adobe2_d.jpg"
+elif _w < 60: tex_name = "t_adobe3_d.jpg"
+elif _w < 74: tex_name = "t_adobe4_d.jpg"
+elif _w < 86: tex_name = "t_adobe5_d.jpg"
+else:         tex_name = "t_adobe6_d.jpg"
 tex_path = os.path.abspath(os.path.join(ASSETS, tex_name))
 if not os.path.exists(tex_path):
     tex_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_d.jpg"))

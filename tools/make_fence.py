@@ -241,6 +241,47 @@ elif STYLE == "gate":
         for frac in (0.18, 0.94):
             lash((sx * gw / 2, 0.04, H * frac), 0.08)
 
+elif STYLE == "plank":
+    # rough sawn planks nailed across posts, gaps and slipped boards included
+    H = random.uniform(1.15, 1.45)
+    for i in range(3):
+        stake(-RUN / 2 + i * (RUN / 2), 0, H + 0.1, 0.08)
+    n = int(H / 0.24)
+    for i in range(n):
+        z = 0.14 + i * (H - 0.16) / n
+        if random.random() < 0.08:
+            continue                              # a board gone
+        drop = random.uniform(-0.03, 0.03)
+        lean = random.uniform(-0.02, 0.02)
+        bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0.05, z + drop))
+        b = bpy.context.active_object
+        b.scale = ((RUN + 0.2) / 2, 0.016, random.uniform(0.085, 0.115))
+        b.rotation_euler = (0, lean, random.uniform(-0.008, 0.008))
+        bpy.ops.object.transform_apply(scale=True, rotation=True)
+        parts.append(b)
+    rec((0, 0, H / 2), RUN / 2, 0.1, H / 2)
+
+elif STYLE == "plankgate":
+    H = random.uniform(1.2, 1.45)
+    for sx in (-1, 1):
+        stake(sx * RUN / 2, 0, H + 0.35, 0.1)
+        rec((sx * RUN / 2, 0, (H + 0.35) / 2), 0.13, 0.13, (H + 0.35) / 2)
+    gw = RUN - 0.5
+    for i in range(4):
+        z = 0.16 + i * (H - 0.2) / 4
+        bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0.04, z))
+        b = bpy.context.active_object
+        b.scale = (gw / 2, 0.015, 0.1)
+        b.rotation_euler = (0, random.uniform(-0.015, 0.015), 0)
+        bpy.ops.object.transform_apply(scale=True, rotation=True)
+        parts.append(b)
+    bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0.07, H * 0.55))
+    d2 = bpy.context.active_object
+    d2.scale = (0.05, 0.014, H * 0.44)
+    d2.rotation_euler = (0, math.atan2(gw, H * 0.8), 0)
+    bpy.ops.object.transform_apply(scale=True, rotation=True)
+    parts.append(d2)
+
 elif STYLE == "low":
     H = random.uniform(0.4, 0.55)
     n = int(RUN / 0.16)
@@ -293,6 +334,7 @@ TINT = {
     "post":    (0.21, 0.15, 0.10),
     "gate":    (0.14, 0.10, 0.075),
     "low":     (0.28, 0.20, 0.13),
+    "plank":   (0.42, 0.38, 0.33), "plankgate": (0.40, 0.36, 0.31),
     "brace":   (0.17, 0.12, 0.085),
 }.get(STYLE, (0.22, 0.16, 0.11))
 
@@ -302,7 +344,8 @@ nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 bsdf.inputs["Roughness"].default_value = 0.94
-tex_path = os.path.abspath(os.path.join(ASSETS, "t_wood_d.jpg"))
+tex_choice = "t_plank_d.jpg" if STYLE in ("plank", "plankgate") else "t_wood_d.jpg"
+tex_path = os.path.abspath(os.path.join(ASSETS, tex_choice))
 tn = None
 if os.path.exists(tex_path):
     img = bpy.data.images.load(tex_path)

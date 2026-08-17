@@ -660,11 +660,12 @@
     for (var i = 0; i < spots.length; i++) {
       var sp = spots[i];
       if (sp.k === 'door') {
-        /* a leaf on its hinge, so the doorway can actually be opened */
+        /* a leaf on its hinge, turned to the face it was exported on */
         var hx = (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
         var hz = (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
+        var face = brot + ((sp.f || 0) * Math.PI / 180);
         door(bx + hx, by + sp.c[1] * scale, bz + hz,
-             sp.r[0] * scale * 0.97, sp.r[1] * scale * 0.97, brot, M.wood);
+             sp.r[0] * scale * 0.97, sp.r[1] * scale * 0.97, face);
         continue;
       }
       var n = sp.k === 'room' ? 3 : (sp.k === 'balcony' ? 2 : 4);
@@ -1551,6 +1552,25 @@
     }
     sow('bush_dry', Math.round(14 * (1 - cb.grass)), dry, 0.8, 1.7);
     sow('rock_d', Math.round(6 * (0.3 + cb.rock)), stony, 0.8, 2.2);
+    if (near) {
+      sow('plant/tuft_1', Math.round(24 * (0.3 + cb.grass)), lush, 0.9, 1.4);
+      sow('plant/tuft_2', Math.round(20 * (0.3 + cb.grass)), lush, 0.9, 1.4);
+      sow('plant/poppy_1', Math.round(11 * (0.2 + cb.grass)), lush, 0.9, 1.3);
+      sow('plant/lavender_1', Math.round(9 * (0.2 + cb.grass)), lush, 0.9, 1.3);
+      sow('plant/shrub_1', Math.round(8 * (0.25 + cb.grass)), lush, 0.9, 1.5);
+      sow('plant/blossom_1', Math.round(5 * (0.2 + cb.grass)), lush, 0.9, 1.4);
+      sow('plant/thistle_1', Math.round(9 * (1 - cb.grass)), dry, 0.9, 1.3);
+      sow('plant/aloe_1', Math.round(7 * (1 - cb.grass)), dry, 0.9, 1.3);
+      sow('plant/agave_1', Math.round(6 * (1 - cb.grass)), dry, 0.9, 1.4);
+      sow('plant/succulent_1', Math.round(6 * (0.3 + cb.rock)), stony, 0.9, 1.3);
+      /* the green bank: reed and papyrus stand where the water table shows */
+      var bank = function (x, z, h) {
+        return h > W.WATER_Y - 0.15 && h < W.WATER_Y + 1.7 &&
+               W.flatAt(x, z) < 0.3 && W.roadAt(x, z) < 0.35;
+      };
+      sow('plant/papyrus_1', 12, bank, 0.9, 1.3);
+      sow('plant/reed_1', 16, bank, 0.9, 1.4);
+    }
 
     /* trees and palms, sparse and deliberate */
     var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (W.vegScale || 1)));
@@ -1560,7 +1580,14 @@
       var w = W.groundWeights(tx, tz, th);
       if (th < W.WATER_Y + 0.5) continue;
       var key = null, sc = 1;
-      if (w.g > 0.62) {
+      var own = rng(tx, tz, 2.7);        /* the Blender-grown trees, true size */
+      if (w.g > 0.55 && own > 0.5) {
+        var TS = ['tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
+                  'tree/fig_1', 'tree/fig_2', 'tree/tamarisk_1', 'tree/tamarisk_2',
+                  'tree/cypress_1', 'tree/cypress_2'];
+        key = TS[Math.floor(rng(tx, tz, 3.3) * TS.length) % TS.length];
+        sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
+      } else if (w.g > 0.62) {
         var pickN = rng(tx, tz, 1.1);
         key = pickN > 0.86 ? 'tree_anc' : (pickN > 0.5 ? 'tree_big_a' : 'tree_big_b');
         sc = pickN > 0.86 ? (24 + rng(tx, tz, 4) * 14) : (11 + rng(tx, tz, 2) * 8);
@@ -1572,7 +1599,11 @@
       if (!key || !MODELS[key]) continue;
       var g = place(key, tx, th - 0.25, tz, sc, rng(tx, tz, 9) * 6.283);
       if (g) {
-        g.userData.col = W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
+        if (key.indexOf('tree/') === 0) {
+          g.userData.col = W.addBox(tx, th + 2.2, tz, 0.38, 2.2, 0.38, 0);
+        } else {
+          g.userData.col = W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
+        }
         out.push(g);
       }
     }
@@ -1690,8 +1721,13 @@
     Promise.all(keys.map(loadCollision));
     loadModels(keys, function () {
       var made = 0;
-      list.forEach(function (o) {
-        if (placeBuilt(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, o.s === undefined ? 1 : o.s)) made++;
+      list.forEach(function (o, idx) {
+        var sc = o.s === undefined ? 1 : o.s;
+        if (placeBuilt(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc)) {
+          made++;
+          /* doors, torch brackets and props hang off the exported spots */
+          dressBuilding(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc, idx * 131 + 7);
+        }
       });
       W.diag('');
       W.LAYOUT_COUNT = made;
@@ -1781,7 +1817,13 @@
       'palm', 'lantern', 'mashaf', 'carpet',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
-      'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small']), function () {
+      'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
+      'tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
+      'tree/cypress_1', 'tree/cypress_2', 'tree/tamarisk_1', 'tree/tamarisk_2',
+      'tree/fig_1', 'tree/fig_2',
+      'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
+      'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
+      'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1']), function () {
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();

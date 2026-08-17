@@ -39,6 +39,45 @@ scene.cycles.device = 'CPU'
 scene.cycles.samples = 10
 
 COLLIDERS = []
+
+
+def lathe(profile, segments=26, thickness=0.015):
+    """Spin a silhouette round the axis: how every vessel is actually made."""
+    import bmesh
+    me = bpy.data.meshes.new("v")
+    ob = bpy.data.objects.new("v", me)
+    bpy.context.collection.objects.link(ob)
+    bm = bmesh.new()
+    vs = [bm.verts.new((r, 0.0, z)) for r, z in profile]
+    for i in range(len(vs) - 1):
+        bm.edges.new((vs[i], vs[i + 1]))
+    bmesh.ops.spin(bm, geom=bm.verts[:] + bm.edges[:], axis=(0, 0, 1),
+                   cent=(0, 0, 0), dvec=(0, 0, 0), angle=math.pi * 2,
+                   steps=segments, use_merge=True)
+    bm.to_mesh(me)
+    bm.free()
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    sol = ob.modifiers.new("s", 'SOLIDIFY')
+    sol.thickness = thickness
+    sol.offset = 1.0
+    bpy.ops.object.modifier_apply(modifier=sol.name)
+    for v in ob.data.vertices:                      # wheel rings and lean
+        r = math.hypot(v.co.x, v.co.y)
+        if r > 0.002:
+            ring = math.sin(v.co.z * 55.0) * 0.003
+            k = (r + ring) / r
+            v.co.x *= k
+            v.co.y *= k
+        v.co.x += 0.008 * v.co.z
+    bpy.ops.object.shade_smooth()
+    es = ob.modifiers.new("es", 'EDGE_SPLIT')
+    es.use_edge_angle = True
+    es.split_angle = math.radians(50)
+    bpy.ops.object.modifier_apply(modifier=es.name)
+    parts.append(ob)
+    return ob
+
 parts = []
 
 
@@ -127,15 +166,14 @@ elif KIND == "crates":
             box(s + 0.03, 0.05, 0.07, (sp[0], sp[1] + e * s / 2, sp[2] + s * 0.46), sp[3])
 
 elif KIND == "jars":
-    for i, sp in enumerate([(0, 0), (0.44, 0.14), (0.2, 0.46), (-0.36, 0.3)]):
-        h = random.uniform(0.5, 0.82)
-        r = h * 0.34
-        body = sphere(r, (sp[0], sp[1], r * 0.92))
-        body.scale = (1, 1, 1.25)
-        bpy.ops.object.transform_apply(scale=True)
-        cyl(r * 0.42, r * 0.5, h * 0.34, (sp[0], sp[1], r * 1.7), verts=12)
-        torus(r * 0.5, 0.022, (sp[0], sp[1], r * 1.85), seg=12)
-        rec((sp[0], sp[1], h * 0.4), r, r, h * 0.4)
+    for k, (jx, jy, js) in enumerate([(-0.22, 0.05, 1.0), (0.16, -0.08, 0.85), (0.05, 0.22, 0.7)]):
+        ob2 = lathe([(0.08 * js, 0.0), (0.14 * js, 0.03), (0.19 * js, 0.14),
+                     (0.21 * js, 0.3), (0.17 * js, 0.44), (0.11 * js, 0.52),
+                     (0.13 * js, 0.58), (0.12 * js, 0.60)])
+        ob2.location = (jx, jy, 0)
+        ob2.rotation_euler = (random.uniform(-0.05, 0.05), random.uniform(-0.05, 0.05), 0)
+        bpy.ops.object.transform_apply(location=True, rotation=True)
+    rec((0, 0, 0.3), 0.4, 0.4, 0.3)
 
 elif KIND == "sacks":
     for i, sp in enumerate([(0, 0, 0), (0.5, 0.16, 0), (0.24, 0.5, 0), (0.3, 0.24, 0.44)]):
@@ -292,12 +330,12 @@ elif KIND == "inkset":
     box(0.24, 0.17, 0.01, (-0.14, 0.02, 0.005), 0.2)
 
 elif KIND == "bowl":
-    b = sphere(0.16, (0, 0, 0.1))
-    b.scale = (1, 1, 0.6)
-    bpy.ops.object.transform_apply(scale=True)
+    lathe([(0.05, 0.0), (0.10, 0.015), (0.17, 0.06), (0.22, 0.13), (0.24, 0.19),
+           (0.24, 0.21)], thickness=0.012)
     for i in range(5):
         a = i * 1.3
-        sphere(0.055, (math.cos(a) * 0.06, math.sin(a) * 0.06, 0.15))
+        b2 = sphere(0.05, (math.cos(a) * 0.06, math.sin(a) * 0.06, 0.20))
+        jitter(b2, 0.008)
 
 elif KIND == "bread":
     for i in range(3):
@@ -307,16 +345,14 @@ elif KIND == "bread":
         jitter(b, 0.012)
 
 elif KIND == "pot":
-    b = sphere(0.28, (0, 0, 0.26))
-    b.scale = (1, 1, 1.1)
-    bpy.ops.object.transform_apply(scale=True)
-    cyl(0.13, 0.16, 0.12, (0, 0, 0.52), verts=12)
-    torus(0.16, 0.02, (0, 0, 0.56), seg=12)
-    rec((0, 0, 0.28), 0.28, 0.28, 0.3)
+    lathe([(0.10, 0.0), (0.17, 0.04), (0.24, 0.16), (0.26, 0.32), (0.22, 0.46),
+           (0.15, 0.55), (0.13, 0.62), (0.16, 0.67), (0.15, 0.70)])
+    rec((0, 0, 0.35), 0.24, 0.24, 0.35)
 
 elif KIND == "plantpot":
-    cyl(0.19, 0.24, 0.34, (0, 0, 0.17), verts=14, collide=True)
-    torus(0.24, 0.022, (0, 0, 0.33), seg=14)
+    lathe([(0.11, 0.0), (0.14, 0.02), (0.17, 0.14), (0.20, 0.30), (0.21, 0.34)],
+          thickness=0.014)
+    rec((0, 0, 0.17), 0.19, 0.19, 0.17)
     for i in range(9):
         a = random.uniform(0, 6.28)
         lean = random.uniform(0.2, 0.5)
@@ -372,22 +408,24 @@ elif KIND == "brazier":
     torus(0.24, 0.022, (0, 0, 0.7), seg=14)
 
 elif KIND == "oillamp":
-    b = sphere(0.1, (0, 0, 0.07))
-    b.scale = (1.3, 1.0, 0.6)
-    bpy.ops.object.transform_apply(scale=True)
-    cyl(0.03, 0.012, 0.16, (0.13, 0, 0.09), rot=(0, 1.2, 0), verts=8)
-    torus(0.05, 0.012, (-0.12, 0, 0.09), seg=10)
+    lathe([(0.035, 0.0), (0.075, 0.012), (0.10, 0.04), (0.085, 0.075),
+           (0.045, 0.095), (0.055, 0.11)], thickness=0.008, segments=14)
+    cyl(0.02, 0.014, 0.1, (0.1, 0, 0.055), rot=(0, 1.25, 0), verts=8)
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.045, minor_radius=0.009,
+                                     location=(-0.1, 0, 0.06),
+                                     major_segments=10, minor_segments=5,
+                                     rotation=(0, 0.5, 0))
+    parts.append(bpy.context.active_object)
 
 elif KIND == "waterjug":
-    b = sphere(0.2, (0, 0, 0.2))
-    b.scale = (1, 1, 1.25)
-    bpy.ops.object.transform_apply(scale=True)
-    cyl(0.06, 0.08, 0.22, (0, 0, 0.44), verts=12)
-    torus(0.09, 0.016, (0, 0, 0.53), seg=12)
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.1, minor_radius=0.016, location=(0.19, 0, 0.34),
-                                     major_segments=10, minor_segments=5, rotation=(0, 0.4, 0))
-    parts.append(bpy.context.active_object)
-    rec((0, 0, 0.25), 0.2, 0.2, 0.28)
+    lathe([(0.07, 0.0), (0.13, 0.03), (0.19, 0.14), (0.21, 0.30), (0.17, 0.44),
+           (0.09, 0.54), (0.065, 0.66), (0.09, 0.73), (0.085, 0.76)])
+    for i in range(8):
+        t = i / 7.0
+        z = 0.30 + t * 0.36
+        rr = 0.14 + math.sin(t * math.pi) * 0.07
+        cyl(0.016, 0.016, 0.05, (rr, 0, z), rot=(0.5, 0, 0), verts=6)
+    rec((0, 0, 0.38), 0.2, 0.2, 0.38)
 
 elif KIND == "ropecoil":
     for i in range(5):
@@ -533,6 +571,37 @@ bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 bsdf.inputs["Roughness"].default_value = 0.95
 ob.data.materials.clear()
 ob.data.materials.append(mat)
+
+
+# ------------------------------------------------- photographed materials
+WOODY = {"barrel", "barrels", "crates", "cart", "bench", "stall", "table",
+         "stool", "chest", "broom", "swordrack", "spears", "bowarrows",
+         "firewood", "ladder", "pergola", "torchpost"}
+CLAYY = {"pot", "jars", "waterjug", "oillamp", "bowl", "plantpot", "bread"}
+CLOTHY = {"awning", "carpet", "cushions", "sacks"}
+
+tex_file = None
+gain = 2.4
+if KIND in WOODY:
+    tex_file = "t_wood_d.jpg"
+elif KIND in CLAYY:
+    tex_file = "t_clay_d.jpg"
+elif KIND in CLOTHY:
+    tex_file = "t_cloth_d.jpg"
+
+if tex_file is not None:
+    path = os.path.abspath(os.path.join(ASSETS, tex_file))
+    if os.path.exists(path):
+        img = bpy.data.images.load(path)
+        tn2 = nt.nodes.new('ShaderNodeTexImage')
+        tn2.image = img
+        mix2 = nt.nodes.new('ShaderNodeMixRGB')
+        mix2.blend_type = 'MULTIPLY'
+        mix2.inputs['Fac'].default_value = 1.0
+        mix2.inputs['Color2'].default_value = (TINT[0] * gain, TINT[1] * gain, TINT[2] * gain, 1)
+        nt.links.new(tn2.outputs['Color'], mix2.inputs['Color1'])
+        nt.links.new(mix2.outputs['Color'], bsdf.inputs['Base Color'])
+        img.pack()
 
 while len(ob.data.color_attributes):
     ob.data.color_attributes.remove(ob.data.color_attributes[0])

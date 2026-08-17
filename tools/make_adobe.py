@@ -145,12 +145,15 @@ def build(mode, out_name):
                               lowf.load(), out.load(), bands.load())
     bk, cs = brick.load(), courses.load()
     cr, hl, zn = core.load(), halo_src.load(), zone_src.load()
+    patch2 = lowf.rotate(90).filter(ImageFilter.GaussianBlur(26))
+    pz2 = patch2.load()
     for y in range(S):
         for x in range(S):
             m = 1.0 + (mp[x, y] - bp[x, y]) / 128.0 * 0.26 + (lp[x, y] - 128) / 128.0 * 0.14
             m *= bx[x, y] / 128.0
             if mode == "mix":
-                m *= 1.0 + 0.10 * math.sin(zn[x, y] * 0.049 + x * 0.0009)
+                z2 = pz2[x, y]
+                m *= 1.0 + 0.11 * sstep(150, 168, z2) - 0.12 * sstep(106, 88, z2)
             z = zn[x, y]
             m *= 1.0 + 0.07 * sstep(138, 148, z) - 0.09 * sstep(120, 110, z)
 
@@ -191,6 +194,12 @@ def build(mode, out_name):
             px = op[x, y]
             op[x, y] = tuple(max(0, min(255, int(
                 ((px[c] - sm[c]) * min(1.35, rsd[c] / ssd[c]) + rm[c]) * 1.12))) for c in range(3))
+
+    # the palette match pulls every variant to the same mean, which erased
+    # the very difference these moods exist for -- restore it afterwards
+    GAIN = {"light": 1.07, "dark": 0.80, "darkdom": 0.87}.get(mode, 1.0)
+    if GAIN != 1.0:
+        out = out.point(lambda v: max(0, min(255, int(v * GAIN))))
 
     # the sharpening he asked for
     out = out.filter(ImageFilter.UnsharpMask(radius=2.4, percent=95, threshold=2))
