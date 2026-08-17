@@ -385,6 +385,10 @@
      "n": "Cart"
     },
     {
+     "k": "p_pergola",
+     "n": "Pergola"
+    },
+    {
      "k": "p_stall",
      "n": "Stall"
     }
@@ -473,6 +477,10 @@
     {
      "k": "p_inkset",
      "n": "Inkset"
+    },
+    {
+     "k": "p_ladder",
+     "n": "Ladder"
     },
     {
      "k": "p_oillamp",

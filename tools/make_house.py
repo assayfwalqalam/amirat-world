@@ -383,7 +383,11 @@ bsdf.inputs["Roughness"].default_value = 1.0
 house.data.materials.clear()
 house.data.materials.append(mat)
 
-tex_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_d.jpg"))
+# about two buildings in five wear the banded pakhsa wall
+tex_name = "t_adobe2_d.jpg" if ((SEED * 2654435761) % 100) < 40 else "t_adobe_d.jpg"
+tex_path = os.path.abspath(os.path.join(ASSETS, tex_name))
+if not os.path.exists(tex_path):
+    tex_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_d.jpg"))
 img_tex = None
 if os.path.exists(tex_path):
     img_tex = bpy.data.images.load(tex_path)
