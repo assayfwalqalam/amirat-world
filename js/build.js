@@ -7,6 +7,7 @@
   var T = THREE;
 
   var MODELS = {};
+  W.MODELS = MODELS;             /* the card baker and the probes read these */
   var doors = [];
   W.DOORS = doors;               /* the shot harness reads these */
   var fires = [];
@@ -1692,6 +1693,12 @@
       map: W.tex(texUrl, true), alphaTest: 0.45, side: T.DoubleSide,
       roughness: 1, metalness: 0, color: tint
     }), '0.075');
+    /* a blade under moonlight is not black; give the sheet a little light of
+       its own or the whole meadow reads as tar. It must be GREEN light: a
+       white lift on a straw-coloured sheet turns the field to gold crumbs. */
+    m.emissive = new T.Color(0x667a4a);
+    m.emissiveMap = m.map;
+    m.emissiveIntensity = 0.16;
     return { g: geo, m: m };
   }
   function mergeGeos(list) {
@@ -1714,6 +1721,59 @@
     out.setIndex(idx);
     return out;
   }
+
+  /* ---------------------------------------------------------- the bloom
+     Every flower file we bought is a PACK: five to eight separate plants
+     standing in a row, a metre and a half end to end. The sower measured
+     the whole row and scaled that, so one placement was the entire row,
+     wrongly sized and carrying up to fifteen thousand triangles. Sown by
+     the tens of thousands, the flowers alone were two hundred and thirty
+     million triangles, and still too small to see.
+
+     Each plant is now baked to its own sheet at its own true size (the
+     width and height in centimetres are in the file name) and sown as a
+     crossed card: eight triangles instead of three thousand. That is what
+     makes it possible for flowers to be the dominant cover. */
+  var FLOWER_CARDS = {
+    orange: ['card_fl_orange_2_w24_h7.png', 'card_fl_orange_3_w25_h10.png',
+             'card_fl_orange_4_w34_h17.png', 'card_fl_orange_5_w27_h12.png',
+             'card_fl_orange_6_w31_h11.png', 'card_fl_orange_7_w24_h11.png'],
+    yellow: ['card_fl_yellow_0_w22_h27.png', 'card_fl_yellow_1_w18_h19.png',
+             'card_fl_yellow_2_w22_h18.png', 'card_fl_yellow_3_w19_h17.png',
+             'card_fl_yellow_4_w11_h15.png'],
+    purple: ['card_fl_purple_0_w16_h26.png', 'card_fl_purple_2_w17_h30.png',
+             'card_fl_purple_3_w23_h41.png', 'card_fl_purple_4_w11_h21.png',
+             'card_fl_purple_5_w26_h40.png'],
+    white:  ['card_fl_white_0_w43_h16.png', 'card_fl_white_1_w28_h13.png',
+             'card_fl_white_2_w26_h15.png', 'card_fl_white_3_w19_h13.png']
+  };
+  var FLOWER_KEYS = ['orange', 'yellow', 'purple', 'white'];
+  var flCache = {};
+  function flowerCard(file) {
+    if (flCache[file]) return flCache[file];
+    var m = file.match(/_w(\d+)_h(\d+)\.png$/);
+    var w = m ? +m[1] / 100 : 0.28, h = m ? +m[2] / 100 : 0.28;
+    var c = makeCard('assets/flowers/' + file, w, h, 0xffffff);
+    /* Moonlight is weak and blue, and a bloom lit only by it goes black.
+       Real flowers hold their colour at night -- pale ones almost shine --
+       so the petals carry a little light of their own. Not a glow: just
+       enough that the colour survives the dark. */
+    c.m.emissive = new T.Color(0xffffff);
+    c.m.emissiveMap = c.m.map;
+    c.m.emissiveIntensity = 0.30;
+    flCache[file] = { g: c.g, m: c.m, w: w, h: h };
+    return flCache[file];
+  }
+
+  /* Where the ground is deep in growth and where it is thin. Grass does not
+     lie at one length over a whole country: it gathers where the water and
+     the shade are, in patches tens of metres across, and thins between. */
+  function lushField(x, z) {
+    var a = W.fbm(x * 0.0125 + 31.7, z * 0.0125 - 12.3, 2);
+    var b = W.fbm(x * 0.041 - 5.1, z * 0.041 + 9.7, 2);
+    return W.sstep(0.32, 0.70, a * 0.70 + b * 0.30);
+  }
+  W.lushField = lushField;
 
   /* what grows in one chunk */
   W.scatter = function (W, ci, cj, CH, seg) {
@@ -1792,7 +1852,9 @@
 
     /* the thick carpet of grass */
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.46, 0.26, 0xffffff);
+      /* a blade card is a hand's width and knee high before it is scaled;
+         a thumbnail of grass reads as dust from standing height */
+      var c1 = makeCard('assets/grass_card.png', 0.62, 0.52, 0xffffff);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
@@ -1852,10 +1914,15 @@
         var h = W.heightAt(rx, rz);
         var w = W.groundWeights(rx, rz, h);
         if (h < W.WATER_Y + 0.15 || w.g < 0.10 || w.r > 0.55) continue;
-        /* thin out with the growth, never a hard edge */
-        if (hashU(sd ^ 0x3d7) > 0.12 + 0.88 * w.g) continue;
+        /* thin out with the growth, never a hard edge, and thicken where the
+           ground is deep in it: a meadow is patchy, not a mown lawn */
+        var lfc = lushField(rx, rz);
+        if (hashU(sd ^ 0x3d7) > (0.10 + 0.90 * w.g) * (0.42 + 0.80 * lfc)) continue;
         if (W.flatAt(rx, rz) > 0.30 || W.roadAt(rx, rz) > 0.35) continue;
-        var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) * (0.55 + 0.7 * w.g);
+        /* length and width both run with the ground: knee high in the thin
+           places, waist high in the deep ones */
+        var sc = (sMin + hashU(sd ^ 0x85ebca6b) * (sMax - sMin)) *
+                 (0.55 + 0.65 * w.g) * (0.70 + 0.80 * lfc);
         dummy.position.set(rx, h - 0.07, rz);
         dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
         dummy.scale.set(sc, sc, sc);
@@ -1889,28 +1956,66 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(9500 * (0.40 + cb.grass) * (W.vegScale || 1)), 0.8, 1.45);
+    sowCards(cardGeo, cardMat, Math.round(15000 * (0.40 + cb.grass) * (W.vegScale || 1)), 0.75, 1.70);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     /* THE SUPERWORLD OF FLOWERS: instanced drifts of one colour after
        another across every green chunk, near or far -- one draw per species
        per part per chunk, so the bloom costs almost nothing */
-    var FLK = ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'];
-    for (var fd = 0; fd < FLK.length; fd++) {
-      var fkey = FLK[fd];
-      /* two drift centres per species per chunk, chosen by hash */
+    W.DRIFTS = W.DRIFTS || [];
+    for (var fd = 0; fd < FLOWER_KEYS.length; fd++) {
+      var fk2 = FLOWER_KEYS[fd], all = FLOWER_CARDS[fk2];
       var d1 = (ci * 48611 + cj * 75377 + fd * 30011) | 0;
-      var d2 = (ci * 15013 + cj * 32117 + fd * 5407) | 0;
-      /* not every chunk carries every colour: half do, and those run THICK */
-      if (hashU(d1 ^ 0x5c3) < 0.45) continue;
-      W.DRIFTS = W.DRIFTS || [];
-      var cA = { x: ox + hashU(d1) * CH, z: oz + hashU(d1 ^ 0x77f) * CH, r: 9 + hashU(d1 ^ 0x3e7) * 8 };
-      var cB = { x: ox + hashU(d2) * CH, z: oz + hashU(d2 ^ 0x77f) * CH, r: 8 + hashU(d2 ^ 0x3e7) * 7 };
-      W.DRIFTS.push([fkey, Math.round(cA.x), Math.round(cA.z), Math.round(cA.r)]);
-      /* each drift packs its blooms around its own heart; a light loose
-         scatter wanders the whole chunk besides */
-      sowParts(fkey, 300, lush, 0.5, 0.85, fd * 977, cA);
-      sowParts(fkey, 240, lush, 0.5, 0.85, fd * 1381 + 7, cB);
-      sowParts(fkey, 26, lush, 0.45, 0.75, fd * 2003 + 13);
+      if (hashU(d1 ^ 0x5c3) < 0.16) continue;   /* a few chunks miss a colour */
+      /* three of this colour's plants for this chunk, so no two chunks of
+         the same bloom are made of exactly the same stems */
+      var files = [];
+      for (var q = 0; q < 3; q++) {
+        files.push(all[Math.floor(hashU(d1 ^ (0x51 + q * 0x9d)) * all.length) % all.length]);
+      }
+      /* three hearts, each tens of metres across, and a loose wandering */
+      var hearts = [];
+      for (var dr = 0; dr < 3; dr++) {
+        var ds = (d1 ^ ((dr + 1) * 0x9e37)) | 0;
+        var ht = { x: ox + hashU(ds) * CH, z: oz + hashU(ds ^ 0x77f) * CH,
+                   r: 13 + hashU(ds ^ 0x3e7) * 23 };
+        hearts.push(ht);
+        W.DRIFTS.push([fk2, Math.round(ht.x), Math.round(ht.z), Math.round(ht.r)]);
+      }
+      var mats = [[], [], []];
+      var N = Math.round(2600 * (W.vegScale || 1));
+      for (var i2 = 0; i2 < N; i2++) {
+        var sd2 = (ci * 73856093) ^ (cj * 19349663) ^ ((i2 + fd * 7919 + 331) * 83492791);
+        var rx2, rz2;
+        if (i2 % 8 === 7) {                      /* one in eight wanders free */
+          rx2 = ox + hashU(sd2) * CH; rz2 = oz + hashU(sd2 ^ 0x9e3779b9) * CH;
+        } else {
+          var ht2 = hearts[i2 % 3];
+          var aa2 = hashU(sd2) * 6.283;
+          var rr2 = Math.pow(hashU(sd2 ^ 0x9e3779b9), 0.58) * ht2.r;
+          rx2 = ht2.x + Math.cos(aa2) * rr2; rz2 = ht2.z + Math.sin(aa2) * rr2;
+        }
+        var h2 = W.heightAt(rx2, rz2);
+        if (!lush(rx2, rz2, h2)) continue;
+        var lf2 = lushField(rx2, rz2);
+        if (hashU(sd2 ^ 0x2b1) > 0.34 + 0.78 * lf2) continue;
+        /* true size, then the ground's own generosity on top of it */
+        var sc2 = (0.85 + hashU(sd2 ^ 0x85ebca6b) * 0.85) * (0.80 + 0.95 * lf2);
+        dummy.position.set(rx2, h2 - 0.03, rz2);
+        dummy.rotation.set(0, hashU(sd2 ^ 0xc2b2ae35) * 6.283, 0);
+        dummy.scale.set(sc2, sc2, sc2);
+        dummy.updateMatrix();
+        mats[Math.floor(hashU(sd2 ^ 0x7c1) * 3) % 3].push(dummy.matrix.clone());
+      }
+      for (var fi = 0; fi < 3; fi++) {
+        if (!mats[fi].length) continue;
+        var cd = flowerCard(files[fi]);
+        var imf = new T.InstancedMesh(cd.g, cd.m, mats[fi].length);
+        for (var mi2 = 0; mi2 < mats[fi].length; mi2++) imf.setMatrixAt(mi2, mats[fi][mi2]);
+        imf.instanceMatrix.needsUpdate = true;
+        imf.frustumCulled = true;
+        W.scene.add(imf);
+        out.push(imf);
+      }
     }
 
     var near = (seg === undefined) || seg >= 32;
@@ -1953,8 +2058,27 @@
     if (townD2 < 210) fMask = 0;                    /* the town keeps its air */
     var forest = !palmChunk && fMask > 0.02;
     var treeN = Math.max(1, Math.round((12 * cb.grass + 4) * (1 + 5.5 * fMask) * (W.vegScale || 1)));
+    /* Trees keep company. They come up in stands, thick at the heart and
+       thinning at the edge, tens of metres across, with the odd loner out
+       on its own -- an even sprinkle over a whole chunk is an orchard grid,
+       and reads as one. */
+    var nStand = 1 + Math.floor(rng(ci, cj, 4.4) * 3);
+    var STANDS = [];
+    for (var s2 = 0; s2 < nStand; s2++) {
+      STANDS.push({ x: ox + rng(ci + s2 * 11, cj, 1.7) * CH,
+                    z: oz + rng(ci, cj + s2 * 13, 2.9) * CH,
+                    r: 9 + rng(ci + s2, cj + s2, 5.1) * 26 });
+    }
     for (var t = 0; t < treeN; t++) {
-      var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
+      var tx, tz;
+      if (t % 7 === 6) {
+        tx = ox + rng(ci + t, cj, 3.9) * CH; tz = oz + rng(ci, cj + t, 8.4) * CH;
+      } else {
+        var stnd = STANDS[t % STANDS.length];
+        var tang = rng(ci + t, cj, 3.9) * 6.283;
+        var trr = Math.pow(rng(ci, cj + t, 8.4), 0.62) * stnd.r;
+        tx = stnd.x + Math.cos(tang) * trr; tz = stnd.z + Math.sin(tang) * trr;
+      }
       var th = W.heightAt(tx, tz);
       var w = W.groundWeights(tx, tz, th);
       if (th < W.WATER_Y + 0.5) continue;
@@ -2018,7 +2142,7 @@
   var lawn = null, lawnAt = new T.Vector3(9e9, 0, 9e9), LAWN_R = 52;
   function initLawn() {
     if (!cardGeo) {
-      var c1 = makeCard('assets/grass_card.png', 0.44, 0.34, 0xd2dfbe);
+      var c1 = makeCard('assets/grass_card.png', 0.62, 0.52, 0xffffff);
       cardGeo = c1.g; cardMat = c1.m;
       var c2 = makeCard('assets/reed_card.png', 0.34, 1.15, 0xd2e0bd);
       reedGeo = c2.g; reedMat = c2.m;
@@ -2037,12 +2161,17 @@
       var sd = (Math.round(p.x / 8) * 73856093) ^ (Math.round(p.z / 8) * 19349663) ^ (i * 83492791);
       var a = hashU(sd) * 6.283;
       var r = Math.sqrt(hashU(sd ^ 0x9e3779b9)) * LAWN_R;
+      /* The carpet thins towards its rim. Cut off square, it reads from the
+         air as a dark disc following the player around the country. */
+      var edge = r / LAWN_R;
+      if (hashU(sd ^ 0x51f) < edge * edge * 1.2 - 0.20) continue;
       var gx = p.x + Math.cos(a) * r, gz = p.z + Math.sin(a) * r;
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
       if (h < W.WATER_Y + 0.12 || w.g < 0.20 || w.r > 0.65) continue;
       if (W.flatAt(gx, gz) > 0.30 || W.roadAt(gx, gz) > 0.35) continue;
-      var sc = (0.55 + hashU(sd ^ 0x85ebca6b) * 0.7) * (0.55 + 0.7 * w.g);
+      var lfl = lushField(gx, gz);
+      var sc = (0.60 + hashU(sd ^ 0x85ebca6b) * 0.95) * (0.55 + 0.65 * w.g) * (0.70 + 0.80 * lfl);
       dummy.position.set(gx, h - 0.07, gz);
       dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
       dummy.scale.set(sc, sc, sc);

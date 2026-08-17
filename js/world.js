@@ -554,10 +554,61 @@
           'vec3 sC = texture2D(tSand, wxz * 0.0143).rgb;',
           'vec3 sand = mix(sA, sB, smoothstep(0.40, 0.66, macro));',
           'sand *= (0.62 + 0.82 * sC.r) * (0.80 + 0.42 * macro2);',
-          /* rock */
-          'vec3 rA = texture2D(tRock, wxz * 0.062).rgb;',
+          /* ---- the rock, and the cliffs it makes.
+             Ground texture is projected straight down, which is fine for a
+             field and ruinous for a wall: a vertical face has no footprint to
+             sample, so one row of pixels stretches down its whole height. It
+             is projected from three sides instead, and on a flat field the
+             upward projection still wins, so nothing else changes.
+             What a real cliff shows, from the photographs: beds of different
+             coloured stone, rain fluting combed vertically down the face, a
+             hard cap on each bed that catches the light while its soft
+             underside stays in shadow. */
+          'float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);',
+          'float cliff = smoothstep(0.40, 0.76, slope);',
+          'vec3 bw = pow(abs(vWNrm), vec3(4.0));',
+          'bw /= max(1e-4, bw.x + bw.y + bw.z);',
+          'vec3 rock = (texture2D(tRock, vWPos.zy * 0.058).rgb * bw.x',
+          '          +  texture2D(tRock, wxz      * 0.058).rgb * bw.y',
+          '          +  texture2D(tRock, vWPos.xy * 0.058).rgb * bw.z);',
           'vec3 rB = texture2D(tRock, wxz * 0.0121 + vec2(0.5)).rgb;',
-          'vec3 rock = rA * (0.66 + 0.78 * rB.r);',
+          'float rGrain = dot(rock, vec3(0.34, 0.5, 0.16));',
+          'rock *= (0.66 + 0.78 * rB.r);',
+          'if (cliff > 0.004) {',
+          /* the beds, warped so they are not ruled lines, each its own stone */
+          /* Two systems, not one. Thick FORMATIONS of a single stone, each
+             many metres deep and each its own colour, and inside every one
+             its own LAMINATIONS at its own thickness. One evenly spaced
+             stripe repeated up the whole wall is corrugated card, not rock,
+             and red beds are rare: most stone here is cream and grey. */
+          '  float warpY = 3.4 * texture2D(tMask, wxz * 0.0021 + vec2(0.31, 0.62)).r;',
+          '  float fy = (vWPos.y + warpY * 2.2) * 0.052;',
+          '  float fi = floor(fy);',
+          '  float fh = fract(sin(fi * 12.9898) * 43758.545);',
+          '  float fh2 = fract(sin(fi * 45.164) * 31718.927);',
+          '  float bedH = mix(0.55, 3.4, fh2);',
+          '  float by = (vWPos.y + warpY) / bedH;',
+          '  float bhh = fract(sin(floor(by) * 78.233 + fi * 3.7) * 24634.633);',
+          '  vec3 bed = mix(vec3(0.86, 0.82, 0.73), vec3(0.66, 0.64, 0.61), smoothstep(0.26, 0.60, fh));',
+          '  bed = mix(bed, vec3(0.80, 0.67, 0.50), smoothstep(0.56, 0.80, fh));',
+          '  bed = mix(bed, vec3(0.70, 0.42, 0.29), smoothstep(0.89, 0.975, fh));',
+          '  bed *= 0.90 + 0.20 * bhh;',
+          /* the cap of a bed stands proud, the soft rock beneath it is undercut */
+          '  float f = fract(by);',
+          '  float lip = smoothstep(0.85, 1.0, f) * 0.24 - smoothstep(0.17, 0.0, f) * 0.17;',
+          /* rain fluting: channels running down the face, spaced along its own
+             horizontal direction so they stay vertical whichever way it turns */
+          '  vec2 tang = normalize(vec2(-vWNrm.z, vWNrm.x) + vec2(1e-5));',
+          '  float u = dot(wxz, tang);',
+          '  float rib = sin(u * 2.7 + fh2 * 6.28) * 0.50',
+          '            + sin(u * 6.9 + fh * 4.10) * 0.30',
+          '            + sin(u * 16.3) * 0.20;',
+          '  vec3 cliffC = bed * (0.70 + 0.50 * (rib * 0.5 + 0.5)) * (1.0 + lip);',
+          /* the photographed grain, held down: a ground photo dragged up a
+             wall shows its own weave, and at full strength it reads as cloth */
+          '  cliffC *= 0.82 + 0.36 * rGrain;',
+          '  rock = mix(rock, cliffC, cliff);',
+          '}',
           /* grass */
           'vec3 gA = texture2D(tGrass, wxz * 0.098).rgb;',
           'vec3 gA2 = texture2D(tGrass, wxz * -0.074 + vec2(0.53, 0.21)).rgb;',
@@ -571,19 +622,19 @@
           /* the dry grassland: the same sheet pulled to straw gold */
           'vec3 dry = mix(vec3(dot(gA, vec3(0.33, 0.5, 0.17))), gA, 0.30);',
           'dry *= vec3(1.30, 1.06, 0.60) * (0.80 + 0.45 * macro);',
-          'float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);',
-          'float wRock = clamp(vColor.g + smoothstep(0.30, 0.62, slope) - 0.10 * vColor.r, 0.0, 1.0);',
+          /* a face this steep is stone whatever grows on the flat beside it */
+          'float wRock = clamp(vColor.g + smoothstep(0.30, 0.62, slope) - 0.10 * vColor.r + cliff * 0.85, 0.0, 1.0);',
           /* one ramp for all land: bare sand only where nothing grows at all */
           'float gW = clamp(vColor.r * (0.85 + 0.3 * fine), 0.0, 1.0);',
           'vec3 col = mix(sand, dry, smoothstep(0.06, 0.38, gW));',
           'col = mix(col, grass, smoothstep(0.44, 0.76, gW));',
           'col = mix(col, rock, wRock);',
-          /* Scree on the steep faces and gravel in the hollows. Rock does not
-             lie evenly: it collects where it falls and washes out of where
-             water runs, and showing that is most of what makes ground read. */
-          'float steep = smoothstep(0.24, 0.62, slope);',
+          /* Rubble does not cling to a wall. It falls off it and piles at the
+             foot, so the loose stuff belongs on the gentler slopes below the
+             cliff, and the cliff itself stays bare rock. */
+          'float apron = smoothstep(0.07, 0.19, slope) * (1.0 - smoothstep(0.30, 0.54, slope));',
           'vec3 scree = texture2D(tGrav, wxz * 0.19).rgb * (0.7 + 0.7 * texture2D(tRock, wxz * 0.031).r);',
-          'col = mix(col, scree * 0.92, steep * 0.72);',
+          'col = mix(col, scree * 0.92, apron * 0.66 * clamp(vColor.g + cliff, 0.0, 1.0));',
           'float hollow = 1.0 - smoothstep(0.02, 0.16, slope);',
           'vec3 grit2 = texture2D(tGrav, wxz * 0.33 + vec2(0.4, 0.9)).rgb;',
           'col = mix(col, col * (0.72 + 0.66 * grit2.r), hollow * 0.34 * (1.0 - vColor.r));',

@@ -37,6 +37,10 @@ def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None):
     dx, dy, dz = dx / n, dy / n, dz / n
     x, y, z = p0
     seglen = length / segs
+    # The bark has to FLOW up the limb. Projected per segment it gives every
+    # joint its own unaligned mapping and the trunk reads as a stack of drums,
+    # so the vertical coordinate carries on from where the last segment ended.
+    voff = random.uniform(0, 4.0)
     for i in range(segs):
         t = i / float(segs)
         r = r0 + (r1 - r0) * t
@@ -54,15 +58,25 @@ def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None):
         yaw = math.atan2(dy, dx)
         r_next = r0 + (r1 - r0) * (t + 1.0 / segs)
         bpy.ops.mesh.primitive_cone_add(radius1=r, radius2=r_next,
-                                        depth=seglen * 1.12, location=mid, vertices=10)
+                                        depth=seglen * 1.26, location=mid, vertices=12)
         ob = bpy.context.active_object
         ob.rotation_euler = (0.0, pitch, yaw)
         bpy.ops.object.transform_apply(rotation=True)
+        uvl = ob.data.uv_layers.active
+        if uvl:
+            us = (6.283 * max(r, r_next, 0.02)) / BARKSCALE
+            vs = seglen / BARKSCALE
+            for lp in uvl.data:
+                lp.uv = (lp.uv[0] * us, lp.uv[1] * vs + voff)
+            voff += vs
         wood.append(ob)
-        if i < segs - 1:
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=r_next * 0.99, location=(nx, ny, nz),
-                                                 segments=10, ring_count=6)
-            wood.append(bpy.context.active_object)
+        # No joint balls. They were meant to hide the elbow where one segment
+        # turns into the next, and every setting of them failed: at equal
+        # radius their corners crenellate the trunk, smaller and the segment's
+        # end teeth show through, larger and they read as bandage collars with
+        # the bark running the wrong way round them. The segments overlap by a
+        # quarter of their length instead, so there is no gap to hide, and a
+        # bend just reads as a knuckle in the wood, which is what it is.
         x, y, z = nx, ny, nz
     return (x, y, z), (dx, dy, dz)
 
@@ -82,15 +96,19 @@ def card(at, size):
 def cluster(at, r, n=None):
     """A DENSE cluster of cards round one point: the unit of foliage. Cards
     overlap heavily so the mass reads solid from every side, never a sheet."""
-    n = n or random.randint(8, 12)
+    # A crown you can see the sky through is a scatter of paper sprigs on bare
+    # sticks. Real foliage is a MASS: cards packed until the middle is opaque
+    # and light only breaks through at the edges. Cards are two triangles, so
+    # density is nearly free -- there was no reason to be sparing.
+    n = n or random.randint(20, 28)
     for _ in range(n):
         a = random.uniform(0, 6.283)
-        el = random.uniform(-0.5, 1.1)
-        rr = random.uniform(0, r * 0.55)
+        el = random.uniform(-0.6, 1.1)
+        rr = random.uniform(0, r * 0.62)
         cx = at[0] + math.cos(a) * math.cos(el) * rr
         cy = at[1] + math.sin(a) * math.cos(el) * rr
         cz = at[2] + math.sin(el) * rr * 0.8
-        card((cx, cy, cz), random.uniform(r * 0.85, r * 1.35))
+        card((cx, cy, cz), random.uniform(r * 0.95, r * 1.55))
 
 
 def crown_of_clusters(at, spread, k, cr):
@@ -117,6 +135,18 @@ LEAFTEX = {
     "fig": "leafcard_broad2.png", "giant": "leafcard_broad.png",
     "pine": "leafcard_fine.png",
 }[KIND]
+# The trunks had NO texture at all: their colour came from a vertex-colour
+# node, which is why they read as smooth blurred tubes. Real photographed
+# bark now, CC0 from Poly Haven, with the furrow scale set per kind.
+BARKTEX, BARKSCALE = {
+    "olive":    ("t_bark_d.jpg", 0.75),
+    "plane":    ("t_bark_d.jpg", 1.10),
+    "fig":      ("t_bark_d.jpg", 0.95),
+    "tamarisk": ("t_bark_d.jpg", 0.65),
+    "cypress":  ("t_barkpine_d.jpg", 0.70),
+    "pine":     ("t_barkpine_d.jpg", 1.00),
+    "giant":    ("t_barkold_d.jpg", 1.70),
+}[KIND]
 
 # every tree is at least two storeys; trunks are logs
 if KIND == "olive":
@@ -131,7 +161,7 @@ if KIND == "olive":
         t3, _ = limb(t2, (math.cos(a + 0.7), math.sin(a + 0.7), random.uniform(0.3, 0.8)),
                      H * 0.18, 0.05, 0.02, segs=2, crook=0.5)
         cluster(t3, H * 0.13)
-    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.16), H * 0.32, 10, H * 0.15)
+    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.16), H * 0.32, 26, H * 0.15)
     rec((0, 0, H * 0.3), 0.5, 0.5, H * 0.3)
 
 elif KIND == "plane":
@@ -145,7 +175,7 @@ elif KIND == "plane":
         t3, _ = limb(t2, (math.cos(a + 0.8), math.sin(a + 0.8), random.uniform(0.5, 1.0)),
                      H * 0.16, 0.06, 0.025, segs=2, crook=0.45)
         cluster(t3, H * 0.12)
-    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.2), H * 0.34, 13, H * 0.14)
+    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.2), H * 0.34, 30, H * 0.14)
     rec((0, 0, H * 0.28), 0.6, 0.6, H * 0.28)
 
 elif KIND == "cypress":
@@ -172,7 +202,7 @@ elif KIND == "tamarisk":
         t3, _ = limb(tip, (math.cos(a + 1.1), math.sin(a + 1.1), 0.7),
                      H * 0.2, 0.05, 0.02, segs=2, crook=0.5)
         cluster(t3, H * 0.13)
-    crown_of_clusters((0, 0, H * 0.72), H * 0.32, 8, H * 0.15)
+    crown_of_clusters((0, 0, H * 0.72), H * 0.32, 22, H * 0.15)
     rec((0, 0, H * 0.3), 0.45, 0.45, H * 0.3)
 
 elif KIND == "fig":
@@ -218,7 +248,7 @@ else:                        # giant: the bustan patriarch, 5-7 storeys
         t3, _ = limb(t2, (math.cos(a + 0.9), math.sin(a + 0.9), random.uniform(0.4, 0.9)),
                      H * 0.16, 0.09, 0.03, segs=2, crook=0.4)
         cluster(t3, H * 0.09)
-    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.22), H * 0.32, 16, H * 0.10)
+    crown_of_clusters((tip[0], tip[1], tip[2] + H * 0.22), H * 0.32, 34, H * 0.10)
     for _ in range(5):
         a = random.uniform(0, 6.283)
         limb((math.cos(a) * 0.8, math.sin(a) * 0.8, 0.5),
@@ -294,7 +324,11 @@ def join_leaf_cards(objs, tint):
     return ob
 
 
-w_ob = join_and_colour(wood, "wood", (0.155, 0.115, 0.085), 0.12)
+# The vertex colour used to BE the trunk colour, so it was near black. It is
+# now only a per-face shade jitter riding on top of the bark photo, which
+# means it must sit near white -- and never above 1.0, because glTF clamps a
+# vertex-colour lift and the wood goes pastel.
+w_ob = join_and_colour(wood, "wood", (0.74, 0.68, 0.61), 0.10)
 l_ob = join_leaf_cards(leaf, GREEN)
 
 # the wood keeps its own bark material; the join then carries both slots
@@ -302,10 +336,20 @@ mat = bpy.data.materials.new("bark")
 mat.use_nodes = True
 nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
-bsdf.inputs["Roughness"].default_value = 0.9
+bsdf.inputs["Roughness"].default_value = 0.92
+bpath = os.path.abspath(os.path.join(ASSETS, BARKTEX))
+bimg = bpy.data.images.load(bpath)
+btn = nt.nodes.new('ShaderNodeTexImage')
+btn.image = bimg
 vc = nt.nodes.new('ShaderNodeVertexColor')
 vc.layer_name = "ao"
-nt.links.new(vc.outputs['Color'], bsdf.inputs['Base Color'])
+bmix = nt.nodes.new('ShaderNodeMixRGB')
+bmix.blend_type = 'MULTIPLY'
+bmix.inputs['Fac'].default_value = 1.0
+nt.links.new(btn.outputs['Color'], bmix.inputs['Color1'])
+nt.links.new(vc.outputs['Color'], bmix.inputs['Color2'])
+nt.links.new(bmix.outputs['Color'], bsdf.inputs['Base Color'])
+bimg.pack()
 w_ob.data.materials.clear()
 w_ob.data.materials.append(mat)
 
