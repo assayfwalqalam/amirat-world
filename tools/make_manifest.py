@@ -19,6 +19,7 @@ GROUPS = [
     ("Boundary walls", [r"^bound/"]),
     ("Vehicles",    [r"^veh/"]),
     ("Camp",        [r"^camp/"]),
+    ("War",         [r"^war/"]),
     ("Books",       [r"^book/"]),
     ("Fences",      [r"^fence/"]),
     ("Market stalls", [r"^stall/"]),

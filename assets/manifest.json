@@ -263,6 +263,27 @@
    ]
   },
   {
+   "name": "War",
+   "items": [
+    {
+     "k": "war/ak",
+     "n": "Ak"
+    },
+    {
+     "k": "war/dshk",
+     "n": "Dshk"
+    },
+    {
+     "k": "war/mortar",
+     "n": "Mortar"
+    },
+    {
+     "k": "war/rpg",
+     "n": "Rpg"
+    }
+   ]
+  },
+  {
    "name": "Books",
    "items": [
     {

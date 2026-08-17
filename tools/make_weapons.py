@@ -116,28 +116,38 @@ if KIND == "ak":
     cyl(0.006, 0.02, (-0.035, 0, -0.036), black, rot=(math.pi / 2, 0, 0), verts=8)  # trigger
 
 elif KIND == "rpg":
-    # RPG-7: the tube, the wide blast shield midway, the warhead up front
-    cyl(0.021, 0.95, (0.0, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)
-    cyl(0.045, 0.06, (0.17, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)   # the conical grip flare
-    taper(steel[-1], 0, 1.0, 0.55)
-    # the warhead: bulb tapering to the nose
-    cyl(0.043, 0.14, (0.60, 0, 0), black, rot=(0, math.pi / 2, 0), verts=20)
-    taper(black[-1], 0, 1.4, 0.5)
-    cyl(0.02, 0.12, (0.72, 0, 0), black, rot=(0, math.pi / 2, 0), verts=16)   # the stem to fins
-    box(0.02, 0.09, 0.002, (0.50, 0, 0), steel)     # fins on the warhead stem (cross)
-    box(0.02, 0.002, 0.09, (0.50, 0, 0), steel)
-    # wooden heat-guard on the tube
-    hg = box(0.26, 0.06, 0.06, (0.02, 0, 0), wood, bevel=0.01)
-    taper(hg, 0, 1.0, 1.0)
-    box(0.24, 0.055, 0.055, (-0.30, 0, 0), wood, bevel=0.01)    # rear wood
-    # pistol grip and trigger group
-    box(0.03, 0.04, 0.11, (0.02, 0, -0.075), wood, bevel=0.008, rot=(0, 0.2, 0))
-    box(0.05, 0.03, 0.02, (0.02, 0, -0.03), steel)
-    # the iron sight on a stalk
-    box(0.006, 0.03, 0.07, (0.10, 0, 0.05), steel)
-    # the rear venturi cone (exhaust bell)
-    cyl(0.035, 0.09, (-0.50, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)
-    taper(steel[-1], 0, 0.6, 1.25)
+    # RPG-7: the launch tube, the wooden heat guards, the pistol grip, and
+    # the loaded rocket whose bulbous PG-7 warhead juts out the front.
+    # Tube runs the length; muzzle (front) at +x.
+    cyl(0.021, 0.86, (0.02, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)
+    # the central flare where the tube widens (the optical-sight seat area)
+    cyl(0.032, 0.10, (0.10, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)
+    # --- the rocket sticking out the front ---
+    # a thin neck from the tube mouth
+    cyl(0.018, 0.10, (0.50, 0, 0), black, rot=(0, math.pi / 2, 0), verts=16)
+    # THE BULB: a rounded PG-7 warhead, wider than the tube, widest at centre
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.05, location=(0.60, 0, 0), segments=20, ring_count=12)
+    bulb = bpy.context.active_object
+    bulb.scale = (1.7, 1.0, 1.0)                  # stretch along the barrel
+    bpy.ops.object.transform_apply(scale=True)
+    black.append(bulb)
+    # the nose cone tapering to the fuze point
+    cone = cyl(0.05, 0.13, (0.72, 0, 0), black, rot=(0, math.pi / 2, 0), verts=20)
+    taper(cone, 2, 1.0, 0.16)     # cylinders keep local-Z length; taper on z
+    cyl(0.006, 0.03, (0.80, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=8)  # fuze tip
+    # wooden heat-guards clamped on the tube (two, front and rear of grip)
+    box(0.22, 0.062, 0.062, (0.24, 0, 0), wood, bevel=0.012)
+    box(0.20, 0.058, 0.058, (-0.22, 0, 0), wood, bevel=0.012)
+    # pistol grip and trigger group under the tube
+    box(0.032, 0.042, 0.12, (0.0, 0, -0.075), wood, bevel=0.008, rot=(0, 0.18, 0))
+    box(0.06, 0.032, 0.022, (0.0, 0, -0.028), steel, bevel=0.003)
+    box(0.03, 0.028, 0.008, (0.04, 0, -0.05), steel)      # trigger guard bar
+    # the folding iron sight on a stalk
+    box(0.006, 0.032, 0.08, (0.16, 0, 0.055), steel)
+    box(0.02, 0.03, 0.012, (0.16, 0, 0.09), steel)         # sight leaf
+    # the rear venturi cone (exhaust bell), flaring open at the very back
+    ven = cyl(0.035, 0.11, (-0.50, 0, 0), steel, rot=(0, math.pi / 2, 0), verts=20)
+    taper(ven, 2, 1.25, 0.6)      # wide mouth at the rear (local -z)
 
 elif KIND == "mortar":
     # 82mm mortar: the tube leaning back over a bipod, on a baseplate
