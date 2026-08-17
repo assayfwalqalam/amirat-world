@@ -8,6 +8,7 @@
 
   var MODELS = {};
   var doors = [];
+  W.DOORS = doors;               /* the shot harness reads these */
   var fires = [];
   var lamps = [];
   var winds = [];
@@ -23,8 +24,8 @@
      on the new one, so the light in a street changes the way light does. */
   var EMIT = [];
   var POOL = [];
-  var POOL_N = 8;
-  var MAX_D2 = 5200;
+  var POOL_N = 14;
+  var MAX_D2 = 9800;
 
   function initPool() {
     for (var i = 0; i < POOL_N; i++) {
@@ -87,7 +88,7 @@
       L.position.set(src.x, src.y, src.z);
       /* dim with distance as well, so nothing pops as it enters range */
       var range = 1 - W.sstep(MAX_D2 * 0.55, MAX_D2, src.d2);
-      L.intensity = src.base * src.lit * sl.fade * range;
+      L.intensity = Math.min(2.7, src.base * src.lit * sl.fade * range);
     }
   }
 
@@ -124,7 +125,8 @@
     M.stone2 = surf('t_ashlar', 0xd5bb92, { nrm: 1.0 });
     M.marble = surf('t_marble', 0xf3ece6, { nrm: 0.5, rough: 0.42 });
     M.cloth = mat('assets/cloth.jpg', 0xbba98e, 1, [1, 1]);
-    M.wood = new T.MeshStandardMaterial({ color: 0x5a3d24, roughness: 0.9 });
+    M.wood = new T.MeshStandardMaterial({ map: W.tex('assets/t_wood_d.jpg', true, true),
+                                          color: 0x9a7a55, roughness: 0.9 });
     M.iron = new T.MeshStandardMaterial({ color: 0x2e2a26, roughness: 0.72, metalness: 0.35 });
     /* the painted door of the reference courtyard: honey-gold arched panels */
     M.doorPaint = new T.MeshStandardMaterial({ map: W.tex('assets/t_door_d.jpg', true), roughness: 0.78 });
@@ -297,7 +299,7 @@
   function tickFires(t, dt, cp) {
     for (var i = 0; i < fires.length; i++) {
       var f = fires[i];
-      if (f.d2 > 30000) { f.g.visible = false; continue; }
+      if (f.d2 > 68000) { f.g.visible = false; continue; }
       f.g.visible = true;
 
       /* each layer runs the sheet at its own speed, so the flame never loops
@@ -401,7 +403,7 @@
     var painted = false;
     var mat = m;
     if (!mat) {
-      if (M.doorPaint && hashU(((x * 73.7 + z * 131.3) * 1000) | 0) > 0.78) {
+      if (M.doorPaint && hashU(((x * 73.7 + z * 131.3) * 1000) | 0) > 0.965) {
         painted = true;
         mat = M.doorPaint.clone();
         mat.map = M.doorPaint.map.clone();
@@ -428,7 +430,9 @@
     knob.position.set(w - 0.18, h * 0.5, 0.1);
     pivot.add(knob);
     W.scene.add(pivot);
-    var cx = x + Math.cos(rot) * w / 2, cz = z + Math.sin(rot) * w / 2;
+    /* rotation.y maps the leaf's +x to world (cos, -sin) -- the collider
+       must live on the same side, or turned doors hang beside their wall */
+    var cx = x + Math.cos(rot) * w / 2, cz = z - Math.sin(rot) * w / 2;
     var col = W.addBox(cx, y + h / 2, cz, w / 2, h / 2, 0.1, rot);
     var d = { pivot: pivot, col: col, open: false, ang: 0, x: x, z: z,
               hw: w / 2, y0: col.y0, y1: col.y1 };
@@ -498,7 +502,8 @@
     for (var i = 0; i < boxes.length; i++) {
       var b = boxes[i];
       var bx = b.c[0] * k, by = b.c[1] * k, bz = b.c[2] * k;
-      W.addBox(x + bx * c - bz * s2, y + by, z + bx * s2 + bz * c,
+      /* rotation.y carries local (x,z) to world (x c + z s, -x s + z c) */
+      W.addBox(x + bx * c + bz * s2, y + by, z - bx * s2 + bz * c,
                b.h[0] * k, b.h[1] * k, b.h[2] * k, rot || 0);
     }
     return g;
@@ -661,8 +666,8 @@
       var sp = spots[i];
       if (sp.k === 'door') {
         /* a leaf on its hinge, turned to the face it was exported on */
-        var hx = (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
-        var hz = (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
+        var hx = (sp.c[0] * scale) * c + (sp.c[2] * scale) * s2;
+        var hz = -(sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
         var face = brot + ((sp.f || 0) * Math.PI / 180);
         door(bx + hx, by + sp.c[1] * scale, bz + hz,
              sp.r[0] * scale * 0.97, sp.r[1] * scale * 0.97, face);
@@ -672,17 +677,19 @@
       for (var j = 0; j < n; j++) {
         var sd = (seedBase * 2654435761) ^ ((i * 40503 + j * 7919) | 0);
         var u = (hashU(sd) - 0.5) * 2, v = (hashU(sd ^ 0x51ab) - 0.5) * 2;
+        /* the middle of a court belongs to its fountain */
+        if (sp.k === 'court' && Math.abs(u * sp.r[0]) < 4.6 && Math.abs(v * sp.r[1]) < 4.6) continue;
         var lx = (sp.c[0] + u * sp.r[0]) * scale;
         var lz = (sp.c[2] + v * sp.r[1]) * scale;
         var ly = sp.c[1] * scale;
-        var wx = bx + lx * c - lz * s2;
-        var wz = bz + lx * s2 + lz * c;
+        var wx = bx + lx * c + lz * s2;
+        var wz = bz - lx * s2 + lz * c;
         var list = sp.k === 'room' ? PROPS_ROOM
                  : (hashU(sd ^ 0x99) > 0.86 ? PROPS_ARMS : PROPS_ROOF);
         propOn(list, sd, wx, by + ly, wz, hashU(sd ^ 0x77) * 6.283, 1);
         /* a lamp burning on some terraces */
         if (sp.k !== 'room' && j === 0 && hashU(sd ^ 0x1234) > 0.55) {
-          lamp(wx, by + ly + 0.9, wz, 0.85, false);
+          lamp(wx, by + ly + 0.9, wz, 0.85);
         }
         /* Rooms are lit from within, so a window reads as a lit window and not
            a black hole punched in the wall. Most houses, not all -- some
@@ -814,19 +821,61 @@
        used to do -- two and a half metres shy in both directions. */
     var RAMPART_Y = 15.95;
     var WALK_IN = 3.2;
+    /* One solid wedge of masonry carries each flight -- a single surface, so
+       the wall texture runs unbroken down the flank instead of restarting on
+       every step the way the old stacked slabs did. Thin treads ride its back
+       and carry the walkable colliders. */
+    function stairWedge(xFoot, xTop, yBase, hTop, z, deep, m) {
+      var len = Math.abs(xTop - xFoot);
+      var g = uvScaleBox(new T.BoxGeometry(len, 1, deep), len, hTop, deep);
+      g.translate(0, 0.5, 0);                     /* bottom at local y 0 */
+      var pa = g.attributes.position;
+      var dirRight = xTop > xFoot ? 1 : -1;
+      for (var vi = 0; vi < pa.count; vi++) {
+        if (pa.getY(vi) > 0.5) {
+          var t = (pa.getX(vi) * dirRight + len / 2) / len;   /* 0 at foot */
+          pa.setY(vi, Math.max(0.3, hTop * t));
+        }
+      }
+      g.computeVertexNormals();
+      /* courses stay horizontal: reproject every face flat from position,
+         or the shear drags the masonry into a diagonal weave */
+      var uv2 = g.attributes.uv, pp = g.attributes.position;
+      var mx = (xFoot + xTop) / 2;
+      for (var fi = 0; fi < 6; fi++) {
+        for (var vi2 = 0; vi2 < 4; vi2++) {
+          var k2 = fi * 4 + vi2;
+          var px = pp.getX(k2) + mx, py = pp.getY(k2) + yBase, pz = pp.getZ(k2) + z;
+          if (fi < 2) uv2.setXY(k2, pz / TILE, py / TILE);        /* ends   */
+          else if (fi < 4) uv2.setXY(k2, px / TILE, pz / TILE);   /* top    */
+          else uv2.setXY(k2, px / TILE, py / TILE);               /* flanks */
+        }
+      }
+      uv2.needsUpdate = true;
+      var mesh = new T.Mesh(g, m);
+      mesh.position.set((xFoot + xTop) / 2, yBase, z);
+      W.scene.add(mesh);
+      /* coarse side blocking, thirds of rising height */
+      for (var k3 = 0; k3 < 3; k3++) {
+        var t0 = k3 / 3, t1 = (k3 + 1) / 3;
+        var hh = hTop * (t0 + t1) / 2;
+        var cx3 = xFoot + (xTop - xFoot) * (t0 + t1) / 2;
+        W.addBox(cx3, yBase + hh / 2, z, len / 6, hh / 2, deep / 2, 0);
+      }
+      return mesh;
+    }
     [-1, 1].forEach(function (sgn) {
       var steps = 26, rise = RAMPART_Y / steps, run = 1.5;
       var far = sgn * (GATE_HALF + 16 + steps * run);   /* the foot, away from the gate */
       var deep = 7.2;                                   /* runs back INTO the wall */
       var zIn = S - WALK_IN - deep / 2 + 1.4;           /* so the top tread overlaps the walk */
+      var xTop = far - sgn * steps * run;
+      stairWedge(far, xTop, Y, RAMPART_Y, zIn, deep, M.stone2);
       for (var i = 0; i < steps; i++) {
         var h = rise * (i + 1);
         var x = far - sgn * i * run;
-        box(run + 0.1, h, deep, x, Y + h / 2, zIn, M.stone2, 0);
+        box(run + 0.1, 0.34, deep, x, Y + h - 0.17, zIn, M.stone2, 0);
       }
-      /* the cheek wall carrying its open side */
-      var midX = far - sgn * (steps - 1) * run / 2;
-      box(steps * run, RAMPART_Y, 0.85, midX, Y + RAMPART_Y / 2, zIn - deep / 2 + 0.42, M.stone2, 0);
       /* the landing, level with the walk */
       box(4.8, 1.0, deep, far - sgn * steps * run, Y + RAMPART_Y - 0.5, zIn, M.stone2, 0);
     });
@@ -1106,7 +1155,7 @@
 
     function keepOut(x, z) {
       if (Math.hypot(x + 40, z + 34) < 36) return true;   /* the mosque */
-      if (Math.hypot(x + 40, z + 71) < 27) return true;   /* its courtyard */
+      if (Math.hypot(x + 40, z - 3) < 27) return true;    /* its courtyard */
       if (Math.hypot(x - 6, z - 8) < 14) return true;     /* the well square */
       if (Math.abs(x) > S - 30 || Math.abs(z) > S - 30) return true;
       return false;
@@ -1308,6 +1357,52 @@
     if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.2, 3.4, 0.3, false, 'x');
     if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.2, 0.42, 0.3, false, 'x');
     return { x: cx, z: cz, y: Y };
+  }
+
+  /* the bustan: a walled orchard. Giant trees five to seven storeys tall
+     stand in loose rows over fig and olive, ringed by low mud walls. */
+  function buildBustan(cx, cz) {
+    var giants = ['tree/giant_1', 'tree/giant_2', 'tree/giant_3'];
+    if (!MODELS[giants[0]]) return;
+    /* the patriarchs, two loose rows */
+    for (var i = 0; i < 7; i++) {
+      var gx = cx + (i % 4) * 26 - 39 + hashU((i * 977) | 0) * 10;
+      var gz = cz + Math.floor(i / 4) * 30 - 15 + hashU((i * 331) | 0) * 10;
+      var gh = W.heightAt(gx, gz);
+      var g = place(giants[i % 3], gx, gh - 0.3, gz, null,
+                    hashU((i * 913) | 0) * 6.283, false, 'raw',
+                    0.9 + hashU((i * 71) | 0) * 0.35);
+      if (g) g.userData.col = W.addBox(gx, gh + 3.2, gz, 1.05, 3.2, 1.05, 0);
+    }
+    /* fig and olive fill the rows between */
+    var FRUIT = ['tree/fig_1', 'tree/fig_2', 'tree/olive_1', 'tree/olive_2'];
+    for (var f2 = 0; f2 < 15; f2++) {
+      var fx = cx + (hashU((f2 * 419) | 0) - 0.5) * 96;
+      var fz = cz + (hashU((f2 * 653) | 0) - 0.5) * 70;
+      var fh = W.heightAt(fx, fz);
+      if (fh < W.WATER_Y + 0.4) continue;
+      var fg = place(FRUIT[f2 % 4], fx, fh - 0.25, fz, null,
+                     hashU((f2 * 149) | 0) * 6.283, false, 'raw',
+                     0.9 + hashU((f2 * 37) | 0) * 0.4);
+      if (fg) fg.userData.col = W.addBox(fx, fh + 2, fz, 0.36, 2, 0.36, 0);
+    }
+    /* the low mud ring, gapped for the paths in */
+    if (MODELS['bound/low']) {
+      var hw2 = 52, hd2 = 40;
+      for (var sw = -1; sw <= 1; sw += 2) {
+        for (var wx2 = -hw2 + 2; wx2 < hw2 - 2; wx2 += 4.1) {
+          if (Math.abs(wx2) < 5) continue;                 /* the gate gaps */
+          var wz2 = cz + sw * hd2;
+          placeBuilt('bound/low', cx + wx2, W.heightAt(cx + wx2, wz2) - 0.12, wz2, 0, 1);
+        }
+        for (var wz3 = -hd2 + 2; wz3 < hd2 - 2; wz3 += 4.1) {
+          var wxe = cx + sw * hw2;
+          placeBuilt('bound/low', wxe, W.heightAt(wxe, cz + wz3) - 0.12, cz + wz3, Math.PI / 2, 1);
+        }
+      }
+    }
+    torchPost(cx - 3.5, W.heightAt(cx - 3.5, cz - hd2), cz - 40);
+    torchPost(cx + 3.5, W.heightAt(cx + 3.5, cz + hd2), cz + 40);
   }
 
   /* an oasis: water, palms, big trees, flowers */
@@ -1539,22 +1634,24 @@
     };
 
     /* blades first, then the modelled clumps on top of them */
-    sowCards(cardGeo, cardMat, Math.round(2100 * (0.32 + cb.grass) * (W.vegScale || 1)), 0.85, 1.9);
+    sowCards(cardGeo, cardMat, Math.round(5600 * (0.34 + cb.grass) * (W.vegScale || 1)), 1.0, 2.1);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
     var near = (seg === undefined) || seg >= 32;
     if (near) {
-      sow('grass_a', Math.round(40 * (0.35 + cb.grass)), lush, 0.8, 1.6);
-      sow('grass_b', Math.round(46 * (0.3 + cb.grass)), lush, 0.7, 1.4);
-      sow('fl_orange', Math.round(110 * (0.2 + cb.grass)), lush, 0.9, 1.7);
-      sow('fl_yellow', Math.round(80 * (0.2 + cb.grass)), lush, 0.9, 1.7);
-      sow('fl_purple', Math.round(26 * (0.15 + cb.grass)), lush, 0.9, 1.6);
-      sow('fl_white', Math.round(10 * (0.15 + cb.grass)), lush, 0.9, 1.6);
+      sow('grass_a', Math.round(100 * (0.35 + cb.grass)), lush, 0.8, 1.7);
+      sow('grass_b', Math.round(112 * (0.3 + cb.grass)), lush, 0.7, 1.5);
+      sow('fl_orange', Math.round(150 * (0.2 + cb.grass)), lush, 0.9, 1.7);
+      sow('fl_yellow', Math.round(110 * (0.2 + cb.grass)), lush, 0.9, 1.7);
+      sow('fl_purple', Math.round(40 * (0.15 + cb.grass)), lush, 0.9, 1.6);
+      sow('fl_white', Math.round(16 * (0.15 + cb.grass)), lush, 0.9, 1.6);
     }
-    sow('bush_dry', Math.round(14 * (1 - cb.grass)), dry, 0.8, 1.7);
-    sow('rock_d', Math.round(6 * (0.3 + cb.rock)), stony, 0.8, 2.2);
+    sow('bush_dry', Math.round(24 * (1 - cb.grass)), dry, 0.8, 1.7);
+    sow('rock_d', Math.round(9 * (0.3 + cb.rock)), stony, 0.8, 2.2);
+    sow('rock_small', Math.round(30 * (0.4 + cb.rock)), dry, 0.7, 1.9);
+    sow('rock_small', Math.round(16 * (0.3 + cb.rock)), stony, 0.7, 1.9);
     if (near) {
-      sow('plant/tuft_1', Math.round(24 * (0.3 + cb.grass)), lush, 0.9, 1.4);
-      sow('plant/tuft_2', Math.round(20 * (0.3 + cb.grass)), lush, 0.9, 1.4);
+      sow('plant/tuft_1', Math.round(38 * (0.3 + cb.grass)), lush, 0.9, 1.5);
+      sow('plant/tuft_2', Math.round(32 * (0.3 + cb.grass)), lush, 0.9, 1.5);
       sow('plant/poppy_1', Math.round(11 * (0.2 + cb.grass)), lush, 0.9, 1.3);
       sow('plant/lavender_1', Math.round(9 * (0.2 + cb.grass)), lush, 0.9, 1.3);
       sow('plant/shrub_1', Math.round(8 * (0.25 + cb.grass)), lush, 0.9, 1.5);
@@ -1572,7 +1669,11 @@
       sow('plant/reed_1', 16, bank, 0.9, 1.4);
     }
 
-    /* trees and palms, sparse and deliberate */
+    /* trees and palms, sparse and deliberate. One stand per chunk: palms
+       keep to the water veins, orchards keep to the grass -- a mixed clump
+       of palms and planes is nothing that grows anywhere. */
+    var zc = W.groundWeights(ox + CH / 2, oz + CH / 2, W.heightAt(ox + CH / 2, oz + CH / 2));
+    var palmChunk = zc.w > 0.33;
     var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
@@ -1581,9 +1682,18 @@
       if (th < W.WATER_Y + 0.5) continue;
       var key = null, sc = 1;
       var own = rng(tx, tz, 2.7);        /* the Blender-grown trees, true size */
-      if (w.g > 0.55 && own > 0.5) {
+      if (palmChunk) {
+        if (w.w > 0.24) {
+          if (own > 0.82) {              /* tamarisk holds the bank with them */
+            key = 'tree/tamarisk_' + (own > 0.91 ? 2 : 1);
+            sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
+          } else {
+            key = 'palm'; sc = 8 + rng(tx, tz, 7) * 5;
+          }
+        }
+      } else if (w.g > 0.55 && own > 0.5) {
         var TS = ['tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
-                  'tree/fig_1', 'tree/fig_2', 'tree/tamarisk_1', 'tree/tamarisk_2',
+                  'tree/fig_1', 'tree/fig_2',
                   'tree/cypress_1', 'tree/cypress_2'];
         key = TS[Math.floor(rng(tx, tz, 3.3) * TS.length) % TS.length];
         sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
@@ -1591,8 +1701,6 @@
         var pickN = rng(tx, tz, 1.1);
         key = pickN > 0.86 ? 'tree_anc' : (pickN > 0.5 ? 'tree_big_a' : 'tree_big_b');
         sc = pickN > 0.86 ? (24 + rng(tx, tz, 4) * 14) : (11 + rng(tx, tz, 2) * 8);
-      } else if (w.w > 0.35) {
-        key = 'palm'; sc = 8 + rng(tx, tz, 7) * 5;
       } else if (rng(tx, tz, 6.6) > 0.72) {
         key = 'tree_small'; sc = 4 + rng(tx, tz, 5) * 3;
       }
@@ -1697,7 +1805,7 @@
     }
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
-      if (lp.d2 > 26000) { lp.g.visible = false; continue; }
+      if (lp.d2 > 60000) { lp.g.visible = false; continue; }
       lp.g.visible = true;
       lp.g.lookAt(cp);
       lp.g.material.opacity = 0.5 + 0.16 * lp.lit;
@@ -1823,7 +1931,8 @@
       'tree/fig_1', 'tree/fig_2',
       'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
-      'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1']), function () {
+      'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',
+      'tree/giant_1', 'tree/giant_2', 'tree/giant_3', 'bound/low']), function () {
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();
@@ -1838,20 +1947,21 @@
           });
           /* lamps hung between the courtyard piers */
           for (var q = -2; q <= 2; q++) {
-            lamp(MX + q * 9, TOWN.y + 5.4, MZ - 37, 1.5, false);
+            lamp(MX + q * 9, TOWN.y + 5.4, MZ + 37, 1.5);
           }
-          lamp(MX, TOWN.y + 6.0, MZ, 1.8, false);
+          lamp(MX, TOWN.y + 6.0, MZ, 1.8, false);   /* inside the dome, unseen */
           W.MOSQUE = { x: MX, z: MZ, y: TOWN.y };
         } else {
           buildMosque(-34, -30);
         }
-        if (MODELS.p_well) { placeBuilt('p_well', 6, TOWN.y, 8, 0.4, 1.6); lamp(6, TOWN.y + 4.2, 8, 1.2, false); }
-        lamp(6, TOWN.y + 3.4, 8, 1.3, false);
+        if (MODELS.p_well) { placeBuilt('p_well', 6, TOWN.y, 8, 0.4, 1.6); }
+        lamp(6, TOWN.y + 3.4, 8, 1.3);
 
         buildCamp(430, -260, 4);
         buildCamp(-520, 300, 3);
         buildCave(-360, 250);
         buildOasis(300, 330);
+        buildBustan(195, 245);
 
         if (W.refreshVeg) W.refreshVeg();
       });

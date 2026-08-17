@@ -438,16 +438,76 @@ elif KIND == "firewood":
             rot=(0, math.pi / 2, random.uniform(0, 3.14)), verts=6)
 
 elif KIND == "torch":
-    # an iron bracket driven into a wall, holding a pitch-soaked head
-    box(0.16, 0.34, 0.16, (0, 0.1, 0), 0, True)                  # the wall plate
-    cyl(0.035, 0.03, 0.52, (0, -0.16, 0.14), rot=(1.05, 0, 0), verts=8)   # the arm
-    cyl(0.055, 0.05, 0.16, (0, -0.36, 0.36), rot=(0.25, 0, 0), verts=8)   # the collar
-    ring = torus(0.1, 0.018, (0, -0.38, 0.42), seg=12)
-    cyl(0.045, 0.055, 0.62, (0, -0.4, 0.7), rot=(0.12, 0, 0), verts=8)    # the shaft
-    head = sphere(0.11, (0, -0.44, 1.02))
-    head.scale = (1, 1, 1.3)
+    # Forged ironwork, not stacked primitives: a strapped wall plate, one
+    # hammered arm curving out and up, and an open finger-basket cradling
+    # the pitch-soaked head. Every element bends and wavers a little.
+    def seg_chain(pts, r0, r1, verts=7, hammer=0.004):
+        """Tapered rod bent through the given points, ball at each joint."""
+        n = len(pts) - 1
+        for i in range(n):
+            (x0, y0, z0), (x1, y1, z1) = pts[i], pts[i + 1]
+            dx, dy, dz = x1 - x0, y1 - y0, z1 - z0
+            ln = math.sqrt(dx * dx + dy * dy + dz * dz)
+            ra = r0 + (r1 - r0) * (i / n)
+            rb = r0 + (r1 - r0) * ((i + 1) / n)
+            pitch = math.acos(max(-1, min(1, dz / (ln or 1))))
+            yaw = math.atan2(dy, dx)
+            bpy.ops.mesh.primitive_cone_add(radius1=ra, radius2=rb, depth=ln * 1.12,
+                location=((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), vertices=verts)
+            ob = bpy.context.active_object
+            ob.rotation_euler = (0.0, pitch, yaw)
+            bpy.ops.object.transform_apply(rotation=True)
+            jitter(ob, hammer)
+            parts.append(ob)
+            if i < n - 1:
+                bpy.ops.mesh.primitive_uv_sphere_add(radius=rb * 1.06,
+                    location=(x1, y1, z1), segments=7, ring_count=5)
+                jb = bpy.context.active_object
+                jitter(jb, hammer)
+                parts.append(jb)
+
+    pl = box(0.15, 0.3, 0.05, (0, 0.05, 0.16), 0, True)          # the strap plate
+    jitter(pl, 0.008)
+    for sy, sz in ((-0.1, 0.05), (0.1, 0.05), (-0.1, 0.27), (0.1, 0.27)):
+        nl = cyl(0.014, 0.012, 0.03, (0.0, sy, sz), rot=(0, 1.5708, 0), verts=6)
+        jitter(nl, 0.003)                                        # nail heads
+    # the arm: one smooth smith's curve from the plate, out and up
+    arm = []
+    for i in range(7):
+        t = i / 6.0
+        arm.append((0,
+                    -0.05 - 0.42 * math.sin(t * 1.35),
+                    0.12 + 0.30 * t + 0.42 * t * t))
+    seg_chain(arm, 0.030, 0.020)
+    tipy, tipz = arm[-1][1], arm[-1][2]
+    # a scrolled drip-curl under the arm's end, the smith's flourish
+    seg_chain([(0, tipy + 0.02, tipz - 0.05), (0, tipy + 0.07, tipz - 0.10),
+               (0, tipy + 0.10, tipz - 0.07), (0, tipy + 0.08, tipz - 0.03)],
+              0.012, 0.007)
+    # the basket: six bowed fingers meeting two waving hoops
+    for k in range(6):
+        a = k * math.pi / 3 + 0.26
+        fx, fy = math.cos(a), math.sin(a)
+        seg_chain([(fx * 0.035, tipy + fy * 0.035, tipz - 0.02),
+                   (fx * 0.085, tipy + fy * 0.085, tipz + 0.07),
+                   (fx * 0.105, tipy + fy * 0.105, tipz + 0.16),
+                   (fx * 0.075, tipy + fy * 0.075, tipz + 0.24)],
+                  0.011, 0.008, verts=5)
+    for hz, hr in ((tipz + 0.10, 0.10), (tipz + 0.185, 0.105)):
+        hp = torus(hr, 0.009, (0, tipy, hz), seg=14)
+        jitter(hp, 0.006)
+    # the pitch-soaked head, a ragged charred lump proud of the basket
+    head = sphere(0.095, (0, tipy, tipz + 0.20), seg=12)
+    head.scale = (1, 1, 1.35)
     bpy.ops.object.transform_apply(scale=True)
-    jitter(head, 0.02)
+    jitter(head, 0.032)
+    for k in range(3):                                           # sagging drips
+        a = k * 2.2 + 0.5
+        dr = sphere(0.022, (math.cos(a) * 0.08, tipy + math.sin(a) * 0.08,
+                            tipz + 0.06 - k * 0.02), seg=7)
+        dr.scale = (0.7, 0.7, 1.9)
+        bpy.ops.object.transform_apply(scale=True)
+        jitter(dr, 0.006)
 
 elif KIND == "torchpost":
     # A cresset: a timber stake with an open iron basket on top holding the
@@ -469,18 +529,26 @@ elif KIND == "torchpost":
         a = k * math.pi * 2 / 3 + 0.7
         cyl(0.03, 0.024, 0.56, (math.cos(a) * 0.17, math.sin(a) * 0.17, 0.34),
             rot=(0.62 * math.sin(a), -0.62 * math.cos(a), 0), verts=5)
-    # the basket: a ring of upright bars closed by two hoops, open at the top
-    cyl(0.11, 0.16, 0.1, (0, 0, 2.25), verts=10)                        # collar
-    for k in range(8):
-        a = k * math.pi * 2 / 8
-        cyl(0.017, 0.015, 0.34, (math.cos(a) * 0.15, math.sin(a) * 0.15, 2.46),
-            rot=(-0.30 * math.sin(a), 0.30 * math.cos(a), 0), verts=4)
-    torus(0.155, 0.019, (0, 0, 2.34), seg=14)
-    torus(0.215, 0.019, (0, 0, 2.62), seg=14)
+    # the basket: bowed iron fingers meeting two hoops, none of them true
+    col = cyl(0.11, 0.15, 0.1, (0, 0, 2.25), verts=10)                  # collar
+    jitter(col, 0.008)
+    for k in range(7):
+        a = k * math.pi * 2 / 7 + 0.2
+        fx, fy = math.cos(a), math.sin(a)
+        bar = cyl(0.016, 0.012, 0.4,
+                  (fx * 0.16, fy * 0.16, 2.48),
+                  rot=(-0.38 * fy + random.uniform(-0.05, 0.05),
+                       0.38 * fx + random.uniform(-0.05, 0.05), 0), verts=5)
+        jitter(bar, 0.006)
+    for hz, hr in ((2.36, 0.15), (2.63, 0.205)):
+        hp = torus(hr, 0.016, (0, 0, hz), seg=14)
+        jitter(hp, 0.01)
     for k in range(4):                                                  # the fuel in it
         a = k * 1.6
-        c = sphere(0.075, (math.cos(a) * 0.07, math.sin(a) * 0.07, 2.45))
-        jitter(c, 0.02)
+        c = sphere(0.075, (math.cos(a) * 0.07, math.sin(a) * 0.07, 2.5))
+        c.scale = (1.15, 1.0, 0.75)
+        bpy.ops.object.transform_apply(scale=True)
+        jitter(c, 0.024)
 
 elif KIND == "ladder":
     # leaning ladder, after the roofs in the reference panorama

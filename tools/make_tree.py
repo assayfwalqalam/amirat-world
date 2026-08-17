@@ -52,7 +52,7 @@ def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None):
         bpy.ops.mesh.primitive_cone_add(radius1=r, radius2=r0 + (r1 - r0) * (t + 1.0 / segs),
                                         depth=seglen * 1.15, location=mid, vertices=8)
         ob = bpy.context.active_object
-        ob.rotation_euler = (0.0, pitch, yaw + math.pi / 2)
+        ob.rotation_euler = (0.0, pitch, yaw)
         bpy.ops.object.transform_apply(rotation=True)
         wood.append(ob)
         if i < segs - 1:
@@ -89,7 +89,7 @@ def crown(at, r, squash=0.72, n=None):
 GREEN = {
     "olive": (0.20, 0.26, 0.15), "plane": (0.14, 0.26, 0.10),
     "cypress": (0.08, 0.155, 0.085), "tamarisk": (0.20, 0.27, 0.155),
-    "fig": (0.115, 0.23, 0.09),
+    "fig": (0.115, 0.23, 0.09), "giant": (0.13, 0.245, 0.10),
 }[KIND]
 
 if KIND == "olive":
@@ -145,6 +145,25 @@ elif KIND == "tamarisk":
                       H * 0.7, 0.12, 0.03, crook=0.5)
         crown(tip, H * 0.3, 0.55, n=5)
     rec((0, 0, H * 0.3), 0.35, 0.35, H * 0.3)
+
+elif KIND == "giant":
+    # the bustan patriarch: five to seven storeys of tree
+    H = random.uniform(16.0, 21.0)
+    tip, d = limb((0, 0, 0), (0, 0, 1), H * 0.38, 1.15, 0.62,
+                  segs=6, crook=0.22, min_dz=0.8)
+    # heavy boughs fork off the crown point and each carries its own cloud
+    for _ in range(random.randint(6, 8)):
+        a = random.uniform(0, 6.283)
+        t2, _ = limb(tip, (math.cos(a) * 0.9, math.sin(a) * 0.9, random.uniform(0.55, 1.0)),
+                     H * 0.42, 0.34, 0.09, crook=0.4)
+        crown(t2, H * 0.24, 0.66)
+    crown((tip[0], tip[1], tip[2] + H * 0.26), H * 0.30, 0.7)
+    # buttress roots at the foot
+    for _ in range(5):
+        a = random.uniform(0, 6.283)
+        limb((math.cos(a) * 0.7, math.sin(a) * 0.7, 0.4),
+             (math.cos(a), math.sin(a), -0.55), 1.6, 0.3, 0.06, segs=3, crook=0.3)
+    rec((0, 0, H * 0.22), 1.1, 1.1, H * 0.22)
 
 else:                        # fig: low, wide, spreading
     H = random.uniform(4.0, 5.5)

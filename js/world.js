@@ -305,9 +305,9 @@
       composer.addPass(new THREE.RenderPass(scene, cam));
       var bloom = new THREE.UnrealBloomPass(
         new THREE.Vector2(innerWidth, innerHeight),
-        TIER === 2 ? 0.40 : 0.28,  /* strength */
-        0.85,                       /* radius */
-        0.80                        /* threshold: only bright things glow */
+        TIER === 2 ? 0.30 : 0.22,  /* strength · his rule: light must not flare */
+        0.75,                       /* radius */
+        0.86                        /* threshold: only true flames glow */
       );
       composer.addPass(bloom);
       W.bloom = bloom;
@@ -489,6 +489,8 @@
           'float fine  = texture2D(tMask, wxz * 0.0195 + vec2(0.8, 0.3)).r;',
           /* sand: two different photos at two scales, mixed by a large organic mask */
           'vec3 sA = texture2D(tSand, wxz * 0.085).rgb;',
+          'vec3 sA2 = texture2D(tSand, wxz * -0.067 + vec2(0.41, 0.77)).rgb;',
+          'sA = mix(sA, sA2, smoothstep(0.36, 0.62, macro2));',
           'vec3 sB = texture2D(tGrav, wxz * 0.052).rgb;',
           'vec3 sC = texture2D(tSand, wxz * 0.0143).rgb;',
           'vec3 sand = mix(sA, sB, smoothstep(0.40, 0.66, macro));',
@@ -499,6 +501,8 @@
           'vec3 rock = rA * (0.66 + 0.78 * rB.r);',
           /* grass */
           'vec3 gA = texture2D(tGrass, wxz * 0.098).rgb;',
+          'vec3 gA2 = texture2D(tGrass, wxz * -0.074 + vec2(0.53, 0.21)).rgb;',
+          'gA = mix(gA, gA2, smoothstep(0.34, 0.66, macro2));',
           'vec3 gB = texture2D(tGrass, wxz * 0.0172 + vec2(0.2, 0.7)).rgb;',
           'vec3 grass = gA * (0.60 + 0.85 * gB.g);',
           'grass *= (0.86 + 0.30 * macro);',
@@ -516,6 +520,16 @@
           'vec3 grit2 = texture2D(tGrav, wxz * 0.33 + vec2(0.4, 0.9)).rgb;',
           'col = mix(col, col * (0.72 + 0.66 * grit2.r), hollow * 0.34 * (1.0 - vColor.r));',
           'col = mix(col, col * vec3(0.70, 0.76, 0.70), vColor.b * 0.55);',
+          /* Inside the walls the ground is trodden: compacted grey-tan earth
+             with pebbles pressed in, not loose desert. */
+          'float townD = length(wxz);',
+          'float town = 1.0 - smoothstep(128.0, 182.0, townD);',
+          'vec3 trodA = texture2D(tGrav, wxz * 0.115).rgb;',
+          'vec3 trodB = texture2D(tSand, wxz * 0.034 + vec2(0.6, 0.2)).rgb;',
+          'vec3 trod = mix(trodA, trodB, 0.42);',
+          'trod = mix(trod, vec3(dot(trod, vec3(0.36, 0.5, 0.14))), 0.55) * vec3(1.05, 0.99, 0.90);',
+          'trod *= (0.78 + 0.38 * macro2) * (0.90 + 0.20 * fine);',
+          'col = mix(col, trod, town * 0.85);',
           'col *= 0.94 + 0.12 * fine;',
           /* Grain underfoot. The broad layers repeat every ten metres or so,
              which is smooth mush at arm's length, so a fine layer fades in
@@ -527,13 +541,13 @@
           '  vec3 fine2 = texture2D(tGrav, wxz * 3.1).rgb;',
           '  vec3 grit  = texture2D(tGrav, wxz * 1.35).rgb;',
           '  float g = grain.r * 0.48 + grit.r * 0.30 + fine2.r * 0.22;',
-          '  col *= mix(1.0, 0.58 + 0.86 * g, nearW * 0.62);',
+          '  col *= mix(1.0, 0.72 + 0.56 * g, nearW * 0.5);',
           '}',
           /* Moonlight is blue, and photographed daylight sand is far too bright
              to stand in for ground at night: left alone it reads as lit
              concrete and outshines the walls it should sit beneath. */
-          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.40 * uNight);',
-          'col *= mix(1.0, 0.46, uNight);',
+          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.34 * uNight);',
+          'col *= mix(1.0, 0.52, uNight);',
           'diffuseColor.rgb *= col;'
         ].join('\n'));
     };
@@ -735,7 +749,13 @@
           'vec3 nC = texture2D( normalMap, wUv * 2.3 + vec2( uFlow * 0.04, -uFlow * 0.031) ).xyz * 2.0 - 1.0;',
           'vec3 mapN = normalize(nA + nB * 0.8 + nC * 0.35);',
           'mapN.xy *= normalScale;',
-          'normal = normalize( tbn * mapN );'
+          /* build the frame ourselves: some compile paths have no tbn */
+          'vec3 wq0 = dFdx(-vViewPosition); vec3 wq1 = dFdy(-vViewPosition);',
+          'vec2 wst0 = dFdx(wUv); vec2 wst1 = dFdy(wUv);',
+          'vec3 wN = normalize(normal);',
+          'vec3 wT = normalize(wq0 * wst1.t - wq1 * wst0.t);',
+          'vec3 wB = -normalize(cross(wN, wT));',
+          'normal = normalize(mat3(wT, wB, wN) * mapN);'
         ].join('\n'));
     };
     water = new THREE.Mesh(g, m);
@@ -753,8 +773,10 @@
   var CELL = 26;
   function cellKey(x, z) { return Math.floor(x / CELL) + ',' + Math.floor(z / CELL); }
 
+  var boxId = 0;
   W.addBox = function (cx, cy, cz, hx, hy, hz, rot) {
-    var b = { cx: cx, cz: cz, hx: hx, hz: hz, y0: cy - hy, y1: cy + hy, rot: rot || 0,
+    var b = { id: ++boxId,
+              cx: cx, cz: cz, hx: hx, hz: hz, y0: cy - hy, y1: cy + hy, rot: rot || 0,
               c: Math.cos(rot || 0), s: Math.sin(rot || 0) };
     COLL.push(b);
     var reach = Math.sqrt(hx * hx + hz * hz) + CELL;
@@ -778,7 +800,9 @@
         if (!a) continue;
         for (var i = 0; i < a.length; i++) {
           var b = a[i];
-          if (!seen[b.cx + '_' + b.cz + '_' + b.y0]) { seen[b.cx + '_' + b.cz + '_' + b.y0] = 1; out.push(b); }
+          if (b.dead || seen[b.id]) continue;
+          seen[b.id] = 1;
+          out.push(b);
         }
       }
     }
@@ -786,7 +810,7 @@
   };
 
   /* ------------------------------------------------------------- player */
-  var PR = 0.42, PH = 1.72, STEP = 0.62, GRAV = -23.5, JUMP = 8.4;
+  var PR = 0.42, PH = 1.72, STEP = 0.74, GRAV = -23.5, JUMP = 8.4;
   var pos = new THREE.Vector3(), vel = new THREE.Vector3();
   var yaw = 0, pitch = -0.04, fly = false, grounded = false;
   var keys = {}, moveVec = { x: 0, y: 0 }, movePid = null, moveOrigin = null, looks = {};
@@ -909,8 +933,9 @@
       var b = boxes[i];
       if (b.dead || head < b.y0 || feet > b.y1) continue;
       var dx = p.x - b.cx, dz = p.z - b.cz;
-      var lx = dx * b.c + dz * b.s;
-      var lz = -dx * b.s + dz * b.c;
+      /* rotation.y carries local +x to world (cos, -sin); this is its inverse */
+      var lx = dx * b.c - dz * b.s;
+      var lz = dx * b.s + dz * b.c;
       var ox = b.hx + PR - Math.abs(lx);
       var oz = b.hz + PR - Math.abs(lz);
       if (ox <= 0 || oz <= 0) continue;
@@ -919,8 +944,8 @@
         p.y = b.y1 + PH; vel.y = 0; grounded = true; continue;
       }
       if (ox < oz) { lx += (lx > 0 ? ox : -ox); } else { lz += (lz > 0 ? oz : -oz); }
-      p.x = b.cx + lx * b.c - lz * b.s;
-      p.z = b.cz + lx * b.s + lz * b.c;
+      p.x = b.cx + lx * b.c + lz * b.s;
+      p.z = b.cz - lx * b.s + lz * b.c;
     }
   }
 

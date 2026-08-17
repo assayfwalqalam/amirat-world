@@ -130,12 +130,24 @@
 
   /* the way the next thing will face · [ and ] turn it before you put it down */
   var placeRot = 0;
+  var placeScale = 1;        /* duplicates keep the source's size */
+  var runMode = false;       /* T · each placement offers the next slot beside it */
+  var runPrev = null;        /* the last thing placed in this run */
+  var runSlot = null;        /* where the next one in the run will stand */
+
+  function runWidth(rec) {
+    if (!rec || !rec.obj) return 4;
+    var sz = new T.Box3().setFromObject(rec.obj).getSize(new T.Vector3());
+    var c = Math.abs(Math.cos(rec.rot)), s2 = Math.abs(Math.sin(rec.rot));
+    return Math.max(0.6, sz.x * c + sz.z * s2);
+  }
 
   function placeAt(key, p) {
     var y = snapGround ? W.heightAt(p.x, p.z) : p.y;
     var x = p.x, z = p.z;
-    if (snapGrid) { x = Math.round(x / GRID) * GRID; z = Math.round(z / GRID) * GRID; }
-    var rec = addObject(key, x, y, z, placeRot, 1);
+    if (snapGrid && !(runMode && runSlot)) { x = Math.round(x / GRID) * GRID; z = Math.round(z / GRID) * GRID; }
+    var rec = addObject(key, x, y, z, placeRot, placeScale);
+    if (runMode) runPrev = rec;
     push({ undo: function () { removeRecord(rec); refreshList(); },
            redo: function () { reAdd(rec); refreshList(); } });
     /* select it, so the turn and size keys act on what was just placed */
@@ -456,9 +468,11 @@
           document.querySelectorAll('.item.sel').forEach(function (q) { q.classList.remove('sel'); });
           e.classList.add('sel');
           armed = it.k;
+          placeScale = 1;
+          runPrev = null; runSlot = null;
           setMode('place');
           makeGhost(it.k);
-          toast('placing ' + it.n);
+          toast(runMode ? 'placing ' + it.n + ' · row on (T)' : 'placing ' + it.n);
         };
         box.appendChild(e);
       });
@@ -613,7 +627,13 @@
       else if (ctrl && e.code === 'KeyD') { e.preventDefault(); duplicate(); }
       else if (ctrl && e.code === 'KeyS') { e.preventDefault(); save(); }
       else if (e.code === 'Delete' || e.code === 'Backspace') { e.preventDefault(); del(); }
-      else if (e.code === 'Escape') { armed = null; setMode('select'); clearSel(); }
+      else if (e.code === 'Escape') { armed = null; runPrev = null; runSlot = null; setMode('select'); clearSel(); }
+      else if (e.code === 'KeyT') {
+        runMode = !runMode;
+        if (!runMode) { runPrev = null; runSlot = null; }
+        else if (SEL.length === 1) runPrev = SEL[0];
+        toast(runMode ? 'row placing on · next one lands beside the last' : 'row placing off');
+      }
       else if (e.code === 'KeyG') { snapGrid = !snapGrid; refreshSnap(); }
       else if (e.code === 'KeyR') { dragRot = true; }
       else if (e.code === 'BracketLeft') { turn(-Math.PI / 12); }
@@ -677,8 +697,23 @@
       if (mode === 'place' && ghost) {
         var g = groundPoint(e);
         if (g) {
-          if (snapGrid) { g.x = Math.round(g.x / GRID) * GRID; g.z = Math.round(g.z / GRID) * GRID; }
-          ghost.position.set(g.x, g.y, g.z);
+          if (runMode && runPrev && runPrev.obj) {
+            /* the next slot butts against the last piece; the cursor only
+               chooses which end of it to grow from */
+            var wRun = runWidth(runPrev);
+            var dx = Math.cos(placeRot) * wRun, dz = -Math.sin(placeRot) * wRun;
+            var aX = runPrev.x + dx, aZ = runPrev.z + dz;
+            var bX = runPrev.x - dx, bZ = runPrev.z - dz;
+            var useA = (g.x - aX) * (g.x - aX) + (g.z - aZ) * (g.z - aZ) <=
+                       (g.x - bX) * (g.x - bX) + (g.z - bZ) * (g.z - bZ);
+            runSlot = { x: useA ? aX : bX, z: useA ? aZ : bZ };
+            runSlot.y = snapGround ? W.heightAt(runSlot.x, runSlot.z) : runPrev.y;
+            ghost.position.set(runSlot.x, runSlot.y, runSlot.z);
+          } else {
+            runSlot = null;
+            if (snapGrid) { g.x = Math.round(g.x / GRID) * GRID; g.z = Math.round(g.z / GRID) * GRID; }
+            ghost.position.set(g.x, g.y, g.z);
+          }
           ghost.rotation.y = placeRot;
           ghost.visible = true;
         } else ghost.visible = false;
@@ -696,7 +731,7 @@
       mouse.down = false; mouse.look = false;
       if (gizDrag) { endGizDrag(); gizHighlight(null); return; }
       if (e.button === 0 && mode === 'place' && armed && !wasDrag) {
-        var g = groundPoint(e);
+        var g = (runMode && runSlot) ? runSlot : groundPoint(e);
         if (g) placeAt(armed, g);
       }
       if (dragStart && wasDrag) commitDrag();
@@ -788,12 +823,27 @@
   }
   function duplicate() {
     if (!SEL.length) return;
+    if (SEL.length === 1) {
+      /* the copy rides the cursor; click puts it down and selects it */
+      var r0 = SEL[0];
+      armed = r0.key;
+      placeRot = r0.rot;
+      placeScale = r0.sc;
+      runPrev = runMode ? r0 : null; runSlot = null;
+      setMode('place');
+      makeGhost(r0.key);
+      toast('copy on the cursor · click to place');
+      return;
+    }
     var made = SEL.map(function (r) {
       return addObject(r.key, r.x + 3, r.y, r.z + 3, r.rot, r.sc, true);
     });
     push({ undo: function () { made.forEach(removeRecord); refreshList(); },
            redo: function () { made.forEach(reAdd); refreshList(); } });
-    refreshList(); toast('duplicated ' + made.length);
+    SEL.forEach(unmark); SEL.length = 0;
+    made.forEach(function (r) { SEL.push(r); mark(r); });
+    refreshPanel(); refreshList(); updateGizmo();
+    toast('duplicated ' + made.length + ' · the copies are selected');
   }
   function del() {
     if (!SEL.length) return;
@@ -825,6 +875,18 @@
     $('load2').onclick = function () { loadSaved(); };
     $('del').onclick = del;
     $('dup').onclick = duplicate;
+    $('row').onclick = function () {
+      if (SEL.length !== 1) { toast('select one thing to grow a row from'); return; }
+      var r0 = SEL[0];
+      armed = r0.key;
+      placeRot = r0.rot;
+      placeScale = r0.sc;
+      runMode = true;
+      runPrev = r0; runSlot = null;
+      setMode('place');
+      makeGhost(r0.key);
+      toast('row: click to add one beside it · [ ] to turn a corner · T to stop');
+    };
     $('clear').onclick = function () {
       if (!PLACED.length) return;
       var all = PLACED.slice();
@@ -900,7 +962,7 @@
       'WASD fly · Q/E down/up · Shift fast · right-drag look · wheel zoom<br>' +
       'click an asset then click the ground to place · click a building for its handles:<br>' +
       'red/blue arrows slide it, green arrow lifts it, yellow square slides it freely, gold ring turns it<br>' +
-      '[ ] turn · + − size · Ctrl+D copy · Del remove · Ctrl+Z undo · G grid';
+      '[ ] turn · + − size · Ctrl+D copy · T row · Del remove · Ctrl+Z undo · G grid';
   }
 
   /* A starting town, so the page is not an empty desert. It is only a seed:

@@ -269,9 +269,20 @@ arcade(-CW / 2, CY - 8.0, -CW / 2, CY + 8.0, 5)
 arcade(CW / 2, CY - 8.0, CW / 2, CY + 8.0, 5)
 SPOTS.append({"c": [0, 0.05, round(-CY, 2)], "r": [CW / 2 - 4, 6], "k": "court"})
 
-# a fountain in the middle of the court
+# a fountain in the middle of the court: the rim is a ring, the water sits
+# recessed inside it -- coplanar caps flickered against each other before
 cyl(2.6, 2.8, 0.8, (0, CY, 0.4), verts=20, collide=True)
-cyl(2.2, 2.2, 0.1, (0, CY, 0.75), verts=20)
+cut_cyl = bpy.ops.mesh.primitive_cylinder_add(radius=2.25, depth=0.5,
+                                              location=(0, CY, 0.85), vertices=20)
+_c = bpy.context.active_object
+_m = parts[-1].modifiers.new("b", 'BOOLEAN')
+_m.operation = 'DIFFERENCE'
+_m.object = _c
+_m.solver = 'EXACT'
+bpy.context.view_layer.objects.active = parts[-1]
+bpy.ops.object.modifier_apply(modifier=_m.name)
+bpy.data.objects.remove(_c, do_unlink=True)
+cyl(2.2, 2.2, 0.06, (0, CY, 0.62), verts=20)
 cyl(0.4, 0.5, 1.4, (0, CY, 1.2), verts=12)
 dome(0.55, (0, CY, 1.85))
 

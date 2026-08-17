@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- The door example, for design approval: the wooden arched leaf in a mud
+     doorway, lit clearly. Same geometry the game builds. Harness page only. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>door example</title>
+<style>html,body{margin:0;height:100%;background:#202024;overflow:hidden}</style>
+</head>
+<body>
+<script src="js/three.min.js"></script>
+<script>
+var T = THREE;
+var renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(1280, 760);
+renderer.outputEncoding = T.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+var scene = new T.Scene();
+scene.background = new T.Color(0x9db3cd);
+var cam = new T.PerspectiveCamera(42, 1280 / 760, 0.05, 100);
+
+var sun = new T.DirectionalLight(0xffe6c4, 2.0);
+sun.position.set(3.5, 5, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun);
+scene.add(new T.HemisphereLight(0xc7d6ea, 0x6b5a41, 0.8));
+
+var L = new T.TextureLoader();
+function tx(p, rep) {
+  var t = L.load(p, function(){ done(); });
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  if (rep) t.repeat.set(rep[0], rep[1]);
+  t.encoding = T.sRGBEncoding;
+  return t;
+}
+var need = 2, got = 0;
+function done() { if (++got >= need) { render(); document.title = 'loaded'; } }
+
+/* the mud wall with the arched doorway cut, drawn as two jambs + arch head */
+var mudM = new T.MeshStandardMaterial({ map: tx('assets/t_adobe_d.jpg', [1.2, 1.2]), roughness: 1 });
+var W2 = 1.5, H2 = 2.5, TH = 0.5;
+function wallBox(w, h, d, x, y, z) {
+  var m = new T.Mesh(new T.BoxGeometry(w, h, d), mudM);
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+}
+wallBox(1.8, 3.4, TH, -(W2 / 2 + 0.9), 1.7, 0);      /* left jamb  */
+wallBox(1.8, 3.4, TH, (W2 / 2 + 0.9), 1.7, 0);       /* right jamb */
+wallBox(W2 + 3.6, 1.1, TH, 0, 3.4 + 0.55, 0);        /* over the head */
+/* the arch head: voussoirs centred on the leaf's own arc */
+for (var i = 0; i < 11; i++) {
+  var a = Math.PI * (i + 0.5) / 11;
+  var rr = W2 / 2 + 0.24;
+  var seg = new T.Mesh(new T.BoxGeometry((Math.PI * rr) / 11 * 1.35, 0.48, TH), mudM);
+  seg.position.set(-Math.cos(a) * rr, (H2 - W2 / 2) + Math.sin(a) * rr, 0);
+  seg.rotation.z = a - Math.PI / 2;
+  seg.castShadow = seg.receiveShadow = true;
+  scene.add(seg);
+}
+
+/* the ground */
+var gnd = new T.Mesh(new T.PlaneGeometry(30, 30),
+  new T.MeshStandardMaterial({ map: tx('assets/g_gravel_d.jpg', [6, 6]), roughness: 1 }));
+gnd.rotation.x = -Math.PI / 2;
+gnd.receiveShadow = true;
+scene.add(gnd);
+
+/* ------------------------- the door itself: the game's exact leaf ------- */
+var woodM = new T.MeshStandardMaterial({ map: tx('assets/t_wood_d.jpg', [0.8, 1.4]),
+                                         color: 0x9a7a55, roughness: 0.9 });
+need = 3;
+var ironM = new T.MeshStandardMaterial({ color: 0x2e2a26, roughness: 0.72, metalness: 0.35 });
+var goldM = new T.MeshStandardMaterial({ color: 0xc9a24a, roughness: 0.3, metalness: 0.9 });
+
+function leafGeometry(w, h) {
+  var r = w / 2, straight = Math.max(0.2, h - r);
+  var sh = new T.Shape();
+  sh.moveTo(0, 0);
+  sh.lineTo(w, 0);
+  sh.lineTo(w, straight);
+  sh.absarc(r, straight, r, 0, Math.PI, false);
+  sh.lineTo(0, 0);
+  var g = new T.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: false, curveSegments: 10 });
+  g.translate(0, 0, -0.06);
+  return g;
+}
+var pivot = new T.Group();
+pivot.position.set(-W2 / 2, 0.02, 0);
+pivot.rotation.y = 0.5;                       /* ajar, so the leaf shows */
+var leaf = new T.Mesh(leafGeometry(W2, H2), woodM);
+leaf.castShadow = true;
+pivot.add(leaf);
+for (var pl = 1; pl < 4; pl++) {
+  var rib = new T.Mesh(new T.BoxGeometry(0.045, H2 * 0.94, 0.03), woodM);
+  rib.position.set(W2 * pl / 4, H2 * 0.47, 0.075);
+  rib.castShadow = true;
+  pivot.add(rib);
+}
+var band = new T.Mesh(new T.BoxGeometry(W2 * 0.92, 0.09, 0.035), ironM);
+band.position.set(W2 / 2, H2 * 0.28, 0.08);
+pivot.add(band);
+var knob = new T.Mesh(new T.SphereGeometry(0.06, 10, 8), goldM);
+knob.position.set(W2 - 0.18, H2 * 0.5, 0.1);
+pivot.add(knob);
+scene.add(pivot);
+
+cam.position.set(-1.6, 1.7, 4.6);
+cam.lookAt(0.1, 1.35, 0);
+function render() { renderer.render(scene, cam); }
+window.shoot = function (name) {
+  render();
+  var d = renderer.domElement.toDataURL('image/png');
+  fetch('http://127.0.0.1:8899/shots/' + name + '.png', { method: 'POST', body: d });
+  return d.length;
+};
+render();
+</script>
+</body>
+</html>
