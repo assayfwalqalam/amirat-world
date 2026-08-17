@@ -1529,6 +1529,36 @@
     na.needsUpdate = true;
     return g;
   }
+  function vegParts(key) {
+    /* every mesh of the model, each as its own instanced layer */
+    var ck = key + '#parts';
+    if (VEG[ck]) return VEG[ck];
+    var src = MODELS[key];
+    if (!src) return null;
+    var metas = [];
+    src.updateWorldMatrix(true, true);
+    /* shared origin: the whole model's ground centre, so parts stay aligned */
+    var bbAll = new T.Box3().setFromObject(src);
+    var cx0 = (bbAll.min.x + bbAll.max.x) / 2;
+    var cz0 = (bbAll.min.z + bbAll.max.z) / 2;
+    var y0 = bbAll.min.y;
+    src.traverse(function (o) {
+      if (!o.isMesh) return;
+      var g = o.geometry.clone();
+      g.applyMatrix4(o.matrixWorld);
+      g.translate(-cx0, -y0, -cz0);
+      var mm = o.material.clone();
+      mm.side = T.DoubleSide;
+      mm.metalness = 0;
+      if (mm.transparent || mm.alphaMap || (mm.map && mm.alphaTest === 0)) { mm.alphaTest = 0.42; mm.transparent = false; }
+      windify(mm, 0.05);
+      metas.push({ g: g, m: mm });
+    });
+    if (!metas.length) return null;
+    var height = bbAll.max.y - bbAll.min.y || 1;
+    return (VEG[ck] = { parts: metas, height: height });
+  }
+
   function vegSource(key) {
     if (VEG[key]) return VEG[key];          /* never cache a miss */
     var src = MODELS[key];
@@ -1632,6 +1662,45 @@
     var dummy = new T.Object3D();
 
     var TINT_KEYS = { 'grass_a': 1, 'grass_b': 1, 'plant/tuft_1': 1, 'plant/tuft_2': 1, 'bush_dry': 1 };
+    function sowParts(key, count, pick, sizeMin, sizeMax, salt2, around) {
+      count = Math.round(count * (W.vegScale || 1));
+      var src = vegParts(key);
+      if (!src || count <= 0) return;
+      var ims = src.parts.map(function (pr) { return new T.InstancedMesh(pr.g, pr.m, count); });
+      var n = 0;
+      var salt = (key.charCodeAt(0) * 7919 + key.length * 104729 + (salt2 || 0)) | 0;
+      for (var i = 0; i < count; i++) {
+        var sd = (ci * 73856093) ^ (cj * 19349663) ^ ((i + salt) * 83492791);
+        var rx, rz;
+        if (around) {
+          /* packed round the heart of the drift, thinning to its rim */
+          var aa = hashU(sd) * 6.283;
+          var rr2 = Math.pow(hashU(sd ^ 0x9e3779b9), 0.55) * around.r;
+          rx = around.x + Math.cos(aa) * rr2;
+          rz = around.z + Math.sin(aa) * rr2;
+        } else {
+          rx = ox + hashU(sd) * CH;
+          rz = oz + hashU(sd ^ 0x9e3779b9) * CH;
+        }
+        var h = W.heightAt(rx, rz);
+        if (!pick(rx, rz, h, sd)) continue;
+        var sc = (sizeMin + hashU(sd ^ 0x85ebca6b) * (sizeMax - sizeMin)) / src.height;
+        dummy.position.set(rx, h - 0.05, rz);
+        dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
+        dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        for (var pi = 0; pi < ims.length; pi++) ims[pi].setMatrixAt(n, dummy.matrix);
+        n++;
+      }
+      if (!n) { ims.forEach(function (im2) { im2.dispose(); }); return; }
+      ims.forEach(function (im2) {
+        im2.count = n;
+        im2.instanceMatrix.needsUpdate = true;
+        im2.frustumCulled = true;
+        W.scene.add(im2);
+        out.push(im2);
+      });
+    }
     function sow(key, count, pick, scaleMin, scaleMax) {
       count = Math.round(count * (W.vegScale || 1));
       var src = vegSource(key);
@@ -1762,34 +1831,34 @@
     /* blades first, then the modelled clumps on top of them */
     sowCards(cardGeo, cardMat, Math.round(9500 * (0.40 + cb.grass) * (W.vegScale || 1)), 0.8, 1.45);
     sowReeds(reedGeo, reedMat, Math.round(260 * (W.vegScale || 1)));
+    /* THE SUPERWORLD OF FLOWERS: instanced drifts of one colour after
+       another across every green chunk, near or far -- one draw per species
+       per part per chunk, so the bloom costs almost nothing */
+    var FLK = ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'];
+    for (var fd = 0; fd < FLK.length; fd++) {
+      var fkey = FLK[fd];
+      /* two drift centres per species per chunk, chosen by hash */
+      var d1 = (ci * 48611 + cj * 75377 + fd * 30011) | 0;
+      var d2 = (ci * 15013 + cj * 32117 + fd * 5407) | 0;
+      /* not every chunk carries every colour: half do, and those run THICK */
+      if (hashU(d1 ^ 0x5c3) < 0.45) continue;
+      W.DRIFTS = W.DRIFTS || [];
+      var cA = { x: ox + hashU(d1) * CH, z: oz + hashU(d1 ^ 0x77f) * CH, r: 9 + hashU(d1 ^ 0x3e7) * 8 };
+      var cB = { x: ox + hashU(d2) * CH, z: oz + hashU(d2 ^ 0x77f) * CH, r: 8 + hashU(d2 ^ 0x3e7) * 7 };
+      W.DRIFTS.push([fkey, Math.round(cA.x), Math.round(cA.z), Math.round(cA.r)]);
+      /* each drift packs its blooms around its own heart; a light loose
+         scatter wanders the whole chunk besides */
+      sowParts(fkey, 300, lush, 0.5, 0.85, fd * 977, cA);
+      sowParts(fkey, 240, lush, 0.5, 0.85, fd * 1381 + 7, cB);
+      sowParts(fkey, 26, lush, 0.45, 0.75, fd * 2003 + 13);
+    }
+
     var near = (seg === undefined) || seg >= 32;
     if (near) {
       sow('grass_a', Math.round(100 * (0.35 + cb.grass)), lush, 0.8, 1.7);
       sow('grass_b', Math.round(112 * (0.3 + cb.grass)), lush, 0.7, 1.5);
       /* flower meadows: a few strong clumps per chunk, each one colour,
          so the bloom reads as a patch of colour from far off */
-      var FLK = ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white', 'fl_orange', 'fl_yellow'];
-      var nCl = Math.round((2 + 3 * cb.grass) * (W.vegScale || 1));
-      for (var fc = 0; fc < nCl; fc++) {
-        var cs = (ci * 48611 + cj * 75377 + fc * 30011) | 0;
-        var ccx = ox + hashU(cs) * CH, ccz = oz + hashU(cs ^ 0x77f) * CH;
-        var ch2 = W.heightAt(ccx, ccz);
-        if (!lush(ccx, ccz, ch2)) continue;
-        var fkey = FLK[Math.floor(hashU(cs ^ 0x1b3) * FLK.length) % FLK.length];
-        if (!MODELS[fkey]) continue;
-        var per = 16 + Math.floor(hashU(cs ^ 0x9e1) * 18);
-        for (var fi2 = 0; fi2 < per; fi2++) {
-          var fa = hashU((cs ^ (fi2 * 7919)) | 0) * 6.283;
-          var fr = Math.pow(hashU((cs ^ (fi2 * 104729)) | 0), 0.6) * 7.5;
-          var fx2 = ccx + Math.cos(fa) * fr, fz2 = ccz + Math.sin(fa) * fr;
-          var fh2 = W.heightAt(fx2, fz2);
-          if (!lush(fx2, fz2, fh2)) continue;
-          var fg2 = place(fkey, fx2, fh2 - 0.05, fz2,
-                          0.72 + hashU((cs ^ (fi2 * 31)) | 0) * 0.45,
-                          hashU((cs ^ (fi2 * 17)) | 0) * 6.283);
-          if (fg2) out.push(fg2);
-        }
-      }
     }
     sow('bush_dry', Math.round(24 * (1 - cb.grass)), dry, 0.8, 1.7);
     sow('rock_d', Math.round(9 * (0.3 + cb.rock)), stony, 0.8, 2.2);
@@ -1798,14 +1867,9 @@
     if (near) {
       sow('plant/tuft_1', Math.round(38 * (0.3 + cb.grass)), lush, 0.9, 1.5);
       sow('plant/tuft_2', Math.round(32 * (0.3 + cb.grass)), lush, 0.9, 1.5);
-      sow('plant/poppy_1', Math.round(11 * (0.2 + cb.grass)), lush, 0.9, 1.3);
-      sow('plant/lavender_1', Math.round(9 * (0.2 + cb.grass)), lush, 0.9, 1.3);
-      sow('plant/shrub_1', Math.round((8 + 26 * fMask) * (0.25 + cb.grass)), lush, 0.9, 1.5);
-      sow('plant/blossom_1', Math.round(5 * (0.2 + cb.grass)), lush, 0.9, 1.4);
-      sow('plant/thistle_1', Math.round(9 * (1 - cb.grass)), dry, 0.9, 1.3);
-      sow('plant/aloe_1', Math.round(7 * (1 - cb.grass)), dry, 0.9, 1.3);
-      sow('plant/agave_1', Math.round(6 * (1 - cb.grass)), dry, 0.9, 1.4);
-      sow('plant/succulent_1', Math.round(6 * (0.3 + cb.rock)), stony, 0.9, 1.3);
+      /* the primitive plants are purged: only photographed-grade cover
+         remains -- cards, real tufts, real flowers, real scrub */
+      sow('bush_dry', Math.round((10 + 20 * fMask) * (0.3 + cb.grass)), lush, 0.7, 1.3);
       /* the green bank: reed and papyrus stand where the water table shows */
       var bank = function (x, z, h) {
         return h > W.WATER_Y - 0.15 && h < W.WATER_Y + 1.7 &&
@@ -1828,7 +1892,7 @@
     var townD2 = Math.hypot(ox + CH / 2, oz + CH / 2);
     if (townD2 < 210) fMask = 0;                    /* the town keeps its air */
     var forest = !palmChunk && fMask > 0.02;
-    var treeN = Math.max(1, Math.round((9 * cb.grass + 3) * (1 + 5.5 * fMask) * (W.vegScale || 1)));
+    var treeN = Math.max(1, Math.round((12 * cb.grass + 4) * (1 + 5.5 * fMask) * (W.vegScale || 1)));
     for (var t = 0; t < treeN; t++) {
       var tx = ox + rng(ci + t, cj, 3.9) * CH, tz = oz + rng(ci, cj + t, 8.4) * CH;
       var th = W.heightAt(tx, tz);
@@ -2087,6 +2151,24 @@
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
       'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',
       'tree/giant_1', 'tree/giant_2', 'tree/giant_3', 'bound/low']), function () {
+        /* the flowers wear the land's deeper pigment: darker albedo, and
+           they light up under any lamp like everything else does */
+        ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'].forEach(function (fk) {
+          var mdl = MODELS[fk];
+          if (!mdl || mdl.userData.pigmented) return;
+          mdl.userData.pigmented = true;
+          var seen2 = {};
+          mdl.traverse(function (o) {
+            if (o.isMesh && o.material && !seen2[o.material.uuid]) {
+              seen2[o.material.uuid] = 1;
+              var c = o.material.color;
+              /* leaves take the land's deeper pigment; petals keep nearly
+                 all their light so the bloom still reads and still lights */
+              var isLeaf = c.g > c.r && c.g > c.b;
+              c.multiplyScalar(isLeaf ? 0.72 : 0.94);
+            }
+          });
+        });
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();
