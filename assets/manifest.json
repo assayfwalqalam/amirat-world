@@ -1106,6 +1106,18 @@
     {
      "k": "p_well",
      "n": "Well"
+    },
+    {
+     "k": "palace/dome_onion",
+     "n": "Dome onion"
+    },
+    {
+     "k": "palace/dome_ribbed",
+     "n": "Dome ribbed"
+    },
+    {
+     "k": "palace/dome_tiered",
+     "n": "Dome tiered"
     }
    ]
   }
