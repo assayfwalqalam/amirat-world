@@ -108,6 +108,22 @@
   W.oasisAt = oasisAt;
 
   W.biomeAt = function (x, z) {
+    if (!W.CLASSIC) {
+      /* a pleasant green plain by default; his green and forest deepen it,
+         his salt and roads strip it. A little grain inside painted areas so
+         a brushstroke is not one flat tone. */
+      var gBase = 0.52;
+      var grain = fbm(x * 0.0080 + 21.1, z * 0.0080 - 5.7, 2);
+      if (MAPW) {
+        var mg = mapAt(MAPW.green, x, z) / 255;
+        var mf2 = mapAt(MAPW.forest, x, z) / 255;
+        gBase = Math.max(0.16 + mg * 0.9, mf2 * 0.8);
+        gBase *= 0.82 + 0.36 * grain;
+      } else {
+        gBase *= 0.80 + 0.40 * grain;
+      }
+      return { grass: Math.min(1, gBase), rock: 0 };
+    }
     var moist = fbm(x * 0.00040 + 91.3, z * 0.00040 - 17.7, 3);
     var rocky = fbm(x * 0.00066 - 33.1, z * 0.00066 + 55.9, 3);
     var oa = oasisAt(x, z);
@@ -171,8 +187,34 @@
   }
   W.mapForest = MAPW ? function (x, z) { return mapAt(MAPW.forest, x, z) / 255; } : null;
   W.mapPalm = MAPW ? function (x, z) { return mapAt(MAPW.palm, x, z) / 255; } : null;
+  W.mapGreen = MAPW ? function (x, z) { return mapAt(MAPW.green, x, z) / 255; } : null;
+  W.MAPW = MAPW;
 
   W.heightAt = function (x, z) {
+    if (!W.CLASSIC) {
+      /* the fresh field: level ground with a long breathing swell, and his
+         map as the one and only sculptor */
+      var hp = 6.0 + (fbm(x * 0.0011 + 3.7, z * 0.0011 - 8.1, 3) - 0.5) * 7.0
+                   + (fbm(x * 0.0060 - 1.9, z * 0.0060 + 4.2, 2) - 0.5) * 1.6;
+      if (MAPW) {
+        var mep = mapAt(MAPW.elev, x, z) - 128;
+        /* his mountains rise for real; his basins sink for real */
+        hp += mep * (mep > 0 ? 1.15 : 0.90);
+        var mwp = mapAt(MAPW.water, x, z);
+        if (mwp > 100) {
+          /* the land shelves down into his water over the brush's own soft
+             edge, and the deep middle is truly deep */
+          var wshp = sstep(100, 200, mwp);
+          hp = lerp(hp, WATER_Y - 1.2 - 4.6 * sstep(140, 235, mwp), wshp);
+        }
+      }
+      for (var fi2 = 0; fi2 < FLATS.length; fi2++) {
+        var ff = FLATS[fi2];
+        var fd2 = Math.sqrt((x - ff.x) * (x - ff.x) + (z - ff.z) * (z - ff.z));
+        hp = lerp(ff.y, hp, sstep(ff.r, ff.r + ff.b, fd2));
+      }
+      return hp;
+    }
     var b = W.biomeAt(x, z);
     /* the land rides above the water table · only carved basins flood */
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
@@ -375,6 +417,12 @@
   /* the map table's Walk The Shape: land and water only, so the drawn world
      can be judged light and fast, with nothing standing on it */
   W.MAPPREVIEW = /[?&]mappreview=1/.test(location.search);
+  /* THE FRESH FIELD (his order, 2026-08-17): the generated world is retired.
+     The game opens on a near-flat green plain, and the ONLY thing that shapes
+     land, water, green, forest or roads is the map he draws on the map table.
+     The old noise world is saved: git tag world-v1-noise, and ?classic=1
+     still walks it. */
+  W.CLASSIC = /[?&]classic=1/.test(location.search);
 
   /* small screens and modest devices get a lighter world, automatically */
   var mem = navigator.deviceMemory || 4;
@@ -489,14 +537,18 @@
     moonDir = new THREE.Vector3(0.36, 0.42, -0.83).normalize();
     var mp = moonDir.clone().multiplyScalar(2600);
 
+    /* the sky family is billboarded every frame; welded into a static batch
+       it becomes a black slab hanging over the world */
     halo = new THREE.Mesh(new THREE.PlaneGeometry(1150, 1150),
       new THREE.MeshBasicMaterial({ map: tex('assets/glow.png', true), color: 0xa9b6f0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false, opacity: 0.34 }));
+    halo.userData.noCrunch = true;
     halo.position.copy(mp); scene.add(halo);
 
     /* Bigger, but tinted just under the bloom threshold · a pure white disc
        blooms into a featureless blob and the face is lost. */
     moonMesh = new THREE.Mesh(new THREE.PlaneGeometry(380, 380),
       new THREE.MeshBasicMaterial({ map: tex('assets/moon.png', true), color: 0xd6dcf0, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
+    moonMesh.userData.noCrunch = true;
     moonMesh.position.copy(mp); scene.add(moonMesh);
 
     var ctex = [tex('assets/cloud0.png', true), tex('assets/cloud1.png', true), tex('assets/cloud2.png', true)];
@@ -511,6 +563,7 @@
       var m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.w * 0.5),
         new THREE.MeshBasicMaterial({ map: ctex[i % 3], color: 0xc0c2e0, transparent: true, depthWrite: false, fog: false, opacity: d.o }));
       m.renderOrder = 2; scene.add(m);
+      m.userData.noCrunch = true;
       clouds.push({ m: m, az: d.az, el: d.el, r: d.r, sp: d.sp });
     });
 
@@ -758,6 +811,9 @@
              concrete and outshines the walls it should sit beneath. */
           'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.34 * uNight);',
           'col *= mix(1.0, 0.52, uNight);',
+          /* grassy ground keeps its green at night, or the blades stand on
+             grey-mauve dirt and the two read as different worlds */
+          'col = mix(col, col * vec3(0.86, 1.22, 0.80), smoothstep(0.35, 0.8, gW) * 0.5 * uNight);',
           'diffuseColor.rgb *= col;'
         ].join('\n'));
     };

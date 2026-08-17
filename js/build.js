@@ -1709,9 +1709,9 @@
     /* a blade under moonlight is not black; give the sheet a little light of
        its own or the whole meadow reads as tar. It must be GREEN light: a
        white lift on a straw-coloured sheet turns the field to gold crumbs. */
-    m.emissive = new T.Color(0x667a4a);
+    m.emissive = new T.Color(0x4e6247);
     m.emissiveMap = m.map;
-    m.emissiveIntensity = 0.16;
+    m.emissiveIntensity = 0.11;
     return { g: geo, m: m };
   }
   function mergeGeos(list) {
@@ -1784,7 +1784,15 @@
   function lushField(x, z) {
     var a = W.fbm(x * 0.0125 + 31.7, z * 0.0125 - 12.3, 2);
     var b = W.fbm(x * 0.041 - 5.1, z * 0.041 + 9.7, 2);
-    return W.sstep(0.32, 0.70, a * 0.70 + b * 0.30);
+    var v = W.sstep(0.32, 0.70, a * 0.70 + b * 0.30);
+    /* on the fresh field his painted green IS the lushness: where he lays it
+       thick the flowers fill the ground, thinning only a little by the grain */
+    if (!W.CLASSIC && W.MAPW) {
+      var mg = 0;
+      try { mg = W.mapGreen ? W.mapGreen(x, z) : 0; } catch (e) {}
+      v = Math.max(v * 0.5, mg * (0.55 + 0.45 * v));
+    }
+    return v;
   }
   W.lushField = lushField;
 
@@ -1799,7 +1807,9 @@
   });
   W.BLOSSOM_ROW = BLOSSOM_ROW;
   function buildBlossomRow() {
-    var z0 = 300, x = -430;
+    /* south of the town, well clear of the gate and the spawn: a walk to
+       reach, not a wall of giants looming over the first step */
+    var z0 = 470, x = -420;
     BLOSSOM_ROW.forEach(function (key) {
       var mdl = MODELS[key];
       if (!mdl) return;
@@ -1865,7 +1875,7 @@
       ims.forEach(function (im2) {
         im2.count = n;
         im2.instanceMatrix.needsUpdate = true;
-        im2.frustumCulled = true;
+        im2.frustumCulled = false;
         W.scene.add(im2);
         out.push(im2);
       });
@@ -1894,7 +1904,7 @@
       im.count = n;
       im.instanceMatrix.needsUpdate = true;
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      im.frustumCulled = true;
+      im.frustumCulled = false;
       W.scene.add(im);
       out.push(im);
     }
@@ -2061,7 +2071,7 @@
         var imf = new T.InstancedMesh(cd.g, cd.m, mats[fi].length);
         for (var mi2 = 0; mi2 < mats[fi].length; mi2++) imf.setMatrixAt(mi2, mats[fi][mi2]);
         imf.instanceMatrix.needsUpdate = true;
-        imf.frustumCulled = true;
+        imf.frustumCulled = false;
         W.scene.add(imf);
         out.push(imf);
       }
@@ -2098,10 +2108,20 @@
        of palms and planes is nothing that grows anywhere. */
     var zc = W.groundWeights(ox + CH / 2, oz + CH / 2, W.heightAt(ox + CH / 2, oz + CH / 2));
     var palmChunk = zc.w > 0.33;
+    /* the fresh field is his blank canvas: palms come from his palm brush,
+       never sprinkled over the open plain (the flat plain sits near the
+       water table, so wetness alone calls everywhere a shoreline) */
+    if (!W.CLASSIC) palmChunk = !!(W.mapPalm && W.mapPalm(ox + CH / 2, oz + CH / 2) > 0.4);
     /* the light forests: big soft patches of woodland out in the country */
-    var fMask = W.sstep(0.58, 0.74, W.fbm((ox + CH / 2) * 0.00052 + 91.3,
-                                          (oz + CH / 2) * 0.00052 - 17.9, 3));
-    if (W.mapForest) fMask = Math.max(fMask, W.mapForest(ox + CH / 2, oz + CH / 2));
+    var fMask;
+    if (!W.CLASSIC) {
+      /* the fresh field grows forests only where he paints them */
+      fMask = W.mapForest ? W.mapForest(ox + CH / 2, oz + CH / 2) : 0;
+    } else {
+      fMask = W.sstep(0.58, 0.74, W.fbm((ox + CH / 2) * 0.00052 + 91.3,
+                                        (oz + CH / 2) * 0.00052 - 17.9, 3));
+      if (W.mapForest) fMask = Math.max(fMask, W.mapForest(ox + CH / 2, oz + CH / 2));
+    }
     if (W.mapPalm && W.mapPalm(ox + CH / 2, oz + CH / 2) > 0.4) palmChunk = true;
     var townD2 = Math.hypot(ox + CH / 2, oz + CH / 2);
     if (townD2 < 210) fMask = 0;                    /* the town keeps its air */
@@ -2135,8 +2155,14 @@
           for (var p3 = 0; p3 < ims.length; p3++) ims[p3].setMatrixAt(i3, dummy.matrix);
         }
         ims.forEach(function (im3) {
+          im3.name = 'trees:' + k2;              /* so a fault names its kind */
           im3.instanceMatrix.needsUpdate = true;
-          im3.frustumCulled = true;
+          /* culling OFF: an InstancedMesh keeps its GEOMETRY's bounding
+             sphere, which sits at the model origin -- not where the
+             instances stand. Culled on, whole stands of trees appeared and
+             vanished with the camera's angle. The chunk system already
+             removes them with their chunk. */
+          im3.frustumCulled = false;
           W.scene.add(im3);
           out.push(im3);
         });
@@ -2164,18 +2190,12 @@
       if (th < W.WATER_Y + 0.5) continue;
       var key = null, sc = 1;
       var own = rng(tx, tz, 2.7);        /* the Blender-grown trees, true size */
-      /* THE FLOWERING GIANTS. The biggest things that grow anywhere in the
-         world: some twice the height of the old patriarch, some three times,
-         some four and over. Ten variants, each a different habit and a
-         different photographed bloom. */
-      if (w.g > 0.42 && th > W.WATER_Y + 1.5 && rng(tx, tz, 12.1) > 0.93) {
-        key = 'tree/blossom_' + (1 + Math.floor(rng(tx, tz, 13.3) * 10) % 10);
-        var btier = rng(tx, tz, 14.7);
-        sc = btier > 0.78 ? (80 + rng(tx, tz, 15.1) * 26)
-           : btier > 0.46 ? (58 + rng(tx, tz, 15.1) * 14)
-           : (38 + rng(tx, tz, 15.1) * 10);
-      } else if (palmChunk) {
-        if (w.w > 0.24) {
+      /* Blossom giants are NEVER sown -- his order. The only ones anywhere
+         are the row in front of the city. (A leftover branch here from the
+         normalized era was multiplying true-size 20m trees by 38-106: the
+         sky-filling slabs and the "massive trees all over the map".) */
+      if (palmChunk) {
+        if (w.w > 0.24 || !W.CLASSIC) {   /* his painted grove floors are dry land */
           if (own > 0.82) {              /* tamarisk holds the bank with them */
             key = 'tree/tamarisk_' + (1 + Math.floor(rng(tx, tz, 9.9) * 5) % 5);
             sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
@@ -2322,6 +2342,9 @@
       if (moving) return;
       var m = o.material;
       if (Array.isArray(m)) return;
+      /* billboards, glows and anything additive live by being re-aimed or
+         faded every frame; welded they freeze into dark slabs in the sky */
+      if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
       var key = m.uuid;
       if (!groups.has(key)) groups.set(key, { mat: m, list: [] });
       groups.get(key).list.push(o);
@@ -2472,6 +2495,22 @@
   }
 
   W.buildAll = function (W) {
+    if (W.MAPPREVIEW) {
+      /* Walk The Shape: nothing stands, nothing grows. The land, its
+         colours, and his water -- that is the whole world, so it opens in a
+         breath and the shape is what gets judged. */
+      var sp = null;
+      try {
+        var mj2 = JSON.parse(localStorage.getItem('amirat_worldmap'));
+        (mj2 && mj2.sites || []).forEach(function (s2) { if (s2.k === 'spawn') sp = s2; });
+      } catch (e) {}
+      W.SPAWN = sp ? { x: sp.x, z: sp.z } : { x: 0, z: 260 };
+      W.SPAWN_YAW = 0;
+      W.SHOTS = {};
+      W.scatter = null;
+      W.MODELS_IN = true;
+      return;
+    }
     initMats();
     initFire();
     initPool();
@@ -2556,8 +2595,6 @@
       'tree/tamarisk_1', 'tree/tamarisk_2', 'tree/tamarisk_3', 'tree/tamarisk_4', 'tree/tamarisk_5',
       'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4', 'tree/fig_5',
       'tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4', 'tree/pine_5',
-      'tree/blossom_1', 'tree/blossom_2', 'tree/blossom_3', 'tree/blossom_4', 'tree/blossom_5',
-      'tree/blossom_6', 'tree/blossom_7', 'tree/blossom_8', 'tree/blossom_9', 'tree/blossom_10',
       'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
       'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',
