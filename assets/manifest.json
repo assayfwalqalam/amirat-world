@@ -242,6 +242,27 @@
    ]
   },
   {
+   "name": "Camp",
+   "items": [
+    {
+     "k": "camp/firering",
+     "n": "Firering"
+    },
+    {
+     "k": "camp/shelter",
+     "n": "Shelter"
+    },
+    {
+     "k": "camp/tent_long",
+     "n": "Tent long"
+    },
+    {
+     "k": "camp/tent_round",
+     "n": "Tent round"
+    }
+   ]
+  },
+  {
    "name": "Books",
    "items": [
     {
