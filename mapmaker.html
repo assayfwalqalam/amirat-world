@@ -333,7 +333,7 @@
 
   map.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   map.addEventListener('pointerdown', function (e) {
-    map.setPointerCapture(e.pointerId);
+    try { map.setPointerCapture(e.pointerId); } catch (err) {}
     var p = evPos(e);
     erasing = (e.button === 2) || cur.erase;
     if (cur.site && !cur.erase) {

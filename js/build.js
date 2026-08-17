@@ -2508,6 +2508,9 @@
       W.SPAWN_YAW = 0;
       W.SHOTS = {};
       W.scatter = null;
+      /* a shape is judged in the light. The game itself stays night-only;
+         this is a drawing tool's view, like the editor's raised sun. */
+      if (W.setDaylight) W.setDaylight(true);
       W.MODELS_IN = true;
       return;
     }
