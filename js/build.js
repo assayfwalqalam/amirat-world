@@ -484,7 +484,7 @@
      and nothing has an invisible margin. */
   var COLJSON = {}, SPOTJSON = {};
   function loadCollision(name) {
-    return fetch('assets/models/' + name + '.col.json')
+    return fetch(W.bust('assets/models/' + name + '.col.json'))
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (!j) return;
@@ -563,7 +563,7 @@
 
     function fetchOne(name, tries) {
       active++;
-      loader.load('assets/models/' + name + '.glb', function (g) {
+      loader.load(W.bust('assets/models/' + name + '.glb'), function (g) {
         active--;
         g.scene.traverse(function (o) {
           if (o.isMesh) {
@@ -2084,10 +2084,20 @@
       if (th < W.WATER_Y + 0.5) continue;
       var key = null, sc = 1;
       var own = rng(tx, tz, 2.7);        /* the Blender-grown trees, true size */
-      if (palmChunk) {
+      /* THE FLOWERING GIANTS. The biggest things that grow anywhere in the
+         world: some twice the height of the old patriarch, some three times,
+         some four and over. Ten variants, each a different habit and a
+         different photographed bloom. */
+      if (w.g > 0.42 && th > W.WATER_Y + 1.5 && rng(tx, tz, 12.1) > 0.93) {
+        key = 'tree/blossom_' + (1 + Math.floor(rng(tx, tz, 13.3) * 10) % 10);
+        var btier = rng(tx, tz, 14.7);
+        sc = btier > 0.78 ? (80 + rng(tx, tz, 15.1) * 26)
+           : btier > 0.46 ? (58 + rng(tx, tz, 15.1) * 14)
+           : (38 + rng(tx, tz, 15.1) * 10);
+      } else if (palmChunk) {
         if (w.w > 0.24) {
           if (own > 0.82) {              /* tamarisk holds the bank with them */
-            key = 'tree/tamarisk_' + (1 + Math.floor(rng(tx, tz, 9.9) * 4) % 4);
+            key = 'tree/tamarisk_' + (1 + Math.floor(rng(tx, tz, 9.9) * 5) % 5);
             sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
           } else {
             key = 'palm'; sc = 8 + rng(tx, tz, 7) * 5;
@@ -2097,12 +2107,13 @@
         var TS;
         if (forest && rng(tx, tz, 7.7) > 0.35) {
           /* the forest wall is conifer, as the reference shows */
-          TS = ['tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4'];
+          TS = ['tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4', 'tree/pine_5'];
         } else {
-          TS = ['tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4',
-                'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4',
-                'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4',
-                'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4'];
+          TS = ['tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4', 'tree/olive_5',
+                'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4', 'tree/plane_5',
+                'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4', 'tree/fig_5',
+                'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4',
+                'tree/cypress_5'];
         }
         key = TS[Math.floor(rng(tx, tz, 3.3) * TS.length) % TS.length];
         sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
@@ -2116,7 +2127,11 @@
       if (!key || !MODELS[key]) continue;
       var g = place(key, tx, th - 0.25, tz, sc, rng(tx, tz, 9) * 6.283);
       if (g) {
-        if (key.indexOf('tree/') === 0) {
+        if (key.indexOf('tree/blossom_') === 0) {
+          /* a trunk this thick is a wall, not a sapling */
+          var br = 0.030 * sc + 0.6;
+          g.userData.col = W.addBox(tx, th + sc * 0.10, tz, br, sc * 0.10, br, 0);
+        } else if (key.indexOf('tree/') === 0) {
           g.userData.col = W.addBox(tx, th + 2.2, tz, 0.38, 2.2, 0.38, 0);
         } else {
           g.userData.col = W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
@@ -2341,12 +2356,14 @@
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
-      'tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4',
-      'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4',
-      'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4',
-      'tree/tamarisk_1', 'tree/tamarisk_2', 'tree/tamarisk_3', 'tree/tamarisk_4',
-      'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4',
-      'tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4',
+      'tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4', 'tree/olive_5',
+      'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4', 'tree/plane_5',
+      'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4', 'tree/cypress_5',
+      'tree/tamarisk_1', 'tree/tamarisk_2', 'tree/tamarisk_3', 'tree/tamarisk_4', 'tree/tamarisk_5',
+      'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4', 'tree/fig_5',
+      'tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4', 'tree/pine_5',
+      'tree/blossom_1', 'tree/blossom_2', 'tree/blossom_3', 'tree/blossom_4', 'tree/blossom_5',
+      'tree/blossom_6', 'tree/blossom_7', 'tree/blossom_8', 'tree/blossom_9', 'tree/blossom_10',
       'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
       'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',

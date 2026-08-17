@@ -34,6 +34,11 @@
   }
 
   function start(ver) {
+    /* The scripts were versioned but the ASSETS were not, so a texture that
+       changed content without changing its name kept being served from cache
+       and the new work never arrived on the player's machine. Everything the
+       engine fetches now carries this build number. */
+    window.__BUILD = ver;
     load(FILES, ver, function () {
       var l = document.getElementById('load');
       if (l) l.style.display = 'none';

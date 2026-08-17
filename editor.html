@@ -126,6 +126,7 @@
 <div id="bar">
   <button id="mSelect" class="on">Select</button>
   <button id="mPlace">Place</button>
+  <button id="mScatter">Scatter</button>
   <div class="sep"></div>
   <button id="snapGrid" class="ghost">Grid off</button>
   <button id="snapGround" class="on">Sit on ground</button>
@@ -165,6 +166,22 @@
       <button id="dup" style="flex:1">Duplicate</button>
       <button id="row" style="flex:1">+ Row</button>
       <button id="del" style="flex:1">Delete</button>
+    </div>
+    <div class="phead" style="margin:10px -6px 0;border-top:1px solid var(--line)">Scatter</div>
+    <div class="row"><label>Radius</label><input id="bR" type="number" step="1" value="16"></div>
+    <div class="row"><label>How many</label><input id="bN" type="number" step="1" value="14"></div>
+    <div class="row"><label>Spacing</label><input id="bGap" type="number" step="0.2" value="2.6"></div>
+    <div class="row"><label>Size from</label><input id="bSmin" type="number" step="0.05" value="0.85"></div>
+    <div class="row"><label>Size to</label><input id="bSmax" type="number" step="0.05" value="1.35"></div>
+    <div class="row"><label>Edge</label><input id="bEdge" type="number" step="0.05" value="0.55"></div>
+    <div class="row" style="gap:8px">
+      <label style="flex:none"><input id="bRot" type="checkbox" checked> turn each</label>
+      <label style="flex:none"><input id="bMix" type="checkbox" checked> mix chosen</label>
+    </div>
+    <div id="bmix" class="muted" style="font-size:11px;margin:2px 0 6px"></div>
+    <div class="row">
+      <button id="bAdd" style="flex:1">Add to mix</button>
+      <button id="bClr" style="flex:1">Clear mix</button>
     </div>
     <div class="phead" style="margin:10px -6px 0;border-top:1px solid var(--line)">In the scene</div>
     <div id="objs"></div>

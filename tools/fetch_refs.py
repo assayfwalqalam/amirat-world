@@ -43,6 +43,11 @@ WANT = {
     "twall":     ("concrete T-wall blast barrier", 4),
     "tower":     ("military guard tower base perimeter", 4),
     "sandbag":   ("sandbag fortification position", 3),
+    # real blossom, for cutting canopy cards from photographs
+    "sakura":    ("cherry blossom branch sky", 8),
+    "blossomtree": ("flowering cherry tree full bloom", 6),
+    "almondbl":  ("almond blossom branch", 5),
+    "jacarandabl": ("jacaranda tree flowering purple", 5),
 }
 
 

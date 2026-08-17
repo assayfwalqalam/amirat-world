@@ -12,7 +12,7 @@
   var PLACED = [];           /* every object in the layout */
   var SEL = [];              /* current selection */
   var nextId = 1;
-  var mode = 'select';       /* 'select' | 'place' */
+  var mode = 'select';       /* 'select' | 'place' | 'scatter' */
   var armed = null;          /* asset key waiting to be placed */
   var snapGrid = false, snapGround = true, GRID = 1.0;
   var UNDO = [], REDO = [];
@@ -505,7 +505,57 @@
     mode = m;
     $('mSelect').classList.toggle('on', m === 'select');
     $('mPlace').classList.toggle('on', m === 'place');
+    var sb = $('mScatter'); if (sb) sb.classList.toggle('on', m === 'scatter');
     if (m === 'select' && ghost) { ghost.visible = false; }
+  }
+
+  /* ------------------------------------------------------------- scatter
+     Placing a forest one tree at a time is not work anyone should do. A
+     scatter drops a whole CLUMP in one click: a chosen radius, a wanted
+     count, a minimum spacing so nothing grows through anything else, a size
+     range, and a mix of assets so a stand is not one tree stamped over and
+     over. It thins toward the rim, the way a real thicket does. */
+  var MIX = [];
+  function mixLabel() {
+    var el = $('bmix'); if (!el) return;
+    el.textContent = MIX.length ? ('mix: ' + MIX.join(', ')) : 'mix empty · uses the chosen asset';
+  }
+  function num(id, dflt) {
+    var el = $(id); if (!el) return dflt;
+    var v = parseFloat(el.value);
+    return isFinite(v) ? v : dflt;
+  }
+  function scatterAt(p) {
+    var keys = ($('bMix') && $('bMix').checked && MIX.length) ? MIX.slice() : (armed ? [armed] : []);
+    if (!keys.length) { toast('pick an asset, or add some to the mix'); return; }
+    var R = Math.max(1, num('bR', 16)), N = Math.max(1, Math.round(num('bN', 14)));
+    var gap = Math.max(0, num('bGap', 2.6));
+    var sMin = num('bSmin', 0.85), sMax = num('bSmax', 1.35);
+    var edge = Math.min(0.95, Math.max(0, num('bEdge', 0.55)));
+    var turn = !$('bRot') || $('bRot').checked;
+    var made = [], tries = 0;
+    while (made.length < N && tries < N * 60) {
+      tries++;
+      var a = Math.random() * 6.283;
+      /* pow > 0.5 packs the middle and thins the rim */
+      var rr = Math.pow(Math.random(), 0.5 + edge) * R;
+      var x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr;
+      var ok = true;
+      for (var i = 0; i < made.length; i++) {
+        var dx = made[i].x - x, dz = made[i].z - z;
+        if (dx * dx + dz * dz < gap * gap) { ok = false; break; }
+      }
+      if (!ok) continue;
+      var key = keys[(Math.random() * keys.length) | 0];
+      var y = W.heightAt(x, z);
+      var sc = sMin + Math.random() * Math.max(0, sMax - sMin);
+      made.push(addObject(key, x, y, z, turn ? Math.random() * 6.283 : placeRot, sc));
+    }
+    if (!made.length) { toast('nothing fitted · widen the radius or close the spacing'); return; }
+    push({ undo: function () { made.forEach(removeRecord); refreshList(); },
+           redo: function () { made.forEach(reAdd); refreshList(); } });
+    refreshList();
+    toast('scattered ' + made.length);
   }
 
   function refreshBar() {
@@ -734,6 +784,10 @@
         var g = (runMode && runSlot) ? runSlot : groundPoint(e);
         if (g) placeAt(armed, g);
       }
+      if (e.button === 0 && mode === 'scatter' && !wasDrag) {
+        var gs = groundPoint(e);
+        if (gs) scatterAt(gs);
+      }
       if (dragStart && wasDrag) commitDrag();
       dragStart = null;
     });
@@ -867,6 +921,21 @@
   function wireUI() {
     $('mSelect').onclick = function () { armed = null; setMode('select'); };
     $('mPlace').onclick = function () { setMode('place'); if (!armed) toast('pick an asset on the left'); };
+    if ($('mScatter')) {
+      $('mScatter').onclick = function () {
+        setMode('scatter');
+        if (!armed && !MIX.length) toast('pick an asset on the left, or build a mix');
+      };
+      $('bAdd').onclick = function () {
+        var added = 0;
+        if (armed && MIX.indexOf(armed) < 0) { MIX.push(armed); added++; }
+        SEL.forEach(function (r) { if (r.key && MIX.indexOf(r.key) < 0) { MIX.push(r.key); added++; } });
+        mixLabel();
+        toast(added ? ('mix has ' + MIX.length) : 'nothing new to add');
+      };
+      $('bClr').onclick = function () { MIX.length = 0; mixLabel(); };
+      mixLabel();
+    }
     $('snapGrid').onclick = function () { snapGrid = !snapGrid; refreshSnap(); };
     $('snapGround').onclick = function () { snapGround = !snapGround; refreshSnap(); };
     $('undo').onclick = undo;

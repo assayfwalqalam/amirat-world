@@ -61,13 +61,30 @@
   var FLATS = [];
   W.addFlat = function (x, z, r, y, blend) { FLATS.push({ x: x, z: z, r: r, y: y, b: blend || 40 }); };
 
+  /* A shore is not a wall. Land comes DOWN to meet water over a long shelf,
+     so every body of water is cut in two stages: a broad shallow valley or
+     basin that draws the whole neighbourhood down, and only inside that, the
+     channel or the deep. The curve is flat at the rim and steepens toward the
+     middle, which is what stops the edge reading as a cliff. */
+  function shelf(t) {
+    t = Math.min(1, Math.max(0, t));
+    return t * t * t * (t * (t * 6 - 15) + 10);
+  }
   function riverAt(x, z) {
     var r = ridged(x * 0.00085 + 4.1, z * 0.00085 - 2.7, 3);
-    return sstep(0.955, 1.0, r);
+    return sstep(0.930, 1.0, r);
+  }
+  function riverValleyAt(x, z) {
+    var r = ridged(x * 0.00085 + 4.1, z * 0.00085 - 2.7, 3);
+    return sstep(0.800, 0.985, r);
   }
   function lakeAt(x, z) {
     var l = fbm(x * 0.00062 - 88.3, z * 0.00062 + 12.9, 3);
-    return sstep(0.70, 0.80, l);
+    return sstep(0.745, 0.815, l);
+  }
+  function lakeBasinAt(x, z) {
+    var l = fbm(x * 0.00062 - 88.3, z * 0.00062 + 12.9, 3);
+    return sstep(0.600, 0.790, l);
   }
 
   /* Places where the water table reaches the surface. A walled desert town is
@@ -136,6 +153,21 @@
     var a = grid[v0 * n + u0] * (1 - fu) + grid[v0 * n + u1] * fu;
     var b2 = grid[v1 * n + u0] * (1 - fu) + grid[v1 * n + u1] * fu;
     return a * (1 - fv) + b2 * fv;
+  }
+  /* The painted map is coarse: one cell spans tens of metres, so ANY edge in
+     it lands in the world as a wall. Every grid that moves the ground is read
+     BLURRED -- nine samples over a wide ring -- so a painted coastline
+     arrives as a shelf a hundred metres wide instead of a cliff. */
+  function mapSmooth(grid, x, z, r) {
+    if (!grid || !grid.length) return 0;
+    var sum = mapAt(grid, x, z) * 1.6, wt = 1.6;
+    for (var i = 0; i < 8; i++) {
+      var a2 = i * 0.7854;
+      sum += mapAt(grid, x + Math.cos(a2) * r, z + Math.sin(a2) * r);
+      sum += mapAt(grid, x + Math.cos(a2) * r * 0.5, z + Math.sin(a2) * r * 0.5);
+      wt += 2;
+    }
+    return sum / wt;
   }
   W.mapForest = MAPW ? function (x, z) { return mapAt(MAPW.forest, x, z) / 255; } : null;
   W.mapPalm = MAPW ? function (x, z) { return mapAt(MAPW.palm, x, z) / 255; } : null;
@@ -219,17 +251,47 @@
     h += (fbm(x * 0.0065, z * 0.0065, 3) - 0.5) * 15 * (1 - mMask * 0.7);
     h += (fbm(x * 0.021, z * 0.021, 2) - 0.5) * 2.2;
 
-    var low = sstep(46, 5, h);
+    /* ------------------------------------------------------------- water
+       Two stages everywhere: the ground is drawn DOWN over a wide skirt
+       first, and only then is the channel or the deep cut inside it. A river
+       may run high -- the gate is generous -- but it always brings its
+       valley down with it, so no water anywhere ends in a wall. */
+    /* Gated on the SLOW height, never on h itself. h carries dunes, hills and
+       rolling detail, so a gate reading it flips from off to on within a few
+       metres and stands a wall up at the waterline -- which is exactly the
+       cliff that was there. The continental form turns over kilometres. */
+    var hSlow = (cont - 0.13) * 165 + skirt * skirt * 46;
+    var low = sstep(92, 6, hSlow);
+    var rval = riverValleyAt(x, z) * low;
+    if (rval > 0.001) h -= shelf(rval) * 22.0;          /* the valley */
     var riv = riverAt(x, z) * low;
-    h = lerp(h, WATER_Y - 3.4, riv);
+    if (riv > 0.001) h = lerp(h, WATER_Y - 2.9, shelf(riv));   /* the channel */
 
-    var lk = lakeAt(x, z) * sstep(60, 10, h);
-    h = lerp(h, WATER_Y - 4.6, lk);
+    var lbasin = lakeBasinAt(x, z) * sstep(96, 12, hSlow);
+    if (lbasin > 0.001) h -= shelf(lbasin) * 26.0;      /* the hollow */
+    var lk = lakeAt(x, z) * sstep(70, 10, hSlow);
+    if (lk > 0.001) h = lerp(h, WATER_Y - 4.6, shelf(lk));
 
-    /* the lake the town drinks from · carved, not left to the noise */
+    /* the lake the town drinks from · carved, not left to the noise. Its rim
+       wander used to be half as wide as the blend itself, which locally
+       collapsed the shelf to nothing and stood a cliff up out of the water. */
     var ld = Math.sqrt((x + 430) * (x + 430) + (z - 330) * (z - 330));
-    var lb = 1 - sstep(96, 208, ld + (fbm(x * 0.0055 - 3.3, z * 0.0055 + 9.1, 2) - 0.5) * 130);
-    if (lb > 0) h = lerp(h, WATER_Y - 5.2, lb * lb * (3 - 2 * lb));
+    var lwob = (fbm(x * 0.0055 - 3.3, z * 0.0055 + 9.1, 2) - 0.5) * 54;
+    var lskirt = 1 - sstep(150, 330, ld + lwob);
+    if (lskirt > 0) h -= shelf(lskirt) * 16.0;
+    var lb = 1 - sstep(84, 240, ld + lwob);
+    if (lb > 0) h = lerp(h, WATER_Y - 5.2, shelf(lb));
+
+    /* THE EDGE OF THE WORLD. Past the far ring the land always goes down to
+       the sea, over the best part of a kilometre, so the world ends in water
+       and never in a wall. The line wanders, so it is a coast and not a
+       drawn circle: bays where it comes in, headlands where it runs out. */
+    var eD = Math.sqrt(x * x + z * z)
+           + (fbm(x * 0.00042 + 71.3, z * 0.00042 - 18.7, 3) - 0.5) * 620
+           + (fbm(x * 0.0017 - 3.9, z * 0.0017 + 6.1, 2) - 0.5) * 130;
+    if (eD > 2250) {
+      h = lerp(h, WATER_Y - 7.0, shelf(sstep(2250, 3250, eD)));
+    }
 
     for (var i = 0; i < FLATS.length; i++) {
       var f = FLATS[i];
@@ -237,12 +299,13 @@
       h = lerp(f.y, h, sstep(f.r, f.r + f.b, d));
     }
     if (MAPW) {
-      var me = mapAt(MAPW.elev, x, z);
-      h += (me - 128) * 0.55;
-      var mw = mapAt(MAPW.water, x, z);
-      if (mw > 110) {
-        var sink = WATER_Y - 1.6 - (mw - 110) * 0.045;
-        h = Math.min(h, sink);
+      h += (mapSmooth(MAPW.elev, x, z, 115) - 128) * 0.55;
+      /* the painted sea: a wide shelf down to it, not a step off it */
+      var mw = mapSmooth(MAPW.water, x, z, 165);
+      var wet = sstep(34, 205, mw);
+      if (wet > 0.0005) {
+        var sink = WATER_Y - 1.2 - sstep(120, 230, mw) * 5.5;
+        h = lerp(h, Math.min(h, sink), shelf(wet));
       }
     }
     return h;
@@ -321,6 +384,24 @@
     try {
       renderer = new THREE.WebGLRenderer({ antialias: !LOWQ, powerPreference: 'high-performance' });
     } catch (err) { W.diag('WebGL unavailable: ' + err.message); return; }
+    /* Ask the driver what it actually is. An integrated Intel chip in a
+       16GB laptop reports plenty of memory and then cannot draw the world,
+       so it starts a tier down and the frame watch takes it from there. */
+    try {
+      var gl0 = renderer.getContext();
+      var dbg = gl0.getExtension('WEBGL_debug_renderer_info');
+      var gname = dbg ? String(gl0.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+      W.GPU = gname;
+      if (/swiftshader|software|basic render|llvmpipe/i.test(gname)) {
+        TIER = 0; W.TIER = 0; W.vegScale = 0.3;
+      } else if (/intel|uhd|hd graphics|iris(?!.*xe)|vega \d|radeon r[2-5]|radeon\(tm\) graphics|radeon graphics/i.test(gname)
+                 && !/arc|xe max|rx \d|radeon pro/i.test(gname)) {
+        /* "AMD Radeon(TM) Graphics" with no model number is the integrated
+           graphics in a Ryzen chip. It reports nothing about itself and it
+           cannot carry the heaviest world. */
+        if (TIER > 1) { TIER = 1; W.TIER = 1; W.vegScale = 0.55; }
+      }
+    } catch (e) {}
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(TIER === 2 ? Math.min(devicePixelRatio, 1.9) : (TIER === 1 ? Math.min(devicePixelRatio, 1.5) : 1));
     renderer.setClearColor(0x0a0916);
@@ -375,8 +456,15 @@
 
   /* ---------------------------------------------------------------- tex */
   var texWaits = [];
+  /* every fetched file carries the build number, or a changed texture keeps
+     being served from the player's cache and the new work never lands */
+  W.bust = function (url) {
+    var v = window.__BUILD;
+    if (!v || url.indexOf('?') >= 0 || url.indexOf('data:') === 0) return url;
+    return url + '?v=' + v;
+  };
   function tex(url, srgb, rep) {
-    var t = new THREE.TextureLoader().load(url,
+    var t = new THREE.TextureLoader().load(W.bust(url),
       function () { t.needsUpdate = true; },
       undefined,
       function () { W.diag('texture failed: ' + url); });
@@ -827,7 +915,30 @@
       if (!want.has(key)) { disposeChunk(rec); chunks.delete(key); }
     });
     pending.sort(function (a, b) { return a.d - b.d; });
+    vegVisible(p);
   }
+
+  /* On a machine that cannot keep up, the vegetation is drawn nearer rather
+     than thinned: a half-empty meadow looks broken, a meadow that ends in the
+     dark does not. Driven by the quality watch, not by a guess about the
+     hardware. */
+  function vegVisible(p) {
+    var R = W.vegDrawR || 1e9;
+    if (R > 1e8) {
+      chunks.forEach(function (rec) {
+        if (rec.veg) for (var i = 0; i < rec.veg.length; i++) rec.veg[i].visible = true;
+      });
+      return;
+    }
+    var R2 = R * R;
+    chunks.forEach(function (rec) {
+      if (!rec.veg) return;
+      var cx = rec.ci * CH + CH / 2 - p.x, cz = rec.cj * CH + CH / 2 - p.z;
+      var on = (cx * cx + cz * cz) < R2;
+      for (var i = 0; i < rec.veg.length; i++) rec.veg[i].visible = on;
+    });
+  }
+  W.vegVisible = vegVisible;
 
   function pumpChunks(budget) {
     var made = 0;
@@ -1194,6 +1305,51 @@
     else running = false;
   });
 
+  /* ------------------------------------------------- keeping up, measured
+     navigator.deviceMemory reports RAM, not the graphics chip, so a laptop
+     with plenty of memory and a weak integrated GPU was handed the heaviest
+     world and crawled. Guessing from what the browser admits to is not good
+     enough: the frame time itself decides. If the machine cannot hold the
+     target, quality steps down until it can, and it says so on screen.
+
+     Cheap first, drastic last: resolution, then the glow, then the shadows,
+     then how far the vegetation is drawn. */
+  var QSTEP = 0, QMAX = 4, qBudget = 0, qHold = 0, rafDriven = false;
+  function applyQuality() {
+    var pr = [1.9, 1.5, 1.25, 1.0, 0.75][QSTEP];
+    renderer.setPixelRatio(Math.min(devicePixelRatio, pr));
+    if (W.bloom) W.bloom.enabled = QSTEP < 2;
+    if (W.moonLight) W.moonLight.castShadow = (QSTEP < 3) && TIER === 2;
+    /* the far vegetation is the last thing to go, and the first thing a weak
+       machine cannot afford */
+    W.vegDrawR = [1e9, 1e9, 260, 190, 130][QSTEP];
+    try { vegVisible(W.getPos()); } catch (e) {}
+    if (hbEl) hbEl.title = 'quality step ' + QSTEP;
+  }
+  W.applyQuality = applyQuality;
+  function qualityWatch(dt) {
+    /* Judge only frames that ANIMATION drove. When the tab is hidden or
+       animation frames are starved, the fallback timer paces the world at
+       a quarter second, and reading that as a slow frame would strip the
+       world to nothing while nobody is even looking at it. */
+    if (!rafDriven || document.visibilityState !== 'visible') return;
+    if (clock.elapsedTime < 1.5) return;
+    var ms = dt * 1000;
+    qBudget = qBudget * 0.88 + ms * 0.12;
+    if (qHold > 0) { qHold -= dt; return; }
+    if (qBudget > 34 && QSTEP < QMAX) {          /* under 30 fps */
+      QSTEP += (qBudget > 60 ? 2 : 1);
+      if (QSTEP > QMAX) QSTEP = QMAX;
+      applyQuality();
+      qHold = 3.0;                                /* let it settle before judging again */
+      W.diag('eased quality to step ' + QSTEP + ' (' + Math.round(qBudget) + 'ms frames)');
+    } else if (qBudget < 15 && QSTEP > 0 && clock.elapsedTime > 12) {
+      QSTEP -= 1;                                 /* it has room again */
+      applyQuality();
+      qHold = 6.0;
+    }
+  }
+
   var hbEl, frames = 0, hbT = 0, lastRaf = 0;
   function frame() {
     var dt = Math.min(clock.getDelta(), 0.05);
@@ -1202,15 +1358,18 @@
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
     step(dt);
     if (composer) composer.render(); else renderer.render(scene, cam);
+    qualityWatch(dt);
     frames++;
     if (hbT > 1) {
       hbT = 0;
-      if (hbEl) hbEl.textContent = frames + ' fps · ' + Math.round(renderer.info.render.triangles / 1000) + 'k';
+      if (hbEl) hbEl.textContent = frames + ' fps · ' +
+        Math.round(renderer.info.render.triangles / 1000) + 'k · q' + QSTEP;
       frames = 0;
     }
   }
   function loop() {
     if (!running) return;
+    rafDriven = true;
     lastRaf = performance.now();
     rafId = requestAnimationFrame(loop);
 
@@ -1240,7 +1399,10 @@
     rafId = requestAnimationFrame(loop);
     /* if animation frames are starved, a plain timer keeps the world alive */
     setInterval(function () {
-      if (running && performance.now() - lastRaf > 400) { try { frame(); } catch (e) {} }
+      if (running && performance.now() - lastRaf > 400) {
+        rafDriven = false;
+        try { frame(); } catch (e) {}
+      }
     }, 260);
   }
 
