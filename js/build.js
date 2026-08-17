@@ -1963,16 +1963,23 @@
       if (palmChunk) {
         if (w.w > 0.24) {
           if (own > 0.82) {              /* tamarisk holds the bank with them */
-            key = 'tree/tamarisk_' + (own > 0.91 ? 2 : 1);
+            key = 'tree/tamarisk_' + (1 + Math.floor(rng(tx, tz, 9.9) * 4) % 4);
             sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
           } else {
             key = 'palm'; sc = 8 + rng(tx, tz, 7) * 5;
           }
         }
       } else if (forest ? (w.g > 0.30) : (w.g > 0.55 && own > 0.5)) {
-        var TS = ['tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
-                  'tree/fig_1', 'tree/fig_2',
-                  'tree/cypress_1', 'tree/cypress_2'];
+        var TS;
+        if (forest && rng(tx, tz, 7.7) > 0.35) {
+          /* the forest wall is conifer, as the reference shows */
+          TS = ['tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4'];
+        } else {
+          TS = ['tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4',
+                'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4',
+                'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4',
+                'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4'];
+        }
         key = TS[Math.floor(rng(tx, tz, 3.3) * TS.length) % TS.length];
         sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
       } else if (w.g > 0.62) {
@@ -2205,9 +2212,12 @@
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
-      'tree/olive_1', 'tree/olive_2', 'tree/plane_1', 'tree/plane_2',
-      'tree/cypress_1', 'tree/cypress_2', 'tree/tamarisk_1', 'tree/tamarisk_2',
-      'tree/fig_1', 'tree/fig_2',
+      'tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4',
+      'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4',
+      'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4',
+      'tree/tamarisk_1', 'tree/tamarisk_2', 'tree/tamarisk_3', 'tree/tamarisk_4',
+      'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4',
+      'tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4',
       'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
       'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',

@@ -781,12 +781,28 @@
      "n": "Cypress 2"
     },
     {
+     "k": "tree/cypress_3",
+     "n": "Cypress 3"
+    },
+    {
+     "k": "tree/cypress_4",
+     "n": "Cypress 4"
+    },
+    {
      "k": "tree/fig_1",
      "n": "Fig 1"
     },
     {
      "k": "tree/fig_2",
      "n": "Fig 2"
+    },
+    {
+     "k": "tree/fig_3",
+     "n": "Fig 3"
+    },
+    {
+     "k": "tree/fig_4",
+     "n": "Fig 4"
     },
     {
      "k": "tree/giant_1",
@@ -809,6 +825,30 @@
      "n": "Olive 2"
     },
     {
+     "k": "tree/olive_3",
+     "n": "Olive 3"
+    },
+    {
+     "k": "tree/olive_4",
+     "n": "Olive 4"
+    },
+    {
+     "k": "tree/pine_1",
+     "n": "Pine 1"
+    },
+    {
+     "k": "tree/pine_2",
+     "n": "Pine 2"
+    },
+    {
+     "k": "tree/pine_3",
+     "n": "Pine 3"
+    },
+    {
+     "k": "tree/pine_4",
+     "n": "Pine 4"
+    },
+    {
      "k": "tree/plane_1",
      "n": "Plane 1"
     },
@@ -817,12 +857,28 @@
      "n": "Plane 2"
     },
     {
+     "k": "tree/plane_3",
+     "n": "Plane 3"
+    },
+    {
+     "k": "tree/plane_4",
+     "n": "Plane 4"
+    },
+    {
      "k": "tree/tamarisk_1",
      "n": "Tamarisk 1"
     },
     {
      "k": "tree/tamarisk_2",
      "n": "Tamarisk 2"
+    },
+    {
+     "k": "tree/tamarisk_3",
+     "n": "Tamarisk 3"
+    },
+    {
+     "k": "tree/tamarisk_4",
+     "n": "Tamarisk 4"
     },
     {
      "k": "tree_anc",
@@ -1106,6 +1162,10 @@
     {
      "k": "p_well",
      "n": "Well"
+    },
+    {
+     "k": "palace/castle",
+     "n": "Castle"
     },
     {
      "k": "palace/dome_onion",
