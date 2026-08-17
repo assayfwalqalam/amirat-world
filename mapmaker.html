@@ -44,6 +44,18 @@
     <h1>the map table</h1>
     <div class="note">Draw the world. The middle circle is the town that already stands, for scale. Send it to the game when it pleases you.</div>
 
+    <div class="grp" style="cursor:pointer" onclick="var q=document.getElementById('layerhow');q.style.display=q.style.display==='none'?'block':'none'">how the layers lie ▾</div>
+    <div id="layerhow" class="note" style="display:none;line-height:1.5">
+      THE LAND is the bone: everything else lies on top of it.<br>
+      WATER floods what lies low. Sea, lake and river brushes also press the
+      land down as they paint, which is why erasing them lifts it back.<br>
+      THE GREEN lies on the land and decides the grass and flowers.<br>
+      FOREST and PALM lie on the green and decide the trees.<br>
+      ROADS lie over everything, and nothing grows on them.<br>
+      PLACES are stamps on top of it all.<br>
+      The ERASER takes everything back to bare plain in one stroke.
+    </div>
+
     <div class="grp">water</div>
     <div class="brushes" id="bWater"></div>
     <div class="grp">the land</div>
@@ -75,6 +87,13 @@
       <button id="send" class="primary">Send to game ▶</button>
       <button id="unsend">Back to plain world</button>
     </div>
+    <div class="btns">
+      <button id="walk">Walk the shape ▶</button>
+    </div>
+    <div class="note">The map feeds the game AT THIS ADDRESS only. Drawn here,
+    it plays here; the copy of the game on another address cannot see it.
+    Walk The Shape opens the world with nothing in it but your land and its
+    colours, so it loads light and you judge the shape.</div>
     <div class="note" id="status"></div>
   </div>
   <div id="stage">
@@ -144,10 +163,63 @@
   ];
   var cur = BR[10];   /* start on lush */
 
+  /* What each brush LOOKS LIKE in the world, shown on hover: a tile of the
+     very texture the game paints that ground with, and one plain line. */
+  var LOOK = {
+    sea:    [null, 'deep open water · the land shelves down long before it'],
+    lake:   [null, 'still water in a hollow · reeds take its rim'],
+    river:  [null, 'a running channel · draws its valley down with it'],
+    marsh:  ['assets/g_grass_d.jpg', 'wet ground · reeds and papyrus stand thick'],
+    mount:  ['assets/g_rock_d.jpg', 'bare rock walls and high stone · cliffs where it is steep'],
+    hill:   ['assets/g_grass_d.jpg', 'rolling grass swells · scree on the steep faces'],
+    plain:  ['assets/g_sand_d.jpg', 'level open ground · dry grass and sand'],
+    basin:  ['assets/g_gravel_d.jpg', 'low gravelly ground · gathers gravel and grit'],
+    dunes:  ['assets/g_sand_d.jpg', 'trains of soft sand crests with bare sheets between'],
+    salt:   ['assets/g_sand_d.jpg', 'blinding flat crust · nothing grows on it'],
+    lush:   ['assets/g_grass_d.jpg', 'deep green meadow · flowers run in drifts'],
+    forest: ['assets/g_grass_d.jpg', 'trees stand thick · conifer walls, broadleaf stands'],
+    palmy:  ['assets/g_grass_d.jpg', 'date palms in company along the water veins'],
+    fields: ['assets/g_grass_d.jpg', 'worked green in patches, thinner than the oasis'],
+    road:   ['assets/g_gravel_d.jpg', 'trodden track · nothing grows on it'],
+    village: [null, 'a small settlement stands here'],
+    mosque: [null, 'a mosque with its court and minaret'],
+    bustan: [null, 'a walled orchard garden'],
+    camp:   [null, 'goat-hair tents round a fire'],
+    cave:   [null, 'a rock cave with a manuscript in it'],
+    ruin:   [null, 'fallen walls of an older age'],
+    tower:  [null, 'a lone watchtower'],
+    harbor: [null, 'boats and a stone quay · put it on a shore'],
+    quarry: [null, 'cut stone benches in the ground'],
+    spring: [null, 'sweet water rising · green gathers round it'],
+    graves: [null, 'a walled graveyard, aniconic stones'],
+    spawn:  [null, 'where you stand when the world opens'],
+    erase:  [null, 'takes EVERYTHING back: water off, green off, land to plain'],
+    smooth: [null, 'softens hard edges between what you painted']
+  };
+  var tip = document.createElement('div');
+  tip.id = 'brtip';
+  tip.style.cssText = 'position:fixed;z-index:40;display:none;width:200px;background:#141210;' +
+    'border:1px solid #4a3f2c;border-radius:6px;padding:8px;font-size:11.5px;color:#cbb890;pointer-events:none';
+  document.body.appendChild(tip);
   BR.forEach(function (b) {
     var el = document.createElement('div');
     el.className = 'br';
     el.innerHTML = '<span class="sw" style="background:' + b.sw + '"></span>' + b.n;
+    var lk = LOOK[b.k];
+    if (lk) {
+      el.addEventListener('mouseenter', function (ev) {
+        tip.innerHTML = (lk[0] ? '<div style="height:74px;border-radius:4px;margin-bottom:6px;' +
+          'background:url(' + lk[0] + ') center/cover"></div>' : '') +
+          '<div style="color:#e8d9b8">' + b.n + '</div>' +
+          '<div style="color:#a8977a;margin-top:2px">' + lk[1] + '</div>';
+        tip.style.display = 'block';
+      });
+      el.addEventListener('mousemove', function (ev) {
+        tip.style.left = Math.min(innerWidth - 215, ev.clientX + 14) + 'px';
+        tip.style.top = Math.min(innerHeight - 130, ev.clientY + 10) + 'px';
+      });
+      el.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+    }
     el.onclick = function () {
       document.querySelectorAll('.br.on').forEach(function (q) { q.classList.remove('on'); });
       el.classList.add('on');
@@ -186,6 +258,23 @@
   function dab(p, b, erase) {
     var sz = +document.getElementById('size').value;
     var flow = +document.getElementById('flow').value / 100;
+    /* THE ERASER erases everything under the brush: water off, green off,
+       forest off, roads off, and the land itself back to plain (128). It was
+       broken outright before -- it had no layer of its own, so it painted
+       into nothing. This is also what puts land back. */
+    if (b.erase) {
+      for (var ek in L) {
+        var ev = (ek === 'elev') ? 128 : 0;
+        var ex = L[ek].x;
+        ex.globalAlpha = flow;
+        ex.fillStyle = 'rgb(' + ev + ',' + ev + ',' + ev + ')';
+        ex.beginPath();
+        ex.arc(p.x, p.y, sz, 0, 6.283);
+        ex.fill();
+        ex.globalAlpha = 1;
+      }
+      return;
+    }
     var tgt = L[b.layer];
     var v = erase ? (b.layer === 'elev' ? 128 : 0) : b.v;
     var g = tgt.x;
@@ -195,6 +284,19 @@
     g.arc(p.x, p.y, (b.line ? sz * 0.35 : sz), 0, 6.283);
     g.fill();
     g.globalAlpha = 1;
+    /* right-drag erase takes the ALSO layer back too: a sea presses the land
+       down when painted, so unpainting it must lift the land back to plain,
+       or it leaves a dry pit where the water was */
+    if (b.also && erase) {
+      var t3 = L[b.also.l];
+      var v3 = (b.also.l === 'elev') ? 128 : 0;
+      t3.x.globalAlpha = flow;
+      t3.x.fillStyle = 'rgb(' + v3 + ',' + v3 + ',' + v3 + ')';
+      t3.x.beginPath();
+      t3.x.arc(p.x, p.y, (b.line ? sz * 0.45 : sz * 1.05), 0, 6.283);
+      t3.x.fill();
+      t3.x.globalAlpha = 1;
+    }
     if (b.also && !erase) {
       var t2 = L[b.also.l], v2 = b.also.v;
       t2.x.globalAlpha = flow * 0.9;
@@ -421,6 +523,11 @@
     localStorage.setItem('amirat_worldmap', JSON.stringify(pack));
     localStorage.setItem('amirat_mapdraft', JSON.stringify(fullState()));
     status('sent · open the game and the land will follow your map');
+  };
+  document.getElementById('walk').onclick = function () {
+    /* send first, so what is walked is what is drawn */
+    document.getElementById('send').onclick();
+    window.open('index.html?mappreview=1', '_blank');
   };
   document.getElementById('unsend').onclick = function () {
     localStorage.removeItem('amirat_worldmap');

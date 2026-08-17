@@ -372,6 +372,9 @@
   var renderer, scene, cam, clock;
   var LOWQ = false;
   try { LOWQ = sessionStorage.getItem('lowq') === '1'; } catch (e) {}
+  /* the map table's Walk The Shape: land and water only, so the drawn world
+     can be judged light and fast, with nothing standing on it */
+  W.MAPPREVIEW = /[?&]mappreview=1/.test(location.search);
 
   /* small screens and modest devices get a lighter world, automatically */
   var mem = navigator.deviceMemory || 4;
