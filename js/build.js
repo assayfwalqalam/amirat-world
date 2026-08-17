@@ -554,6 +554,7 @@
       if (--left === 0) {
         if (loadEl) loadEl.style.display = 'none';
         done();
+        try { if (W.crunch) W.crunch(); } catch (e) { if (W.diag) W.diag('crunch: ' + e.message); }
         W.MODELS_IN = true;      /* fixed-viewpoint capture waits for this */
       } else if (loadEl && loadEl.style.display !== 'none') {
         loadEl.textContent = 'Building the world… ' + Math.round((1 - left / list.length) * 100) + '%';
@@ -1784,6 +1785,42 @@
   }
   W.lushField = lushField;
 
+  /* ------------------------------------------------------- the blossom row
+     His order: the blossom giants are NOT sown anywhere in the world. One of
+     each stands in a row near the town, so they can be walked along and
+     judged side by side. Spacing follows each tree's own crown, widest last,
+     and every one sits on its own ground height. */
+  var BLOSSOM_ROW = [];
+  ['2x', '3x', '4x'].forEach(function (t) {
+    for (var i = 1; i <= 5; i++) BLOSSOM_ROW.push('tree/blossom_' + t + '_' + i);
+  });
+  W.BLOSSOM_ROW = BLOSSOM_ROW;
+  function buildBlossomRow() {
+    var z0 = 300, x = -430;
+    BLOSSOM_ROW.forEach(function (key) {
+      var mdl = MODELS[key];
+      if (!mdl) return;
+      var bb = new T.Box3().setFromObject(mdl);
+      var wide = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) || 20;
+      x += wide * 0.62;
+      var zz = z0 + (W.hash2 ? 0 : 0);
+      var gy = W.heightAt(x, zz);
+      if (gy < W.WATER_Y + 1.5) { x += wide * 0.62; return; }
+      var g = place(key, x, gy - 0.35, zz, null, 0, false, 'raw', 1.0);
+      if (g) {
+        var boxes = COLJSON[key];
+        if (boxes) {
+          boxes.forEach(function (b) {
+            W.addBox(x + b.c[0], gy + b.c[1], zz + b.c[2], b.h[0], b.h[1], b.h[2], 0);
+          });
+        } else {
+          W.addBox(x, gy + 6, zz, 1.6, 6, 1.6, 0);
+        }
+      }
+      x += wide * 0.62 + 6;
+    });
+  }
+
   /* what grows in one chunk */
   W.scatter = function (W, ci, cj, CH, seg) {
     var out = [];
@@ -2071,6 +2108,37 @@
        thinning at the edge, tens of metres across, with the odd loner out
        on its own -- an even sprinkle over a whole chunk is an orchard grid,
        and reads as one. */
+    var treeJobs = [];
+    function instanceTrees(jobs) {
+      if (!jobs.length) return;
+      var byKey = {};
+      jobs.forEach(function (j) { (byKey[j.key] = byKey[j.key] || []).push(j); });
+      Object.keys(byKey).forEach(function (k2) {
+        var src = vegParts(k2);
+        if (!src) return;
+        var list = byKey[k2];
+        var ims = src.parts.map(function (pr) {
+          return new T.InstancedMesh(pr.g, pr.m, list.length);
+        });
+        for (var i3 = 0; i3 < list.length; i3++) {
+          var j2 = list[i3];
+          /* the tree/* models are placed at true size; the older ones were
+             normalised to a height, so they keep that convention */
+          var s3 = j2.raw ? j2.sc : (j2.sc / src.height);
+          dummy.position.set(j2.x, j2.y, j2.z);
+          dummy.rotation.set(0, j2.rot, 0);
+          dummy.scale.set(s3, s3, s3);
+          dummy.updateMatrix();
+          for (var p3 = 0; p3 < ims.length; p3++) ims[p3].setMatrixAt(i3, dummy.matrix);
+        }
+        ims.forEach(function (im3) {
+          im3.instanceMatrix.needsUpdate = true;
+          im3.frustumCulled = true;
+          W.scene.add(im3);
+          out.push(im3);
+        });
+      });
+    }
     var nStand = 1 + Math.floor(rng(ci, cj, 4.4) * 3);
     var STANDS = [];
     for (var s2 = 0; s2 < nStand; s2++) {
@@ -2134,20 +2202,24 @@
         key = 'tree_small'; sc = 4 + rng(tx, tz, 5) * 3;
       }
       if (!key || !MODELS[key]) continue;
-      var g = place(key, tx, th - 0.25, tz, sc, rng(tx, tz, 9) * 6.283);
-      if (g) {
-        if (key.indexOf('tree/blossom_') === 0) {
-          /* a trunk this thick is a wall, not a sapling */
-          var br = 0.030 * sc + 0.6;
-          g.userData.col = W.addBox(tx, th + sc * 0.10, tz, br, sc * 0.10, br, 0);
-        } else if (key.indexOf('tree/') === 0) {
-          g.userData.col = W.addBox(tx, th + 2.2, tz, 0.38, 2.2, 0.38, 0);
-        } else {
-          g.userData.col = W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
-        }
-        out.push(g);
+      /* Trees used to be placed one clone at a time, which is two draw calls
+         each. Seven hundred and forty trees was fourteen hundred and eighty
+         draw calls on their own -- the single biggest reason the world would
+         not hold a frame rate on an integrated chip. They are gathered here
+         and drawn per kind instead. Collision stays per tree. */
+      treeJobs.push({ key: key, x: tx, y: th - 0.25, z: tz, sc: sc,
+                      rot: rng(tx, tz, 9) * 6.283,
+                      raw: key.indexOf('tree/') === 0 });
+      if (key.indexOf('tree/blossom_') === 0) {
+        var br = 0.030 * sc + 0.6;
+        W.addBox(tx, th + sc * 0.10, tz, br, sc * 0.10, br, 0);
+      } else if (key.indexOf('tree/') === 0) {
+        W.addBox(tx, th + 2.2, tz, 0.38, 2.2, 0.38, 0);
+      } else {
+        W.addBox(tx, th + sc * 0.30, tz, sc * 0.045 + 0.25, sc * 0.30, sc * 0.045 + 0.25, 0);
       }
     }
+    instanceTrees(treeJobs);
     /* boulders that you cannot walk through */
     for (var b = 0; b < 2; b++) {
       var bx = ox + rng(ci + b * 3, cj, 2.6) * CH, bz = oz + rng(ci, cj + b * 5, 6.1) * CH;
@@ -2206,6 +2278,117 @@
     lawn.instanceMatrix.needsUpdate = true;
     lawnAt.copy(p);
   }
+
+
+  /* ------------------------------------------------------------ crunching
+     The town is assembled out of about seventeen hundred small meshes: six
+     hundred and eighty sprite planes at two triangles each, four hundred and
+     seventy boxes at twelve. They cost almost nothing to draw and everything
+     to ISSUE -- one draw call apiece, which is what an integrated chip runs
+     out of long before it runs out of triangles.
+
+     Everything static is welded into one mesh per material after the world is
+     built. Anything that moves, opens, flickers, or is aimed at the player is
+     left alone. */
+  function crunch() {
+    var keep = new Set();
+    function protect(o) {
+      if (!o) return;
+      o.traverse ? o.traverse(function (c) { keep.add(c); }) : keep.add(o);
+    }
+    doors.forEach(function (d) { protect(d.pivot); protect(d.leaf); });
+    fires.forEach(function (f) { protect(f.g || f.mesh || f); });
+    lamps.forEach(function (l) { protect(l.g); });
+    /* The small props were kept out of the weld because they are shown and
+       hidden by distance to save draw calls. Welding saves far more than the
+       toggling ever did, so they go in and the toggle list is emptied. */
+    EMIT.forEach(function (e) { protect(e.g || e.mesh); });
+
+    var groups = new Map();
+    var victims = [];
+    W.scene.traverse(function (o) {
+      if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) return;
+      if (keep.has(o)) return;
+      if (o.userData && o.userData.noCrunch) return;
+      var g = o.geometry;
+      if (!g || !g.attributes || !g.attributes.position) return;
+      /* only weld what will never move again */
+      var moving = false;
+      for (var pnt = o; pnt; pnt = pnt.parent) {
+        if (keep.has(pnt) || (pnt.userData && pnt.userData.noCrunch)) { moving = true; break; }
+      }
+      if (moving) return;
+      var m = o.material;
+      if (Array.isArray(m)) return;
+      var key = m.uuid;
+      if (!groups.has(key)) groups.set(key, { mat: m, list: [] });
+      groups.get(key).list.push(o);
+      victims.push(o);
+    });
+
+    var made = 0, removed = 0;
+    groups.forEach(function (grp) {
+      if (grp.list.length < 3) return;          /* not worth a weld */
+      var pos = [], nrm = [], uv = [], idx = [], off = 0, ok = true;
+      var v = new T.Vector3(), nm = new T.Vector3();
+      for (var i = 0; i < grp.list.length; i++) {
+        var o = grp.list[i];
+        var g = o.geometry;
+        var ap = g.attributes.position, an = g.attributes.normal, au = g.attributes.uv;
+        if (!ap) { ok = false; break; }
+        o.updateWorldMatrix(true, false);
+        var mw = o.matrixWorld;
+        /* One bad transform poisons the whole welded batch: its bounding
+           sphere comes out NaN and the mesh either never draws or always
+           does. Anything not finite is left out. */
+        var me2 = mw.elements, finite = true;
+        for (var fe = 0; fe < 16; fe++) if (!isFinite(me2[fe])) { finite = false; break; }
+        if (!finite) continue;
+        var nMat = new T.Matrix3().getNormalMatrix(mw);
+        var bad = false;
+        for (var kk = 0; kk < ap.count; kk++) {
+          if (!isFinite(ap.getX(kk)) || !isFinite(ap.getY(kk)) || !isFinite(ap.getZ(kk))) { bad = true; break; }
+        }
+        if (bad) continue;
+        for (var k = 0; k < ap.count; k++) {
+          v.set(ap.getX(k), ap.getY(k), ap.getZ(k)).applyMatrix4(mw);
+          pos.push(v.x, v.y, v.z);
+          if (an) { nm.set(an.getX(k), an.getY(k), an.getZ(k)).applyMatrix3(nMat).normalize(); nrm.push(nm.x, nm.y, nm.z); }
+          else nrm.push(0, 1, 0);
+          if (au) uv.push(au.getX(k), au.getY(k)); else uv.push(0, 0);
+        }
+        var ix = g.index;
+        if (ix) { for (var q = 0; q < ix.count; q++) idx.push(ix.getX(q) + off); }
+        else { for (var q2 = 0; q2 < ap.count; q2++) idx.push(q2 + off); }
+        off += ap.count;
+      }
+      if (!ok || !pos.length) return;
+      var merged = new T.BufferGeometry();
+      merged.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+      merged.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3));
+      merged.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+      merged.setIndex(idx);
+      merged.computeBoundingSphere();
+      var mesh = new T.Mesh(merged, grp.mat);
+      mesh.name = 'welded';
+      mesh.userData.noCrunch = true;
+      mesh.frustumCulled = true;
+      W.scene.add(mesh);
+      made++;
+      grp.list.forEach(function (o) {
+        var mw2 = o.matrixWorld.elements, fin2 = true;
+        for (var fe2 = 0; fe2 < 16; fe2++) if (!isFinite(mw2[fe2])) { fin2 = false; break; }
+        if (!fin2) return;                      /* it was skipped, so it stays */
+        if (o.parent) o.parent.remove(o);
+        o.geometry.dispose();
+        removed++;
+      });
+    });
+    SMALL.length = 0;
+    if (W.diag) W.diag('welded ' + removed + ' meshes into ' + made);
+    return { made: made, removed: removed };
+  }
+  W.crunch = crunch;
 
   /* ------------------------------------------------------- interaction */
   W.interact = function (W) {
@@ -2359,7 +2542,7 @@
     buildLibrary(34, 36);
     buildHouses();
 
-    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
+    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(BLOSSOM_ROW).map(loadCollision));
     loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
       'palm', 'lantern', 'mashaf', 'carpet',
       'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
@@ -2376,7 +2559,7 @@
       'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
       'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
       'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',
-      'tree/giant_1', 'tree/giant_2', 'tree/giant_3', 'bound/low']), function () {
+'bound/low'].concat(BLOSSOM_ROW)), function () {
         /* the flowers wear the land's deeper pigment: darker albedo, and
            they light up under any lamp like everything else does */
         ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'].forEach(function (fk) {
@@ -2396,6 +2579,7 @@
           });
         });
         /* things that need the models */
+        buildBlossomRow();
         buildCitadel();
         buildSculptedHouses();
         dressSquares();

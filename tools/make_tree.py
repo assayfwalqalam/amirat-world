@@ -12,6 +12,17 @@ KIND = argv[0] if argv else "olive"
 SEED = int(argv[1]) if len(argv) > 1 else 1
 OUT = argv[2] if len(argv) > 2 else (KIND + ".glb")
 ASSETS = argv[3] if len(argv) > 3 else "assets"
+# SIZE TIER. His order: some twice the size of the biggest tree, some three
+# times, some four or more, and the bigger it is the heavier its trunk and
+# logs. Height takes the scale straight; the wood takes it to the power of
+# 1.12, because a tree four times as tall is more than four times as stout.
+SCALE = float(argv[4]) if len(argv) > 4 else 1.0
+RSCALE = SCALE ** 1.12
+# Leaves do NOT grow with the tree. Scaled straight, an eighty metre tree gets
+# eight metre leaf sheets; instead the cards stay near leaf size and there are
+# far more of them.
+CARDK = SCALE ** -0.55
+NK = SCALE ** 1.15
 random.seed(SEED * 4967 + sum(ord(c) for c in KIND) * 61)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -29,108 +40,131 @@ def rec(loc, hx, hy, hz):
                       "h": [round(hx, 2), round(hz, 2), round(hy, 2)]})
 
 
-def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None,
-         gnarl=0.0, arc=0.0, flare=1.0):
-    """One tapering limb of stacked cone segments. Returns (tip, dir).
-    Radii are REAL: a trunk is a log, not a twig.
+WOOD_V, WOOD_F, WOOD_UV = [], [], []
 
-    gnarl  the wood swells and pinches along its length and throws the odd
-           hard ELBOW, which is what an old tree does and what a smooth
-           tapered tube never does
-    arc    the limb rises and then falls away, for boughs that weep
-    flare  the foot of a trunk spreads where it meets the ground"""
+
+def limb(p0, direction, length, r0, r1, segs=None, crook=0.3, min_dz=None,
+         gnarl=0.0, arc=0.0, flare=1.0, sides=None):
+    """One limb, built as ONE CONTINUOUS TUBE with an irregular section.
+
+    It used to be a stack of twelve-sided cones with end caps. That gives a
+    trunk flat facets down its silhouette, a hard ring at every joint where
+    one cone meets the next, and a perfectly circular section the whole way
+    up: machined, not grown. Here there are no joints at all, the section is
+    LOBED, the lobes travel and change along the length, and the foot spreads
+    into root fingers rather than a cone skirt.
+
+    gnarl  the wood swells, pinches and throws hard elbows
+    arc    the limb rises and then falls away
+    flare  the foot spreads where it meets the ground
+    """
+    r0 *= RSCALE
+    r1 *= RSCALE
     segs = segs or max(3, int(length / 0.9))
+    # A thick limb given four rings changes radius in visible steps and grows a
+    # collar. Ring spacing follows the limb's own girth.
+    segs = max(segs, int(length / max(0.55, 1.15 * (r0 + r1))))
+    segs = min(segs, 26)
+    if sides is None:
+        # facets must follow the ACTUAL radius. A four metre trunk at sixteen
+        # sides has twenty-two degree chords, which read as flat plates however
+        # smoothly it is shaded -- and these trunks are now metres thick.
+        sides = int(max(5, min(30, 7 + r0 * 5.0)))
     dx, dy, dz = direction
-    n = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
-    dx, dy, dz = dx / n, dy / n, dz / n
-    x, y, z = p0
+    nn = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+    d = Vector((dx / nn, dy / nn, dz / nn))
+    p = Vector((p0[0], p0[1], p0[2]))
+    # SOCKET the limb into its parent. Each limb is its own tube, so starting
+    # it exactly at the parent's tip leaves the parent's open rim standing
+    # proud as a hard ledge round the trunk. Backing the first ring inside the
+    # parent's wood buries the joint.
+    p = p - d * (r0 * 1.15)
     seglen = length / segs
-    # The bark has to FLOW up the limb. Projected per segment it gives every
-    # joint its own unaligned mapping and the trunk reads as a stack of drums,
-    # so the vertical coordinate carries on from where the last segment ended.
-    voff = random.uniform(0, 4.0)
-    gph = random.uniform(0, 6.283)
+    gph = [random.uniform(0, 6.283) for _ in range(4)]
+
+    # walk the path
+    ring_c = [p.copy()]
+    ring_t = [d.copy()]
     for i in range(segs):
-        t = i / float(segs)
-        r = r0 + (r1 - r0) * t
-        # the wood swells and pinches, and the foot of a trunk spreads
-        if gnarl > 0.0:
-            r *= (1.0 + gnarl * (0.30 * math.sin(i * 2.15 + gph)
-                                 + 0.18 * math.sin(i * 5.3 + gph * 2.0)))
-            if random.random() < 0.16 * gnarl:
-                r *= random.uniform(1.18, 1.42)      # a burl
-        if flare > 1.0:
-            r *= 1.0 + (flare - 1.0) * max(0.0, 1.0 - t * 4.0)
         w = crook * seglen
-        dx += random.uniform(-w, w) * 0.15
-        dy += random.uniform(-w, w) * 0.15
-        dz += random.uniform(-w * 0.5, w) * 0.15
-        # a hard elbow, the way an old bough turns
+        d = Vector((d.x + random.uniform(-w, w) * 0.15,
+                    d.y + random.uniform(-w, w) * 0.15,
+                    d.z + random.uniform(-w * 0.5, w) * 0.15))
         if gnarl > 0.0 and random.random() < 0.22 * gnarl:
             ea = random.uniform(0, 6.283)
             kick = 0.55 * gnarl
-            dx += math.cos(ea) * kick
-            dy += math.sin(ea) * kick
-            dz += random.uniform(-0.35, 0.22) * gnarl
+            d = Vector((d.x + math.cos(ea) * kick, d.y + math.sin(ea) * kick,
+                        d.z + random.uniform(-0.35, 0.22) * gnarl))
         if arc:
-            dz -= arc / float(segs)
-        if min_dz is not None and dz < min_dz:
-            dz = min_dz
-        m = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
-        dx, dy, dz = dx / m, dy / m, dz / m
-        nx, ny, nz = x + dx * seglen, y + dy * seglen, z + dz * seglen
-        mid = ((x + nx) / 2, (y + ny) / 2, (z + nz) / 2)
-        pitch = math.acos(max(-1.0, min(1.0, dz)))
-        yaw = math.atan2(dy, dx)
-        tn = t + 1.0 / segs
-        r_next = r0 + (r1 - r0) * tn
+            d = Vector((d.x, d.y, d.z - arc / float(segs)))
+        if min_dz is not None and d.z < min_dz:
+            d = Vector((d.x, d.y, min_dz))
+        if d.length < 1e-6:
+            d = Vector((0, 0, 1))
+        d.normalize()
+        p = p + d * seglen
+        ring_c.append(p.copy())
+        ring_t.append(d.copy())
+
+    # the radius of every ring, swelling and pinching along the run
+    radii = []
+    for i in range(segs + 1):
+        t = i / float(segs)
+        r = r0 + (r1 - r0) * t
         if gnarl > 0.0:
-            r_next *= (1.0 + gnarl * (0.30 * math.sin((i + 1) * 2.15 + gph)
-                                      + 0.18 * math.sin((i + 1) * 5.3 + gph * 2.0)))
-        if flare > 1.0:
-            r_next *= 1.0 + (flare - 1.0) * max(0.0, 1.0 - tn * 4.0)
-        bpy.ops.mesh.primitive_cone_add(radius1=r, radius2=r_next,
-                                        depth=seglen * 1.26, location=mid, vertices=12)
-        ob = bpy.context.active_object
-        # UVs authored from the geometry, in the segment's own coordinates,
-        # BEFORE it is rotated into place. Blender's cone comes with a radial
-        # unwrap, not a wrap, so scaling it gave every segment a different
-        # bark scale and the trunk banded at each joint. Here U runs round the
-        # limb at true circumference and V runs along it, carrying on from
-        # where the last segment ended, so the bark flows up the whole limb.
-        me0 = ob.data
-        uvl = me0.uv_layers.active or me0.uv_layers.new()
-        circ = (6.283 * max(r, r_next, 0.02)) / BARKSCALE
-        vs = seglen * 1.26 / BARKSCALE
-        for poly in me0.polygons:
-            us_ = []
-            for li in poly.loop_indices:
-                co = me0.vertices[me0.loops[li].vertex_index].co
-                u = (math.atan2(co[1], co[0]) / 6.283) * circ
-                v = (co[2] / (seglen * 1.26) + 0.5) * vs + voff
-                uvl.data[li].uv = (u, v)
-                us_.append((li, u))
-            # the face that straddles the wrap would squash the whole sheet
-            # into one wedge: lift its far side by a full turn instead
-            umin = min(u for _, u in us_)
-            umax = max(u for _, u in us_)
-            if umax - umin > circ * 0.5:
-                for li, u in us_:
-                    if u < umin + circ * 0.5:
-                        uvl.data[li].uv = (u + circ, uvl.data[li].uv[1])
-        voff += seglen / BARKSCALE      # the true advance, not the overlap
-        ob.rotation_euler = (0.0, pitch, yaw)
-        bpy.ops.object.transform_apply(rotation=True)
-        wood.append(ob)
-        # No joint balls. They were meant to hide the elbow where one segment
-        # turns into the next, and every setting of them failed: at equal
-        # radius their corners crenellate the trunk, smaller and the segment's
-        # end teeth show through, larger and they read as bandage collars with
-        # the bark running the wrong way round them. The segments overlap by a
-        # quarter of their length instead, so there is no gap to hide, and a
-        # bend just reads as a knuckle in the wood, which is what it is.
-        x, y, z = nx, ny, nz
-    return (x, y, z), (dx, dy, dz)
+            r *= (1.0 + gnarl * (0.13 * math.sin(i * 1.05 + gph[0])
+                                 + 0.07 * math.sin(i * 2.30 + gph[1])))
+        radii.append(max(0.012, r))
+
+    # carry a frame along the path so the bark does not spin round it
+    nrm = Vector((0.0, 0.0, 1.0)).cross(ring_t[0])
+    if nrm.length < 1e-4:
+        nrm = Vector((1.0, 0.0, 0.0)).cross(ring_t[0])
+    nrm.normalize()
+    base_i = len(WOOD_V)
+    cols = sides + 1
+    vlen = 0.0
+    uoff = random.uniform(0.0, 8.0)
+    # ONE circumference for the whole limb. Taking it per ring means the same
+    # column of vertices lands at a different U wherever the limb is thinner,
+    # so the bark shears between one ring and the next and the trunk wears a
+    # herringbone. The wood stretches a little where it tapers instead, which
+    # is what bark actually does.
+    circ = 6.283 * max(r0, r1, 0.02)
+    for i in range(segs + 1):
+        if i > 0:
+            q = ring_t[i - 1].rotation_difference(ring_t[i])
+            nrm = (q @ nrm).normalized()
+            vlen += seglen
+        bino = ring_t[i].cross(nrm).normalized()
+        r = radii[i]
+        t = i / float(segs)
+        for j in range(cols):
+            a = 6.283 * j / sides
+            lob = 1.0
+            if gnarl > 0.0:
+                # gentle: enough that the section is never a circle, not so
+                # much that consecutive facets fold into a star
+                lob += gnarl * (0.075 * math.sin(3 * a + gph[0] + i * 0.35)
+                                + 0.050 * math.sin(5 * a + gph[1] - i * 0.22)
+                                + 0.030 * math.sin(7 * a + gph[2] + i * 0.60))
+            if flare > 1.0:
+                # ROOT FINGERS: the spread is not a cone, it is three or four
+                # buttresses, and only at the very foot
+                fz = max(0.0, 1.0 - t * 5.0)
+                lob += (flare - 1.0) * fz * fz * (0.10 + 0.40 *
+                        max(0.0, math.sin(3 * a + gph[3])) ** 2.2)
+            rr = r * lob
+            v = ring_c[i] + (nrm * math.cos(a) + bino * math.sin(a)) * rr
+            WOOD_V.append((v.x, v.y, v.z))
+            WOOD_UV.append(((j / float(sides)) * circ / BARKSCALE + uoff,
+                            vlen / BARKSCALE))
+    for i in range(segs):
+        for j in range(sides):
+            a0 = base_i + i * cols + j
+            b0 = base_i + (i + 1) * cols + j
+            WOOD_F.append((a0, a0 + 1, b0 + 1, b0))
+    return (p.x, p.y, p.z), (d.x, d.y, d.z)
 
 
 LEAF_V, LEAF_F = [], []
@@ -161,7 +195,7 @@ def cluster(at, r, n=None):
     # sticks. Real foliage is a MASS: cards packed until the middle is opaque
     # and light only breaks through at the edges. Cards are two triangles, so
     # density is nearly free -- there was no reason to be sparing.
-    n = n or random.randint(20, 28)
+    n = int((n or random.randint(20, 28)) * NK)
     for _ in range(n):
         a = random.uniform(0, 6.283)
         el = random.uniform(-0.6, 1.1)
@@ -169,7 +203,7 @@ def cluster(at, r, n=None):
         cx = at[0] + math.cos(a) * math.cos(el) * rr
         cy = at[1] + math.sin(a) * math.cos(el) * rr
         cz = at[2] + math.sin(el) * rr * 0.8
-        card((cx, cy, cz), random.uniform(r * 0.95, r * 1.55))
+        card((cx, cy, cz), random.uniform(r * 0.95, r * 1.55) * CARDK)
 
 
 def spray(p0, p1, r, n=None, taper=0.55):
@@ -195,6 +229,7 @@ def spray(p0, p1, r, n=None, taper=0.55):
 
 
 def crown_of_clusters(at, spread, k, cr, squash=0.92):
+    k = int(k * NK)
     """k clusters strewn through an ellipsoid: canopy WITH internal depth.
     Squashed hard it reads as a mushroom umbrella on a stick; a real crown is
     nearly as deep as it is wide, and it hangs BELOW its own centre too."""
@@ -248,7 +283,7 @@ LEAFTEX = {
 # bark now, CC0 from Poly Haven, with the furrow scale set per kind.
 # 512, not 2k: this image is PACKED INTO every tree glb, so a 2k sheet costs
 # 1.7MB per variant and fifty megabytes across the set (tools/shrink_bark.py)
-BARKTEX, BARKSCALE = {
+_BARKTEX, _BARKSCALE = {
     "olive":    ("t_bark512_d.jpg", 0.75),
     "plane":    ("t_bark512_d.jpg", 1.10),
     "fig":      ("t_bark512_d.jpg", 0.95),
@@ -258,10 +293,15 @@ BARKTEX, BARKSCALE = {
     "giant":    ("t_barkold512_d.jpg", 1.70),
     "blossom":  ("t_barkold512_d.jpg", 1.90),
 }[KIND]
+# Bark on a giant is bigger bark: deeper, wider furrows. Held at the small-tree
+# scale, a five metre trunk wraps sixteen copies of the sheet round itself and
+# reads as corduroy.
+BARKTEX = _BARKTEX
+BARKSCALE = _BARKSCALE * (RSCALE ** 0.62)
 
 # every tree is at least two storeys; trunks are logs
 if KIND == "olive":
-    H = random.uniform(6.5, 8.5)
+    H = random.uniform(6.5, 8.5) * SCALE
     tip, d = limb((0, 0, 0), (HB["lean"] + random.uniform(-0.1, 0.1),
                               random.uniform(-0.1, 0.1), 1),
                   H * 0.4 * HB["trunk"], 0.42, 0.24, crook=0.45, min_dz=0.66)
@@ -279,7 +319,7 @@ if KIND == "olive":
     rec((0, 0, H * 0.3), 0.5, 0.5, H * 0.3)
 
 elif KIND == "plane":
-    H = random.uniform(11.0, 15.0)
+    H = random.uniform(11.0, 15.0) * SCALE
     tip, d = limb((0, 0, 0), (HB["lean"] * 0.7, 0, 1),
                   H * 0.4 * HB["trunk"], 0.55, 0.3, crook=0.22, min_dz=0.78)
     for _ in range(max(4, int(random.randint(5, 7) * HB["branch"]))):
@@ -295,7 +335,7 @@ elif KIND == "plane":
     rec((0, 0, H * 0.28), 0.6, 0.6, H * 0.28)
 
 elif KIND == "cypress":
-    H = random.uniform(8.5, 12.0)
+    H = random.uniform(8.5, 12.0) * SCALE
     limb((0, 0, 0), (0, 0, 1), H * 0.24, 0.3, 0.16, crook=0.1, min_dz=0.9)
     n = int(H * 4.5)
     for i in range(n):
@@ -308,7 +348,7 @@ elif KIND == "cypress":
     rec((0, 0, H * 0.4), 0.5, 0.5, H * 0.4)
 
 elif KIND == "tamarisk":
-    H = random.uniform(6.0, 8.0)
+    H = random.uniform(6.0, 8.0) * SCALE
     for _ in range(max(2, int(random.randint(3, 4) * HB["branch"]))):
         a = random.uniform(0, 6.283)
         tip, _ = limb((random.uniform(-0.2, 0.2), random.uniform(-0.2, 0.2), 0),
@@ -322,7 +362,7 @@ elif KIND == "tamarisk":
     rec((0, 0, H * 0.3), 0.45, 0.45, H * 0.3)
 
 elif KIND == "fig":
-    H = random.uniform(6.5, 9.0)
+    H = random.uniform(6.5, 9.0) * SCALE
     tip, d = limb((0, 0, 0), (HB["lean"], 0, 1),
                   H * 0.3 * HB["trunk"], 0.5, 0.3, crook=0.35, min_dz=0.7)
     for _ in range(max(4, int(random.randint(5, 7) * HB["branch"]))):
@@ -338,7 +378,7 @@ elif KIND == "fig":
 elif KIND == "pine":
     # the Bannerlord forest wall: straight trunk, whorls of boughs
     # shortening toward the top, dense dark foliage
-    H = random.uniform(10.0, 15.0)
+    H = random.uniform(10.0, 15.0) * SCALE
     limb((0, 0, 0), (0, 0, 1), H, 0.42, 0.06, segs=7, crook=0.06, min_dz=0.95)
     whorls = random.randint(6, 8)
     for wla in range(whorls):
@@ -360,7 +400,7 @@ elif KIND == "blossom":
     # reaching UP and OUT -- never hanging down, never ending in a ball. The
     # bloom runs ALONG the wood and thins toward the tips, so the dark
     # architecture reads right through it.
-    H = random.uniform(19.0, 24.0)
+    H = random.uniform(19.0, 24.0) * SCALE
     L = HB["lean"]
     nlead = 3 if HB["stems"] < 3 else 4
     base, _ = limb((0, 0, 0), (L * 0.5, 0, 1), H * 0.20 * HB["trunk"],
@@ -390,7 +430,7 @@ elif KIND == "blossom":
     rec((0, 0, H * 0.16), 1.5, 1.5, H * 0.16)
 
 else:                        # giant: the bustan patriarch, 5-7 storeys
-    H = random.uniform(16.0, 21.0)
+    H = random.uniform(16.0, 21.0) * SCALE
     tip, d = limb((0, 0, 0), (HB["lean"] * 0.6, 0, 1), H * 0.36 * HB["trunk"], 1.25, 0.66,
                   segs=6, crook=0.18, min_dz=0.82)
     for _ in range(max(5, int(random.randint(6, 8) * HB["branch"]))):
@@ -484,7 +524,34 @@ def join_leaf_cards(objs, tint):
 # now only a per-face shade jitter riding on top of the bark photo, which
 # means it must sit near white -- and never above 1.0, because glTF clamps a
 # vertex-colour lift and the wood goes pastel.
-w_ob = join_and_colour(wood, "wood", (0.74, 0.68, 0.61), 0.10)
+def build_wood(tint, jitter_amt):
+    """One mesh for all the wood, from the tube geometry."""
+    me = bpy.data.meshes.new("woodmesh")
+    me.from_pydata(WOOD_V, [], WOOD_F)
+    me.update()
+    ob = bpy.data.objects.new("wood", me)
+    bpy.context.collection.objects.link(ob)
+    uv0 = me.uv_layers.new(name="UVMap")
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            uv0.data[li].uv = WOOD_UV[me.loops[li].vertex_index]
+    while len(me.color_attributes):
+        me.color_attributes.remove(me.color_attributes[0])
+    col = me.color_attributes.new(name="ao", type='FLOAT_COLOR', domain='CORNER')
+    me.color_attributes.active_color = col
+    for poly in me.polygons:
+        g = 1.0 + random.uniform(-jitter_amt, jitter_amt)
+        for li in poly.loop_indices:
+            col.data[li].color = (min(1.0, tint[0] * g), min(1.0, tint[1] * g),
+                                  min(1.0, tint[2] * g), 1.0)
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.shade_smooth()
+    return ob
+
+
+w_ob = build_wood((0.74, 0.68, 0.61), 0.10)
 l_ob = join_leaf_cards(leaf, GREEN)
 
 # the wood keeps its own bark material; the join then carries both slots
