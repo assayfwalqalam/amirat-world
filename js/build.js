@@ -1573,13 +1573,16 @@
       if (y < W.WATER_Y + 0.2) continue;
       if (MODELS.palm) place('palm', x, y - 0.2, z, 9 + (i % 5) * 1.6, a * 2.1);
     }
+    /* the oasis keeps its palms; the old normalised giants that used to ring
+       it are out of the world with the rest of them. Proper trees at their
+       true size stand here instead. */
     for (var t = 0; t < 5; t++) {
       var ta = t * 1.35 + 0.7, tr = 44 + (t % 3) * 9;
       var tx = cx + Math.cos(ta) * tr, tz = cz + Math.sin(ta) * tr;
       var ty = W.heightAt(tx, tz);
       if (ty < W.WATER_Y + 0.3) continue;
-      var key = ['tree_big_a', 'tree_big_b', 'tree_anc'][t % 3];
-      if (MODELS[key]) place(key, tx, ty - 0.3, tz, 17 + (t % 3) * 7, ta);
+      var key = ['tree/fig_2', 'tree/plane_3', 'tree/tamarisk_1'][t % 3];
+      if (MODELS[key]) place(key, tx, ty - 0.3, tz, null, ta, false, 'raw', 1.0);
     }
     return { x: cx, z: cz, y: Y };
   }
@@ -2194,13 +2197,12 @@
         }
         key = TS[Math.floor(rng(tx, tz, 3.3) * TS.length) % TS.length];
         sc = 0.9 + rng(tx, tz, 5.5) * 0.5;
-      } else if (w.g > 0.62) {
-        var pickN = rng(tx, tz, 1.1);
-        key = pickN > 0.86 ? 'tree_anc' : (pickN > 0.5 ? 'tree_big_a' : 'tree_big_b');
-        sc = pickN > 0.86 ? (24 + rng(tx, tz, 4) * 14) : (11 + rng(tx, tz, 2) * 8);
-      } else if (rng(tx, tz, 6.6) > 0.72) {
-        key = 'tree_small'; sc = 4 + rng(tx, tz, 5) * 3;
       }
+      /* The old normalised trees are OUT of the world by his order: tree_anc
+         was being stood up at twenty-four to thirty-eight metres, tree_big_a
+         and _b at eleven to nineteen, scattered across the whole map. Nothing
+         huge grows in the open country any more. The only giants anywhere are
+         the blossom row in front of the city. */
       if (!key || !MODELS[key]) continue;
       /* Trees used to be placed one clone at a time, which is two draw calls
          each. Seven hundred and forty trees was fourteen hundred and eighty
@@ -2545,7 +2547,7 @@
     Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(BLOSSOM_ROW).map(loadCollision));
     loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
       'palm', 'lantern', 'mashaf', 'carpet',
-      'tree_big_a', 'tree_big_b', 'tree_anc', 'tree_small', 'bush_dry',
+      'bush_dry',
       'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
       'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
       'tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4', 'tree/olive_5',
