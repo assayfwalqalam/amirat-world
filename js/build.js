@@ -568,6 +568,15 @@
         g.scene.traverse(function (o) {
           if (o.isMesh) {
             o.castShadow = true; o.receiveShadow = true;
+            /* Bounds computed from the geometry we actually have. A canopy
+               written as one big vertex list can arrive with bounds from the
+               file that do not enclose it, and then the renderer decides the
+               tree is off screen and stops drawing it -- which is why trees
+               vanished when you walked up to one or looked straight at it. */
+            if (o.geometry) {
+              o.geometry.computeBoundingSphere();
+              o.geometry.computeBoundingBox();
+            }
             if (o.material) {
               o.material.envMapIntensity = 0.35;
               if (o.material.map) o.material.map.anisotropy = 4;

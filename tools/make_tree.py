@@ -172,6 +172,28 @@ def cluster(at, r, n=None):
         card((cx, cy, cz), random.uniform(r * 0.95, r * 1.55))
 
 
+def spray(p0, p1, r, n=None, taper=0.55):
+    """Foliage laid ALONG a branch, from p0 to p1, thinning toward the tip.
+
+    A cluster is a sphere, and a tree built of spheres reads as a bunch of
+    pom-poms hung on sticks however many you use. Real foliage follows the
+    wood: it runs out along the branch and thins as the branch thins."""
+    n = n or 16
+    for i in range(n):
+        t = random.uniform(0.0, 1.0)
+        # along the branch, with a little scatter round it
+        bx = p0[0] + (p1[0] - p0[0]) * t
+        by = p0[1] + (p1[1] - p0[1]) * t
+        bz = p0[2] + (p1[2] - p0[2]) * t
+        rr = r * (1.0 - taper * t)
+        a = random.uniform(0, 6.283)
+        el = random.uniform(-0.5, 1.0)
+        cx = bx + math.cos(a) * math.cos(el) * rr * random.uniform(0, 0.9)
+        cy = by + math.sin(a) * math.cos(el) * rr * random.uniform(0, 0.9)
+        cz = bz + math.sin(el) * rr * random.uniform(0, 0.7)
+        card((cx, cy, cz), random.uniform(rr * 1.05, rr * 1.75))
+
+
 def crown_of_clusters(at, spread, k, cr, squash=0.92):
     """k clusters strewn through an ellipsoid: canopy WITH internal depth.
     Squashed hard it reads as a mushroom umbrella on a stick; a real crown is
@@ -333,11 +355,11 @@ elif KIND == "pine":
     rec((0, 0, H * 0.4), 0.5, 0.5, H * 0.4)
 
 elif KIND == "blossom":
-    # Built to his photographs: a short thick FLARED trunk that splits low
-    # into three or four heavy leaders, every one of them gnarled and elbowed,
-    # the boughs arcing up and then weeping over, and the bloom hung in
-    # CURTAINS along the outer half so the dark wood still reads through it.
-    # A ball of pink on a stick is not this tree.
+    # To his photographs: a short thick FLARED trunk splitting low into three
+    # or four heavy leaders, every one gnarled and elbowed, and the boughs
+    # reaching UP and OUT -- never hanging down, never ending in a ball. The
+    # bloom runs ALONG the wood and thins toward the tips, so the dark
+    # architecture reads right through it.
     H = random.uniform(19.0, 24.0)
     L = HB["lean"]
     nlead = 3 if HB["stems"] < 3 else 4
@@ -346,35 +368,25 @@ elif KIND == "blossom":
                    gnarl=0.85, flare=1.55)
     for li_ in range(nlead):
         la = li_ * (6.283 / nlead) + random.uniform(-0.35, 0.35)
-        lead, _ = limb(base, (math.cos(la) * 0.62 + L, math.sin(la) * 0.62, 1.0),
-                       H * 0.30, 0.92, 0.42, segs=5, crook=0.42,
-                       min_dz=0.30, gnarl=0.95)
-        for _ in range(max(3, int(random.randint(4, 5) * HB["branch"]))):
-            a = la + random.uniform(-1.0, 1.0)
-            bough, _ = limb(lead, (math.cos(a) * 1.15, math.sin(a) * 1.15,
-                                   random.uniform(0.45, 0.95) * HB["elev"]),
-                            H * 0.34 * HB["spread"], 0.34, 0.09,
-                            segs=5, crook=0.40, gnarl=0.70, arc=1.35)
-            # the bloom weeps from the end of the bough toward the ground
-            drop = H * random.uniform(0.16, 0.30)
-            # Sprays must OVERLAP or the tree is a bunch of pom-poms hung in
-            # the air. Walked closely along the bough, and each spray wide
-            # enough to touch the next.
-            for c in range(11):
-                f = c / 10.0
-                # walk OUT along the bough from its middle to its tip, then
-                # hang below it. Scaling the tip's world position toward the
-                # origin threw every spray off into mid air.
-                px = lead[0] + (bough[0] - lead[0]) * (0.42 + 0.62 * f)
-                py = lead[1] + (bough[1] - lead[1]) * (0.42 + 0.62 * f)
-                pz = lead[2] + (bough[2] - lead[2]) * (0.42 + 0.62 * f) - drop * f * f
-                cluster((px, py, pz), 1.75, n=10)
-            twig, _ = limb(bough, (math.cos(a + 0.9), math.sin(a + 0.9), -0.55),
-                           H * 0.12, 0.07, 0.025, segs=3, crook=0.5, gnarl=0.4)
-            cluster(twig, 1.5, n=10)
-    # a light shell over the whole head, never filling the middle
-    crown_of_clusters((base[0], base[1], base[2] + H * 0.30),
-                      H * 0.36 * HB["spread"], 70, 1.7, HB["squash"] * 0.80)
+        lead, _ = limb(base, (math.cos(la) * 0.55 + L, math.sin(la) * 0.55, 1.15),
+                       H * 0.32, 0.92, 0.44, segs=5, crook=0.40,
+                       min_dz=0.42, gnarl=0.95)
+        spray(base, lead, 1.5, n=10, taper=0.25)
+        for bi_ in range(max(4, int(random.randint(5, 7) * HB["branch"]))):
+            a = la + random.uniform(-1.25, 1.25)
+            # up and out: the rise never goes negative
+            rise = random.uniform(0.55, 1.35) * HB["elev"]
+            bough, _ = limb(lead, (math.cos(a) * 1.05, math.sin(a) * 1.05, rise),
+                            H * 0.34 * HB["spread"], 0.36, 0.10,
+                            segs=5, crook=0.38, gnarl=0.72, min_dz=0.02)
+            spray(lead, bough, 1.9, n=26, taper=0.30)
+            for tw in range(2):
+                ta = a + random.uniform(-1.1, 1.1)
+                twig, _ = limb(bough, (math.cos(ta), math.sin(ta),
+                                       random.uniform(0.25, 0.95)),
+                               H * 0.15, 0.08, 0.03, segs=3, crook=0.5,
+                               gnarl=0.45, min_dz=0.0)
+                spray(bough, twig, 1.7, n=16, taper=0.42)
     rec((0, 0, H * 0.16), 1.5, 1.5, H * 0.16)
 
 else:                        # giant: the bustan patriarch, 5-7 storeys

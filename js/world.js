@@ -1315,14 +1315,25 @@
      Cheap first, drastic last: resolution, then the glow, then the shadows,
      then how far the vegetation is drawn. */
   var QSTEP = 0, QMAX = 4, qBudget = 0, qHold = 0, rafDriven = false;
+  /* ?q=0 pins full quality, ?q=4 pins the lightest · for honest comparisons */
+  var QPIN = null;
+  try {
+    var qp = new URLSearchParams(location.search).get('q');
+    if (qp !== null && qp !== '') { QPIN = Math.max(0, Math.min(4, parseInt(qp, 10) || 0)); QSTEP = QPIN; }
+  } catch (e) {}
   function applyQuality() {
-    var pr = [1.9, 1.5, 1.25, 1.0, 0.75][QSTEP];
+    /* WHAT GETS SACRIFICED, AND IN WHAT ORDER. The first version of this took
+       resolution and the grass first, which are exactly the two things the
+       world is judged on -- a still frame looked right and the live game
+       looked mushy and bare. Sharpness never drops below one to one, the
+       grass near you is never thinned, and what actually goes is the glow,
+       the shadows, and how far away vegetation is still drawn. */
+    var pr = [1.9, 1.6, 1.4, 1.2, 1.0][QSTEP];
     renderer.setPixelRatio(Math.min(devicePixelRatio, pr));
-    if (W.bloom) W.bloom.enabled = QSTEP < 2;
-    if (W.moonLight) W.moonLight.castShadow = (QSTEP < 3) && TIER === 2;
-    /* the far vegetation is the last thing to go, and the first thing a weak
-       machine cannot afford */
-    W.vegDrawR = [1e9, 1e9, 260, 190, 130][QSTEP];
+    if (W.bloom) W.bloom.enabled = QSTEP < 1;
+    if (W.moonLight) W.moonLight.castShadow = (QSTEP < 2) && TIER === 2;
+    /* the grass around you always stands; only the distance comes in */
+    W.vegDrawR = [1e9, 1e9, 460, 340, 250][QSTEP];
     try { vegVisible(W.getPos()); } catch (e) {}
     if (hbEl) hbEl.title = 'quality step ' + QSTEP;
   }
@@ -1332,6 +1343,7 @@
        animation frames are starved, the fallback timer paces the world at
        a quarter second, and reading that as a slow frame would strip the
        world to nothing while nobody is even looking at it. */
+    if (QPIN !== null) return;
     if (!rafDriven || document.visibilityState !== 'visible') return;
     if (clock.elapsedTime < 1.5) return;
     var ms = dt * 1000;
