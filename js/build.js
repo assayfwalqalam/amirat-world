@@ -773,9 +773,19 @@
     function finish() {
       if (--left === 0) {
         if (loadEl) loadEl.style.display = 'none';
+        var _t0 = performance.now();
         done();
-        try { if (W.crunch) W.crunch(); } catch (e) { if (W.diag) W.diag('crunch: ' + e.message); }
+        W.BUILD_MS = Math.round(performance.now() - _t0);
         W.MODELS_IN = true;      /* fixed-viewpoint capture waits for this */
+        /* The world is standing now: show it. The weld is a few seconds of
+           pure arithmetic that nobody should sit in the dark for - it runs on
+           the next tick and the town simply gets cheaper to draw when it
+           lands. */
+        setTimeout(function () {
+          var _t1 = performance.now();
+          try { if (W.crunch) W.crunch(); } catch (e) { if (W.diag) W.diag('crunch: ' + e.message); }
+          W.CRUNCH_MS = Math.round(performance.now() - _t1);
+        }, 50);
         if (!W.LOAD_MS) {
           W.LOAD_MS = Math.round(performance.now());
           if (W.diag) W.diag('world up in ' + (W.LOAD_MS / 1000).toFixed(1) + 's');
@@ -2672,60 +2682,118 @@
     var made = 0, removed = 0;
     groups.forEach(function (grp) {
       if (grp.list.length < 3) return;          /* not worth a weld */
-      var pos = [], nrm = [], uv = [], col = [], idx = [], off = 0, ok = true;
-      /* Every Blender asset carries its shading in COLOR_0 and its material
-         says vertexColors. The weld used to copy position, normal and uv
-         only, so the welded batch had no colour attribute while the material
-         still asked for one - and a missing attribute reads as black. That
-         is why the whole welded town went dark. Carry the colour through,
-         white where a piece never had one. */
+      /* THE WELD, MEASURED: this took 22 seconds of the load. It walked every
+         vertex of nearly four thousand meshes through accessor calls and
+         pushed each number onto a growing plain array. Now it counts first,
+         allocates once, and reads the raw typed arrays with the matrix
+         multiplied out by hand. Same result, a fraction of the time.
+
+         Every Blender asset carries its shading in COLOR_0 and its material
+         says vertexColors, so the colour has to come through too - white
+         where a piece never had one, or the batch renders black. */
       var wantCol = !!grp.mat.vertexColors;
-      var v = new T.Vector3(), nm = new T.Vector3();
+      var use = [], total = 0, idxTotal = 0, ok = true;
       for (var i = 0; i < grp.list.length; i++) {
-        var o = grp.list[i];
-        var g = o.geometry;
-        var ap = g.attributes.position, an = g.attributes.normal, au = g.attributes.uv;
-        var ac = wantCol ? g.attributes.color : null;
+        var o = grp.list[i], g = o.geometry;
+        var ap = g.attributes.position;
         if (!ap) { ok = false; break; }
         o.updateWorldMatrix(true, false);
-        var mw = o.matrixWorld;
-        /* One bad transform poisons the whole welded batch: its bounding
-           sphere comes out NaN and the mesh either never draws or always
-           does. Anything not finite is left out. */
-        var me2 = mw.elements, finite = true;
+        var me2 = o.matrixWorld.elements, finite = true;
         for (var fe = 0; fe < 16; fe++) if (!isFinite(me2[fe])) { finite = false; break; }
-        if (!finite) continue;
-        var nMat = new T.Matrix3().getNormalMatrix(mw);
-        var bad = false;
-        for (var kk = 0; kk < ap.count; kk++) {
-          if (!isFinite(ap.getX(kk)) || !isFinite(ap.getY(kk)) || !isFinite(ap.getZ(kk))) { bad = true; break; }
+        if (!finite) continue;              /* one bad transform poisons a batch */
+        use.push(o);
+        total += ap.count;
+        idxTotal += g.index ? g.index.count : ap.count;
+      }
+      if (!ok || !total) return;
+
+      var pos = new Float32Array(total * 3);
+      var nrm = new Float32Array(total * 3);
+      var uv = new Float32Array(total * 2);
+      var col = wantCol ? new Float32Array(total * 3) : null;
+      var idx = (total > 65535) ? new Uint32Array(idxTotal) : new Uint16Array(idxTotal);
+      var vp = 0, vn = 0, vu = 0, vc = 0, vi = 0, off = 0;
+
+      function readScale(attr) {
+        /* a quantised attribute stores ints; getX would divide, raw reads do not */
+        if (!attr.normalized) return 1;
+        var a = attr.array;
+        if (a instanceof Int8Array) return 1 / 127;
+        if (a instanceof Uint8Array) return 1 / 255;
+        if (a instanceof Int16Array) return 1 / 32767;
+        if (a instanceof Uint16Array) return 1 / 65535;
+        return 1;
+      }
+
+      for (var u = 0; u < use.length; u++) {
+        var ob = use[u], geo = ob.geometry;
+        var pa = geo.attributes.position, na = geo.attributes.normal;
+        var ua = geo.attributes.uv, ca = wantCol ? geo.attributes.color : null;
+        var m = ob.matrixWorld.elements;
+        var m0 = m[0], m1 = m[1], m2 = m[2], m4 = m[4], m5 = m[5], m6 = m[6],
+            m8 = m[8], m9 = m[9], m10 = m[10], m12 = m[12], m13 = m[13], m14 = m[14];
+        /* A quantised attribute arrives INTERLEAVED: its numbers live in a
+           shared buffer with a stride and an offset, and reading it as a
+           plain packed array shreds the mesh into spikes - which is exactly
+           what it did the first time. */
+        function view(at, fallbackItems) {
+          if (!at) return { a: null, o: 0, s: fallbackItems, k: 1 };
+          var inter = !!at.isInterleavedBufferAttribute;
+          return {
+            a: inter ? at.data.array : at.array,
+            o: inter ? at.offset : 0,
+            s: inter ? at.data.stride : at.itemSize,
+            k: readScale(at)
+          };
         }
-        if (bad) continue;
-        for (var k = 0; k < ap.count; k++) {
-          v.set(ap.getX(k), ap.getY(k), ap.getZ(k)).applyMatrix4(mw);
-          pos.push(v.x, v.y, v.z);
-          if (an) { nm.set(an.getX(k), an.getY(k), an.getZ(k)).applyMatrix3(nMat).normalize(); nrm.push(nm.x, nm.y, nm.z); }
-          else nrm.push(0, 1, 0);
-          if (au) uv.push(au.getX(k), au.getY(k)); else uv.push(0, 0);
+        var P = view(pa, 3), N = view(na, 3), U = view(ua, 2), C = view(ca, 3);
+        var pArr = P.a, pOff = P.o, pStr = P.s, pSc = P.k;
+        var nArr = N.a, nOff = N.o, nStr = N.s, nSc = N.k;
+        var uArr = U.a, uOff = U.o, uStr = U.s, uSc = U.k;
+        var cArr = C.a, cOff = C.o, cStr = C.s, cSc = C.k;
+        var n = pa.count;
+        for (var k = 0; k < n; k++) {
+          var pi = pOff + k * pStr;
+          var x = pArr[pi] * pSc, y = pArr[pi + 1] * pSc, z = pArr[pi + 2] * pSc;
+          pos[vp++] = m0 * x + m4 * y + m8 * z + m12;
+          pos[vp++] = m1 * x + m5 * y + m9 * z + m13;
+          pos[vp++] = m2 * x + m6 * y + m10 * z + m14;
+          if (nArr) {
+            var ni = nOff + k * nStr;
+            var nx = nArr[ni] * nSc, ny = nArr[ni + 1] * nSc, nz = nArr[ni + 2] * nSc;
+            var wx = m0 * nx + m4 * ny + m8 * nz;
+            var wy = m1 * nx + m5 * ny + m9 * nz;
+            var wz = m2 * nx + m6 * ny + m10 * nz;
+            var L = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
+            nrm[vn++] = wx / L; nrm[vn++] = wy / L; nrm[vn++] = wz / L;
+          } else { nrm[vn++] = 0; nrm[vn++] = 1; nrm[vn++] = 0; }
+          if (uArr) {
+            var ui = uOff + k * uStr;
+            uv[vu++] = uArr[ui] * uSc; uv[vu++] = uArr[ui + 1] * uSc;
+          } else { vu += 2; }
           if (wantCol) {
-            if (ac) col.push(ac.getX(k), ac.getY(k), ac.getZ(k));
-            else col.push(1, 1, 1);
+            if (cArr) {
+              var ci = cOff + k * cStr;
+              col[vc++] = cArr[ci] * cSc; col[vc++] = cArr[ci + 1] * cSc; col[vc++] = cArr[ci + 2] * cSc;
+            } else { col[vc++] = 1; col[vc++] = 1; col[vc++] = 1; }
           }
         }
-        var ix = g.index;
-        if (ix) { for (var q = 0; q < ix.count; q++) idx.push(ix.getX(q) + off); }
-        else { for (var q2 = 0; q2 < ap.count; q2++) idx.push(q2 + off); }
-        off += ap.count;
+        var ix = geo.index;
+        if (ix) {
+          var iArr = ix.array;
+          for (var q = 0; q < ix.count; q++) idx[vi++] = iArr[q] + off;
+        } else {
+          for (var q2 = 0; q2 < n; q2++) idx[vi++] = q2 + off;
+        }
+        off += n;
       }
-      if (!ok || !pos.length) return;
+      grp.list = use;
       var merged = new T.BufferGeometry();
-      merged.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
-      merged.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3));
-      merged.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
-      if (wantCol && col.length === pos.length) {
-        merged.setAttribute('color', new T.Float32BufferAttribute(col, 3));
-      }
-      merged.setIndex(idx);
+      merged.setAttribute('position', new T.BufferAttribute(pos, 3));
+      merged.setAttribute('normal', new T.BufferAttribute(nrm, 3));
+      merged.setAttribute('uv', new T.BufferAttribute(uv, 2));
+      if (wantCol && col) merged.setAttribute('color', new T.BufferAttribute(col, 3));
+      merged.setIndex(new T.BufferAttribute(idx, 1));
       merged.computeBoundingSphere();
       var mesh = new T.Mesh(merged, grp.mat);
       mesh.name = 'welded';
