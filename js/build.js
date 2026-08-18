@@ -2435,12 +2435,20 @@
     var made = 0, removed = 0;
     groups.forEach(function (grp) {
       if (grp.list.length < 3) return;          /* not worth a weld */
-      var pos = [], nrm = [], uv = [], idx = [], off = 0, ok = true;
+      var pos = [], nrm = [], uv = [], col = [], idx = [], off = 0, ok = true;
+      /* Every Blender asset carries its shading in COLOR_0 and its material
+         says vertexColors. The weld used to copy position, normal and uv
+         only, so the welded batch had no colour attribute while the material
+         still asked for one - and a missing attribute reads as black. That
+         is why the whole welded town went dark. Carry the colour through,
+         white where a piece never had one. */
+      var wantCol = !!grp.mat.vertexColors;
       var v = new T.Vector3(), nm = new T.Vector3();
       for (var i = 0; i < grp.list.length; i++) {
         var o = grp.list[i];
         var g = o.geometry;
         var ap = g.attributes.position, an = g.attributes.normal, au = g.attributes.uv;
+        var ac = wantCol ? g.attributes.color : null;
         if (!ap) { ok = false; break; }
         o.updateWorldMatrix(true, false);
         var mw = o.matrixWorld;
@@ -2462,6 +2470,10 @@
           if (an) { nm.set(an.getX(k), an.getY(k), an.getZ(k)).applyMatrix3(nMat).normalize(); nrm.push(nm.x, nm.y, nm.z); }
           else nrm.push(0, 1, 0);
           if (au) uv.push(au.getX(k), au.getY(k)); else uv.push(0, 0);
+          if (wantCol) {
+            if (ac) col.push(ac.getX(k), ac.getY(k), ac.getZ(k));
+            else col.push(1, 1, 1);
+          }
         }
         var ix = g.index;
         if (ix) { for (var q = 0; q < ix.count; q++) idx.push(ix.getX(q) + off); }
@@ -2473,6 +2485,9 @@
       merged.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
       merged.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3));
       merged.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+      if (wantCol && col.length === pos.length) {
+        merged.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+      }
       merged.setIndex(idx);
       merged.computeBoundingSphere();
       var mesh = new T.Mesh(merged, grp.mat);
