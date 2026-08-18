@@ -14,6 +14,7 @@ import bpy, json, math, os, random, sys
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = argv[0] if argv else "qasr.glb"
 ASSETS = argv[1] if len(argv) > 1 else "assets"
+GOLDSMALL = len(argv) > 2 and argv[2] == "goldmix"
 random.seed(9)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -162,8 +163,10 @@ def onion_profile(n):
 SPARK_ANCHORS = []
 
 
-def dome(cx, cy, base_z, belly_r, height, ribs=16, drum=True, seg=None):
-    """A SAPPHIRE onion dome with a faint inner glow; the finial stays gold."""
+def dome(cx, cy, base_z, belly_r, height, ribs=16, drum=True, seg=None, shell=None):
+    """A smooth SAPPHIRE onion dome; the finial stays gold. shell overrides
+    the dome pool (the gold-small-domes preview)."""
+    sh = shell or sapph
     if drum:
         cyl(belly_r * 0.74, belly_r * 0.7, (cx, cy, base_z + belly_r * 0.35), stone, verts=28)
         z0 = base_z + belly_r * 0.7
@@ -176,20 +179,19 @@ def dome(cx, cy, base_z, belly_r, height, ribs=16, drum=True, seg=None):
         row = []
         for s in range(nseg):
             th = s / nseg * 2 * math.pi
-            rib = 1.0 + 0.03 * (0.5 - 0.5 * math.cos(ribs * th)) * max(0.0, 1 - zf) ** 0.5
-            rr = belly_r * rf * rib
-            row.append(len(sapph.v))
-            sapph.v.append((cx + math.cos(th) * rr, cy + math.sin(th) * rr, z0 + zf * height))
+            rr = belly_r * rf
+            row.append(len(sh.v))
+            sh.v.append((cx + math.cos(th) * rr, cy + math.sin(th) * rr, z0 + zf * height))
         rows.append(row)
     for i in range(len(rows) - 1):
         for s in range(nseg):
             s2 = (s + 1) % nseg
-            sapph.quad(rows[i][s], rows[i][s2], rows[i + 1][s2], rows[i + 1][s], smooth=True)
+            sh.quad(rows[i][s], rows[i][s2], rows[i + 1][s2], rows[i + 1][s], smooth=True)
     tipz = z0 + prof[-1][1] * height
-    tip = len(sapph.v); sapph.v.append((cx, cy, tipz + 0.01))
+    tip = len(sh.v); sh.v.append((cx, cy, tipz + 0.01))
     for s in range(nseg):
         s2 = (s + 1) % nseg
-        sapph.tri(rows[-1][s], rows[-1][s2], tip, smooth=True)
+        sh.tri(rows[-1][s], rows[-1][s2], tip, smooth=True)
     for i, br in enumerate((belly_r * 0.06, belly_r * 0.045, belly_r * 0.03)):
         sphere(br, (cx, cy, tipz + height * 0.05 + i * belly_r * 0.11), gold, seg=10, rings=6)
     cyl(belly_r * 0.018, height * 0.30, (cx, cy, tipz + height * 0.16), gold, verts=8)
@@ -427,7 +429,8 @@ for sx in (-1, 1):
     for sy in (-1, 1):
         cyl(2.0, S4_H + S5_H + 2, (sx * 16, sy * 11, z4 + (S4_H + S5_H) / 2), stone, verts=12)
         cyl(2.3, 0.8, (sx * 16, sy * 11, z4 + S4_H + S5_H + 2.2), stone, verts=12)
-        dome(sx * 16, sy * 11, z4 + S4_H + S5_H + 2.5, 2.15, 4.1, ribs=10, drum=False)
+        dome(sx * 16, sy * 11, z4 + S4_H + S5_H + 2.5, 2.15, 4.1, ribs=10, drum=False,
+             shell=gold if GOLDSMALL else None)
 cornice(17, 12, z4 + S4_H, stone)
 col(0, 0, z4 + S4_H / 2, 17, 12, S4_H / 2)
 
@@ -468,7 +471,8 @@ col(0, 0, z6 + S6_H / 2, 12.5, 12.5, S6_H / 2)
 dome(0, 0, z7, 11.0, 21.0, ribs=20)
 for sx in (-1, 1):
     for sy in (-1, 1):
-        dome(sx * 8.5, sy * 8.5, z7 - 1.2, 2.6, 4.8, ribs=10)
+        dome(sx * 8.5, sy * 8.5, z7 - 1.2, 2.6, 4.8, ribs=10,
+             shell=gold if GOLDSMALL else None)
 
 # ============================================================ THE COMPOUND
 def module(cx, cy, face, gate=False):
@@ -543,7 +547,8 @@ def module(cx, cy, face, gate=False):
     dome(cx, cy, W1 + W2 + W3, 5.2, 9.5, ribs=14, seg=36)
     for sa in (-1, 1):
         ex, ey = P(sa * 9.5, 0)
-        sphere(1.5, (ex, ey, W1 + W2 + W3 + 1.7), sapph, seg=14, rings=9, zscale=1.35)
+        sphere(1.5, (ex, ey, W1 + W2 + W3 + 1.7), gold if GOLDSMALL else sapph,
+               seg=14, rings=9, zscale=1.35)
 
 
 def corner_tower(cx, cy):
@@ -732,8 +737,8 @@ parts.append(make_mesh(water, (0.22, 0.34, 0.48, 1), 0.12, 0.0,
                        emis=(0.16, 0.26, 0.38, 1), estr=0.35))
 # THE SAPPHIRE: deep blue-violet with a light pink breath, and the faint
 # even inner glow of an ore block - luminous, never a lamp
-parts.append(make_mesh(sapph, (0.24, 0.13, 0.40, 1), 0.16, 0.55,
-                       emis=(0.44, 0.21, 0.48, 1), estr=0.42))
+parts.append(make_mesh(sapph, (0.34, 0.18, 0.52, 1), 0.34, 1.0,
+                       emis=(0.30, 0.15, 0.38, 1), estr=0.30))
 parts.append(make_mesh(spark, (1.0, 0.9, 0.7, 1), 0.9, 0.0,
                        emis=(1.0, 0.82, 0.52, 1), estr=4.0))
 parts.append(make_mesh(sparkv, (0.9, 0.7, 1.0, 1), 0.9, 0.0,
