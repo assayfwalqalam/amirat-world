@@ -19,13 +19,23 @@ def fresh():
 
 
 def box(sx, sy, sz, loc, into, yaw=0.0, tiltx=0.0):
-    bpy.ops.mesh.primitive_cube_add(size=2, location=loc)
-    o = bpy.context.active_object
-    o.scale = (sx / 2, sy / 2, sz / 2)
-    bpy.ops.object.transform_apply(scale=True)
+    # THE PIVOT LAW: applying a rotation to a box that already stands at its
+    # place swings it about the WORLD ORIGIN in this operator flow, not about
+    # itself. Build at the origin, turn it, then move it.
     if tiltx or yaw:
+        bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 0))
+        o = bpy.context.active_object
+        o.scale = (sx / 2, sy / 2, sz / 2)
+        bpy.ops.object.transform_apply(scale=True)
         o.rotation_euler = (tiltx, 0, yaw)
         bpy.ops.object.transform_apply(rotation=True)
+        o.location = loc
+        bpy.ops.object.transform_apply(location=True)
+    else:
+        bpy.ops.mesh.primitive_cube_add(size=2, location=loc)
+        o = bpy.context.active_object
+        o.scale = (sx / 2, sy / 2, sz / 2)
+        bpy.ops.object.transform_apply(scale=True)
     into.append(o)
     return o
 

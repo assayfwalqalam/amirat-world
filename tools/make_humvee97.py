@@ -47,9 +47,14 @@ def bevel(o, w=0.02):
 
 
 def wedge(sx, sy, sz, loc, into, tilt, axis=0):
-    o = box(sx, sy, sz, loc, into)
+    # THE PIVOT LAW: in this operator flow, applying a rotation to a box that
+    # already stands at its place swings it about the WORLD ORIGIN, not its
+    # own. Build at the origin, turn it there, and only then move it.
+    o = box(sx, sy, sz, (0, 0, 0), into)
     o.rotation_euler[axis] = tilt
     bpy.ops.object.transform_apply(rotation=True)
+    o.location = loc
+    bpy.ops.object.transform_apply(location=True)
     return o
 
 
@@ -79,110 +84,168 @@ def cut(target, sx, sy, sz, loc):
     bpy.data.objects.remove(c, do_unlink=True)
 
 
-# ---------------------------------------------------------------- the tub
-# One low wide slab, floor to belt line; the wheel arches cut out of it.
-belt = 1.32                                     # belt line height
-tub = box(W, L * 0.94, belt - BODY_FLOOR, (0, 0.05, BODY_FLOOR + (belt - BODY_FLOOR) / 2), BODY)
-ax_f = WHEELBASE / 2 + 0.05                     # front axle y (forward = +y)
+# =========================================================== the body
+# Measured off shots/ref/r_humvee_1.jpg: the HMMWV is very wide and low, the
+# bonnet sits BELOW the door tops between two raised wings, the cab is a
+# closed box with square windows, and heavy eyebrow flares stand over the
+# arches with the wheels tucked under them.
+BELT = 1.30                 # top of the body sides / bottom of the windows
+ROOF = 1.80
+FEND = 1.27                 # top of the front wings
+HOOD_C = 1.15               # bonnet centre, well below the wings
+HW = W / 2                  # 1.08
+TUBW = 1.02                 # body side, before the flares
+CABW = 1.00                 # the glasshouse sits nearly flush with the body
+NOSE = L / 2                # 2.285
+COWL = 0.92                 # where the windscreen stands
+ROOF_R = -0.95              # back edge of the roof
+TAIL = -L / 2
+ax_f = WHEELBASE / 2 + 0.05
 ax_r = -WHEELBASE / 2 + 0.05
+
+# ---- the tub: floor to belt, arches cut as rounded openings
+tub = box(TUBW * 2, L * 0.96, BELT - BODY_FLOOR, (0, 0.0, BODY_FLOOR + (BELT - BODY_FLOOR) / 2), BODY)
 for ay in (ax_f, ax_r):
     for sx in (-1, 1):
-        cut(tub, 1.2, TYRE_R * 2 + 0.30, TYRE_R + 0.32, (sx * W / 2, ay, BODY_FLOOR + 0.12))
-bevel(tub, 0.025)
+        cut(tub, 1.2, (TYRE_R + 0.13) * 2, TYRE_R + 0.5, (sx * TUBW, ay, BODY_FLOOR + 0.10))
+        for cs in (-1, 1):
+            cut(tub, 1.2, 0.34, 0.34, (sx * TUBW, ay + cs * (TYRE_R + 0.02), BODY_FLOOR + 0.52))
+bevel(tub, 0.022)
 
-# the rocker line: a darker skirt under the doors
-box(W - 0.06, 1.9, 0.10, (0, 0.15, BODY_FLOOR + 0.05), BLACK)
+# the rocker: a dark skirt under the doors
+box(TUBW * 2 - 0.04, 1.86, 0.11, (0, 0.05, BODY_FLOOR + 0.055), BLACK)
 
-# ---------------------------------------------------------------- the hood
-# long, wide, nearly flat, with the raised centre plane and louvres
-hood_y0 = 0.95                                   # windshield base (the cowl)
-nose_y = L / 2 + 0.05
-hood_len = (nose_y - 0.06) - hood_y0
-hood_mid = (hood_y0 + nose_y - 0.06) / 2
-bevel(wedge(W - 0.10, hood_len, 0.15, (0, hood_mid, belt - 0.055), BODY, 0.035, axis=0), 0.03)
-wedge(W * 0.44, hood_len * 0.66, 0.07, (0, hood_mid - 0.10, belt + 0.045), BODY, 0.035, axis=0)
-for i in range(7):                               # the louvre strip
-    box(0.30, 0.035, 0.028, (0.28, hood_y0 + 0.98 + i * 0.075, belt + 0.125), BLACK)
-# hood tie-down loop
-cyl(0.035, 0.16, (0, hood_y0 + 0.30, belt + 0.13), BLACK, rot=(math.pi / 2, 0, 0), verts=10)
+# ---- the front wings, and the bonnet lying between them
+for sx in (-1, 1):
+    wing = box(0.30, NOSE - COWL, FEND - BELT + 0.14,
+               (sx * (HW - 0.09), (NOSE + COWL) / 2, BELT + (FEND - BELT) / 2 - 0.02), BODY)
+    bevel(wing, 0.03)
+hood_len = NOSE - COWL - 0.02
+hood = wedge(0.92 * 2, hood_len, 0.10, (0, (NOSE + COWL) / 2 - 0.01, HOOD_C - 0.02), BODY, 0.075, axis=0)
+bevel(hood, 0.02)
+for i in range(11):                       # the louvre panel before the screen
+    box(0.86, 0.028, 0.022, (0, COWL + 0.20 + i * 0.055, HOOD_C + 0.045), BLACK)
+box(1.12, hood_len - 0.30, 0.05, (0, (NOSE + COWL) / 2 - 0.05, HOOD_C + 0.045), BODY)
+box(0.98, 0.70, 0.02, (0, COWL + 0.50, HOOD_C + 0.062), BODY)
+for sx in (-1, 1):
+    cyl(0.03, 0.13, (sx * 0.42, NOSE - 0.30, HOOD_C + 0.06), BLACK, rot=(math.pi / 2, 0, 0), verts=8)
 
-# ------------------------------------------------------------- the face
-# grille recess with seven vertical slats
-box(0.78, 0.10, 0.42, (0, nose_y - 0.03, 1.02), BLACK)
+# ---- the face: grille between round lamps, ambers on the wing corners
+face = box(0.92 * 2, 0.10, FEND - 0.62, (0, NOSE - 0.05, (FEND + 0.62) / 2 - 0.02), BODY)
+cut(face, 0.82, 0.4, 0.36, (0, NOSE - 0.05, 1.00))
+for sxl in (-1, 1):                      # the lamps sit IN the face, not behind it
+    cut(face, 0.25, 0.4, 0.25, (sxl * 0.62, NOSE - 0.05, 1.00))
+bevel(face, 0.02)
+box(0.84, 0.07, 0.38, (0, NOSE - 0.12, 1.00), BLACK)
 for i in range(7):
-    box(0.055, 0.12, 0.40, (-0.33 + i * 0.11, nose_y - 0.02, 1.02), BODY)
-# round headlamps either side
+    box(0.062, 0.10, 0.34, (-0.33 + i * 0.11, NOSE - 0.08, 1.00), BODY)
 for sx in (-1, 1):
-    cyl(0.115, 0.06, (sx * 0.62, nose_y, 1.05), LAMP, rot=(math.pi / 2, 0, 0), verts=18)
-    cyl(0.135, 0.05, (sx * 0.62, nose_y - 0.02, 1.05), BLACK, rot=(math.pi / 2, 0, 0), verts=18)
-    # amber blinkers above-outboard
-    cyl(0.075, 0.05, (sx * 0.86, nose_y - 0.055, 1.21), AMBER, rot=(math.pi / 2, 0, 0), verts=12)
-# the face plate the lamps sit in
-face = box(W - 0.14, 0.09, 0.52, (0, nose_y - 0.06, 1.04), BODY)
-cut(face, 0.80, 0.3, 0.44, (0, nose_y - 0.03, 1.02))
-# bumper: heavy channel + shackles + winch drum
-box(W + 0.04, 0.17, 0.22, (0, nose_y + 0.09, 0.55), BODY)
+    cyl(0.135, 0.07, (sx * 0.62, NOSE - 0.06, 1.00), BLACK, rot=(math.pi / 2, 0, 0), verts=20)
+    cyl(0.112, 0.05, (sx * 0.62, NOSE - 0.03, 1.00), LAMP, rot=(math.pi / 2, 0, 0), verts=20)
+    box(0.16, 0.12, 0.15, (sx * 0.92, NOSE - 0.10, 1.13), BODY)
+    box(0.13, 0.05, 0.11, (sx * 0.95, NOSE - 0.05, 1.13), AMBER)
+box(0.92 * 2, 0.09, 0.16, (0, NOSE - 0.05, 0.70), BODY)                  # valance
+box(W + 0.06, 0.19, 0.20, (0, NOSE + 0.10, 0.66), BLACK)                 # bumper channel
+box(W - 0.30, 0.10, 0.16, (0, NOSE + 0.16, 0.50), BLACK)                 # skid
 for sx in (-1, 1):
-    cyl(0.055, 0.16, (sx * 0.55, nose_y + 0.16, 0.74), BLACK, rot=(math.pi / 2, 0, 0), verts=10)
-cyl(0.09, 0.5, (0, nose_y + 0.02, 0.72), BLACK, rot=(0, math.pi / 2, 0), verts=12)
+    box(0.07, 0.10, 0.20, (sx * 0.52, NOSE + 0.20, 0.62), BLACK)
+    cyl(0.055, 0.05, (sx * 0.52, NOSE + 0.22, 0.55), BLACK, rot=(0, math.pi / 2, 0), verts=10)
 
-# ---------------------------------------------------------- the glasshouse
-ws_base = belt + 0.02
-ws_h = 0.46
-# windshield: two flat panes in a black frame, raked slightly
-frame = wedge(W - 0.26, 0.06, ws_h, (0, hood_y0, ws_base + ws_h / 2 - 0.02), BLACK, -0.14, axis=0)
-glass = wedge(W - 0.40, 0.03, ws_h - 0.10, (0, hood_y0 - 0.012, ws_base + ws_h / 2 - 0.03), GLASS, -0.14, axis=0)
-box(0.05, 0.06, ws_h - 0.06, (0, hood_y0 - 0.02, ws_base + ws_h / 2 - 0.02), BLACK)   # centre mullion
-# roof: flat slab from windshield header to the slantback
-roof_y1 = -0.55
-box(W - 0.22, (hood_y0 - 0.10) - roof_y1, 0.07,
-    (0, ((hood_y0 - 0.10) + roof_y1) / 2, ws_base + ws_h - 0.005), BODY)
-# the slantback: sloped rear plane down to the tail
-sb = wedge(W - 0.24, 1.38, 0.07, (0, roof_y1 - 0.62, ws_base + ws_h - 0.30), BODY, 0.46, axis=0)
-wedge(W - 0.44, 0.9, 0.035, (0, roof_y1 - 0.42, ws_base + ws_h - 0.19), GLASS, 0.46, axis=0)
-# rear quarter panels flush to the slope
+# ---- the cab: pillars, roof, windscreen
+WSB, WST = BELT + 0.02, ROOF - 0.06
 for sx in (-1, 1):
-    wedge(0.09, 1.34, 0.62, (sx * (W / 2 - 0.135), roof_y1 - 0.62, belt + 0.26), BODY, 0.0, axis=0)
-# tailgate
-box(W - 0.20, 0.07, 0.55, (0, -L / 2 + 0.10, BODY_FLOOR + 0.42), BODY)
+    wedge(0.07, 0.09, (WST - WSB) + 0.10, (sx * (CABW - 0.03), COWL - 0.15, (WSB + WST) / 2), BODY, -0.55, axis=0)
+    box(0.07, 0.08, WST - WSB, (sx * (CABW - 0.03), 0.02, (WSB + WST) / 2), BODY)
+    box(0.07, 0.09, WST - WSB, (sx * (CABW - 0.03), ROOF_R + 0.06, (WSB + WST) / 2), BODY)
+    box(0.09, 1.84, 0.06, (sx * (CABW - 0.02), 0.0, WSB - 0.01), BODY)
+roof = box(CABW * 2, (COWL - 0.30) - ROOF_R, 0.08, (0, ((COWL - 0.30) + ROOF_R) / 2, ROOF - 0.04), BODY)
+bevel(roof, 0.02)
+box(CABW * 2 - 0.06, 0.09, 0.09, (0, COWL - 0.32, ROOF - 0.10), BODY)
+ws_mid_y = (COWL + (COWL - 0.30)) / 2
+ws_mid_z = (WSB + WST) / 2
+WSH = WST - WSB
+wedge(CABW * 2 - 0.22, 0.05, WSH - 0.02, (0, ws_mid_y, ws_mid_z), GLASS, -0.55, axis=0)
+for sxw in (-1, 1):        # the two posts
+    wedge(0.08, 0.09, WSH + 0.02, (sxw * (CABW - 0.06), ws_mid_y, ws_mid_z), BODY, -0.55, axis=0)
+wedge(CABW * 2 - 0.06, 0.10, 0.07, (0, ws_mid_y - 0.115, WSB + 0.01), BODY, -0.55, axis=0)   # lower rail
+wedge(CABW * 2 - 0.06, 0.10, 0.07, (0, ws_mid_y + 0.115, WST - 0.01), BODY, -0.55, axis=0)   # upper rail
+wedge(0.05, 0.09, WSH - 0.02, (0, ws_mid_y, ws_mid_z), BODY, -0.55, axis=0)                  # mullion
+for sx in (-1, 1):
+    cyl(0.012, 0.42, (sx * 0.34, COWL + 0.06, WSB - 0.02), BLACK, rot=(0, math.pi / 2, 0.35), verts=6)
 
-# ------------------------------------------------------------- the doors
-# four framed doors with inset dark glass; visible panel lines by standing
-# each door 12 mm proud of the tub
-door_w = 0.05
+# ---- the doors: panels proud of the tub, with square windows
 for sx in (-1, 1):
-    for (dy0, dy1, glass_w) in ((0.92, 0.02, 0.62), (0.02, -0.85, 0.60)):
-        mid = (dy0 + dy1) / 2
-        dl = abs(dy0 - dy1)
-        box(door_w, dl - 0.05, belt - BODY_FLOOR - 0.06,
-            (sx * (W / 2 + 0.006), mid, BODY_FLOOR + (belt - BODY_FLOOR) / 2), BODY)
-        # window frame above the belt
-        box(door_w, dl - 0.10, 0.42, (sx * (W / 2 - 0.02), mid, belt + 0.21), BLACK)
-        box(0.02, glass_w, 0.32, (sx * (W / 2 - 0.02), mid, belt + 0.20), GLASS)
-        # hinges and handle
-        for hz in (0.75, 1.05):
-            box(0.022, 0.08, 0.045, (sx * (W / 2 + 0.028), dy0 - 0.06, hz), BLACK)
-        box(0.022, 0.14, 0.038, (sx * (W / 2 + 0.028), dy1 + 0.16, 1.02), BLACK)
-# mirrors on door-frame arms
-for sx in (-1, 1):
-    cyl(0.02, 0.34, (sx * (W / 2 + 0.17), 0.86, belt + 0.34), BLACK, rot=(0, math.pi / 2, 0), verts=8)
-    box(0.03, 0.16, 0.22, (sx * (W / 2 + 0.34), 0.86, belt + 0.34), BLACK)
+    for (dy0, dy1) in ((0.86, 0.03), (-0.03, -0.86)):
+        mid, dl = (dy0 + dy1) / 2, abs(dy0 - dy1)
+        box(0.05, dl - 0.06, BELT - BODY_FLOOR - 0.10,
+            (sx * (TUBW + 0.035), mid, BODY_FLOOR + (BELT - BODY_FLOOR) / 2 + 0.02), BODY)
+        for eg in (dy0, dy1):            # the shut line either side of the door
+            box(0.03, 0.035, BELT - BODY_FLOOR - 0.10,
+                (sx * (TUBW + 0.028), eg, BODY_FLOOR + (BELT - BODY_FLOOR) / 2 + 0.02), BLACK)
+        for (fz, fh) in ((WSB + 0.02, 0.05), (WST - 0.03, 0.05)):
+            box(0.06, dl - 0.10, fh, (sx * (CABW - 0.02), mid, fz), BODY)
+        for fy in (dy0 - 0.05, dy1 + 0.05):
+            box(0.06, 0.05, WST - WSB, (sx * (CABW - 0.02), fy, (WSB + WST) / 2), BODY)
+        box(0.025, dl - 0.20, (WST - WSB) - 0.11, (sx * (CABW - 0.035), mid, (WSB + WST) / 2), GLASS)
+        box(0.03, 0.15, 0.035, (sx * (TUBW + 0.05), dy1 + 0.18, 1.06), BLACK)
+        for hz in (0.78, 1.14):
+            box(0.03, 0.07, 0.05, (sx * (TUBW + 0.05), dy0 - 0.05, hz), BLACK)
+    cyl(0.018, 0.30, (sx * (CABW + 0.16), COWL - 0.04, WSB + 0.30), BLACK, rot=(0, math.pi / 2, 0), verts=8)
+    box(0.035, 0.13, 0.20, (sx * (CABW + 0.31), COWL - 0.04, WSB + 0.30), BLACK)
 
-# ------------------------------------------------------- flares and wheels
+# ---- the slantback: the roof falls away to the tail
+sb_len = 1.15
+SB_T = 0.30                                   # the slope, measured off the photo
+sb = wedge(CABW * 2, sb_len, 0.08,
+           (0, ROOF_R - (sb_len / 2) * math.cos(SB_T), ROOF - 0.04 - (sb_len / 2) * math.sin(SB_T)),
+           BODY, SB_T, axis=0)
+bevel(sb, 0.02)
+sb_end_z = ROOF - 0.04 - sb_len * math.sin(SB_T)
+for sx in (-1, 1):
+    box(0.07, sb_len, (sb_end_z - BELT) + 0.24,
+        (sx * (CABW - 0.02), ROOF_R - sb_len / 2, BELT + ((sb_end_z - BELT) + 0.24) / 2 - 0.04), BODY)
+box(CABW * 2, 0.09, sb_end_z - BELT + 0.04,
+    (0, TAIL + 0.14, BELT + (sb_end_z - BELT) / 2), BODY)
+for i in range(4):
+    box(0.72, 0.05, 0.03, (0, TAIL + 0.10, BELT + 0.06 + i * 0.07), BLACK)
+box(W - 0.20, 0.16, 0.18, (0, TAIL - 0.06, 0.66), BLACK)
+
+# ---- the arch flares: a smooth eyebrow, not a fan of blocks
+def arch_flare(sx, ay):
+    bpy.ops.mesh.primitive_torus_add(major_radius=TYRE_R + 0.15, minor_radius=0.075,
+                                     major_segments=20, minor_segments=6,
+                                     location=(0, 0, 0))
+    o = bpy.context.active_object
+    o.rotation_euler = (0, math.pi / 2, 0)
+    bpy.ops.object.transform_apply(rotation=True)
+    o.scale = (1.9, 1.0, 1.0)                  # flattened across the body
+    bpy.ops.object.transform_apply(scale=True)
+    o.location = (sx * (TUBW + 0.02), ay, BODY_FLOOR + 0.02)
+    bpy.ops.object.transform_apply(location=True)
+    # keep the arch, drop everything below the body line
+    m = o.modifiers.new("b", 'BOOLEAN')
+    bpy.ops.mesh.primitive_cube_add(size=2, location=(sx * (TUBW + 0.02), ay, BODY_FLOOR - 0.60))
+    c = bpy.context.active_object
+    c.scale = (0.5, TYRE_R + 0.5, 0.62)
+    bpy.ops.object.transform_apply(scale=True)
+    m.operation = 'DIFFERENCE'
+    m.object = c
+    m.solver = 'EXACT'
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    bpy.data.objects.remove(c, do_unlink=True)
+    BODY.append(o)
+
+
 for ay in (ax_f, ax_r):
     for sx in (-1, 1):
-        # trapezoid flare: a real eyebrow of body-work, thick and proud
-        box(0.17, TYRE_R * 2 + 0.36, 0.13, (sx * (W / 2 + 0.045), ay, TYRE_R + 0.47), BODY)
-        wedge(0.17, 0.55, 0.12, (sx * (W / 2 + 0.04), ay + TYRE_R + 0.36, TYRE_R + 0.27), BODY, -0.55, axis=0)
-        wedge(0.17, 0.55, 0.12, (sx * (W / 2 + 0.04), ay - TYRE_R - 0.36, TYRE_R + 0.27), BODY, 0.55, axis=0)
-        # the wheel: tyre, chevron tread, rim dish, twelve bolts, hub
-        wx = sx * (TRACK / 2 + 0.10)
+        arch_flare(sx, ay)
+        wx = sx * (TRACK / 2 + 0.09)
         cyl(TYRE_R, TYRE_W, (wx, ay, TYRE_R), TYRE, rot=(0, math.pi / 2, 0), verts=44)
-        for tb in range(28):
-            a = tb / 28 * 2 * math.pi
-            box(TYRE_W + 0.015, 0.055, 0.05,
-                (wx, ay + math.cos(a) * (TYRE_R - 0.008), TYRE_R + math.sin(a) * (TYRE_R - 0.008)),
-                TYRE, yaw=0)
+        for tb in range(30):
+            a = tb / 30 * 2 * math.pi
+            box(TYRE_W + 0.012, 0.06, 0.045,
+                (wx, ay + math.cos(a) * (TYRE_R - 0.006), TYRE_R + math.sin(a) * (TYRE_R - 0.006)), TYRE)
         cyl(TYRE_R * 0.58, 0.06, (wx + sx * (TYRE_W / 2 - 0.02), ay, TYRE_R), RIM,
             rot=(0, math.pi / 2, 0), verts=30)
         for bb in range(12):
@@ -191,17 +254,18 @@ for ay in (ax_f, ax_r):
                               ay + math.cos(a2) * TYRE_R * 0.34,
                               TYRE_R + math.sin(a2) * TYRE_R * 0.34), BLACK,
                 rot=(0, math.pi / 2, 0), verts=8)
-        cyl(0.09, 0.10, (wx + sx * (TYRE_W / 2 + 0.02), ay, TYRE_R), BLACK,
+        cyl(0.085, 0.10, (wx + sx * (TYRE_W / 2 + 0.02), ay, TYRE_R), BLACK,
             rot=(0, math.pi / 2, 0), verts=12)
 
-# side vents behind the front arch (the little gill strip)
 for sx in (-1, 1):
     for i in range(4):
-        box(0.02, 0.05, 0.16, (sx * (W / 2 + 0.01), ax_f - TYRE_R - 0.42 - i * 0.09, 1.06), BLACK)
+        box(0.02, 0.05, 0.15, (sx * (TUBW + 0.03), ax_f - TYRE_R - 0.40 - i * 0.09, 1.05), BLACK)
 
-# the turret ring on the roof
-cyl(0.42, 0.10, (0, 0.05, ws_base + ws_h + 0.08), BODY, verts=22)
-cut(BODY[-1], 0.62, 0.62, 0.3, (0, 0.05, ws_base + ws_h + 0.10))
+ring = cyl(0.40, 0.035, (0, 0.02, ROOF + 0.005), BODY, verts=24)
+cut(ring, 0.60, 0.60, 0.2, (0, 0.02, ROOF + 0.02))
+
+belt = BELT
+ws_base, ws_h = WSB, WST - WSB
 
 # ------------------------------------------------------------- collision
 COLLIDERS.append({"c": [0, (BODY_FLOOR + belt) / 2, -0.05], "h": [W / 2, (belt - BODY_FLOOR) / 2 + 0.1, L / 2 * 0.94]})

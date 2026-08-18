@@ -34,7 +34,9 @@ scene.add(sun);
 scene.add(new THREE.HemisphereLight(0xbdd0e8, 0x6b5a41, 0.75));
 
 var R = 6, CTR = new THREE.Vector3(), ready = false;
-new THREE.GLTFLoader().load('assets/models/' + KEY + '.glb', function (g) {
+/* the browser will happily serve yesterday's model: bust it, or you judge
+   the previous build and chase ghosts */
+new THREE.GLTFLoader().load('assets/models/' + KEY + '.glb?v=' + Date.now(), function (g) {
   var root = g.scene;
   root.traverse(function (o) {
     if (o.isMesh) {
