@@ -51,6 +51,7 @@ class Pool:
 stone = Pool("stone")
 gold = Pool("gold")
 wood = Pool("wood")
+rug = Pool("rug")
 glow = Pool("glow")
 earth = Pool("earth")
 water = Pool("water")
@@ -445,7 +446,7 @@ for lyc in (-11, -4.5, 2, 8.5):
     box(0.5, 0.5, 0.9, (0, lyc, z1 + S1_H - 4.2), glow)
     box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 3.62), gold)
     box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 4.85), gold)
-box(5.4, 26, 0.14, (0, -1, 2.42), wood)
+box(5.4, 26, 0.14, (0, -1, 2.42), rug)      # the hall's runner
 cornice(23, 17, z1 + S1_H, stone)
 dentils(0, 0, 23, 17, z1 + S1_H - 0.7, stone)
 # the iwan: hollow portal, telescoping rings, open lit-from-within door
@@ -635,7 +636,7 @@ def module(cx, cy, face, gate=False):
         # the room dressed: a runner, two hanging lanterns, lit niches
         rx_, ry_ = P(0, 0)
         rsx, rsy = sized(3.2, w_hy * 1.2)
-        box(rsx, rsy, 0.1, (rx_, ry_, fl_z + 0.3), wood)
+        box(rsx, rsy, 0.1, (rx_, ry_, fl_z + 0.3), rug)
         for ll in (-4.5, 4.5):
             llx, lly = P(ll, 0)
             cyl(0.07, 1.6, (llx, lly, ceil_z - 1.6), gold, verts=8)
@@ -929,6 +930,11 @@ parts.append(make_mesh(gold, (1.0, 0.78, 0.28, 1), 0.20, 0.85,
                        emis=(0.62, 0.44, 0.13, 1), estr=0.75))
 parts.append(make_mesh(wood, (0.52, 0.38, 0.24, 1), 0.85, 0.0,
                        tex="t_door_d.jpg", uvs=1.4))
+# THE CARPETS. They were made of `wood`, which wears the DOOR sheet - panels,
+# studs and arches - so every runner in the palace was a row of doors lying on
+# the floor. They have their own surface now.
+parts.append(make_mesh(rug, (0.72, 0.60, 0.52, 1), 0.95, 0.0,
+                       tex="t_carpet_d.jpg", uvs=3.4))
 parts.append(make_mesh(glow, (1.0, 0.76, 0.38, 1), 0.9, 0.0,
                        emis=(1.0, 0.62, 0.22, 1), estr=3.0))
 parts.append(make_mesh(earth, (0.30, 0.22, 0.15, 1), 1.0, 0.0))
