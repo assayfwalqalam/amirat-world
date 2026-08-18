@@ -46,7 +46,44 @@ def cyl(r, depth, loc, into, rot=(0, 0, 0), verts=16, r2=None):
     return o
 
 
-def finish(objs, name, base, rough, metal):
+# ---------------------------------------------------------------- surfaces
+# A flat colour is why these read as toys beside the photographs. Each family
+# of parts gets a photographed-looking sheet instead: chalky desert paint,
+# olive drab, tyre rubber, parkerised steel, gun furniture, canvas. The sheet
+# goes STRAIGHT into Base Color - a colour multiplied over it in the node tree
+# is dropped by the glTF exporter every time - so the tone is baked in.
+_TEXCACHE = {}
+
+
+def surface(mat, tex_file, uv_scale, ob=None):
+    if not tex_file:
+        return mat
+    path = os.path.abspath(os.path.join(ASSETS, tex_file))
+    if not os.path.exists(path):
+        print("no war texture at", path)
+        return mat
+    # never hold an Image across a scene reset: the datablock is freed and the
+    # python handle throws "StructRNA of type Image has been removed"
+    img = bpy.data.images.get(os.path.basename(path))
+    if img is None:
+        img = bpy.data.images.load(path)
+        img.pack()
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    tn.location = (-620, 240)
+    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+    if ob is not None:
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.cube_project(cube_size=uv_scale)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    return mat
+
+
+def finish(objs, name, base, rough, metal, tex=None, uv=1.0):
     if not objs:
         return None
     bpy.ops.object.select_all(action='DESELECT')
@@ -65,6 +102,7 @@ def finish(objs, name, base, rough, metal):
     b2.inputs["Metallic"].default_value = metal
     ob.data.materials.clear()
     ob.data.materials.append(m)
+    surface(m, tex, uv, ob)
     return ob
 
 
@@ -146,9 +184,9 @@ def build_ak():
     box(0.004, 0.018, 0.014, (0, 0.055, -0.052), DARK)
     box(0.004, 0.018, 0.014, (0, 0.60, -0.036), DARK)
     parts = [
-        finish(WOOD, "wood", (0.44, 0.20, 0.075, 1), 0.5, 0.0),
-        finish(STEEL, "steel", (0.055, 0.057, 0.06, 1), 0.42, 0.85),
-        finish(DARK, "dark", (0.035, 0.035, 0.037, 1), 0.7, 0.4),
+        finish(WOOD, "wood", (0.44, 0.20, 0.075, 1), 0.5, 0.0, tex="t_gunwood.jpg", uv=0.26),
+        finish(STEEL, "steel", (0.055, 0.057, 0.06, 1), 0.42, 0.85, tex="t_gunsteel.jpg", uv=0.2),
+        finish(DARK, "dark", (0.035, 0.035, 0.037, 1), 0.7, 0.4, tex="t_gunsteel.jpg", uv=0.16),
     ]
     export(parts, "ak", "ak97.blend")
 

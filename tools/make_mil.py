@@ -324,8 +324,10 @@ def finish(objs, name, base, rough, metal, tex=None, tint=None, csize=1.2):
 
 
 parts = []
-parts.append(finish(concrete, "concrete", (0.42, 0.42, 0.40, 1), 0.9, 0.0))
-parts.append(finish(steel, "steel", (0.46, 0.48, 0.49, 1), 0.55, 0.6))
+parts.append(finish(concrete, "concrete", (0.42, 0.42, 0.40, 1), 0.9, 0.0,
+                    tex="t_concrete.jpg", csize=1.6))
+parts.append(finish(steel, "steel", (0.46, 0.48, 0.49, 1), 0.55, 0.6,
+                    tex="t_gunsteel.jpg", csize=0.6))
 parts.append(finish(gravel, "gravel", (0.5, 0.45, 0.36, 1), 1.0, 0.0,
                     tex="g_gravel_d.jpg", csize=0.6))
 parts.append(finish(cloth, "cloth", (0.55, 0.5, 0.36, 1), 1.0, 0.0,

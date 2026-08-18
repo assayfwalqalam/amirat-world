@@ -77,7 +77,44 @@ def cut(target, sx, sy, sz, loc):
     bpy.data.objects.remove(c, do_unlink=True)
 
 
-def finish(objs, name, base, rough, metal, emis=None):
+# ---------------------------------------------------------------- surfaces
+# A flat colour is why these read as toys beside the photographs. Each family
+# of parts gets a photographed-looking sheet instead: chalky desert paint,
+# olive drab, tyre rubber, parkerised steel, gun furniture, canvas. The sheet
+# goes STRAIGHT into Base Color - a colour multiplied over it in the node tree
+# is dropped by the glTF exporter every time - so the tone is baked in.
+_TEXCACHE = {}
+
+
+def surface(mat, tex_file, uv_scale, ob=None):
+    if not tex_file:
+        return mat
+    path = os.path.abspath(os.path.join(ASSETS, tex_file))
+    if not os.path.exists(path):
+        print("no war texture at", path)
+        return mat
+    # never hold an Image across a scene reset: the datablock is freed and the
+    # python handle throws "StructRNA of type Image has been removed"
+    img = bpy.data.images.get(os.path.basename(path))
+    if img is None:
+        img = bpy.data.images.load(path)
+        img.pack()
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    tn.location = (-620, 240)
+    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+    if ob is not None:
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.cube_project(cube_size=uv_scale)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    return mat
+
+
+def finish(objs, name, base, rough, metal, emis=None, tex=None, uv=1.0):
     if not objs:
         return None
     bpy.ops.object.select_all(action='DESELECT')
@@ -102,6 +139,7 @@ def finish(objs, name, base, rough, metal, emis=None):
         b2.inputs["Emission Strength"].default_value = 0.35
     ob.data.materials.clear()
     ob.data.materials.append(m)
+    surface(m, tex, uv, ob)
     return ob
 
 
@@ -254,11 +292,11 @@ def build_landrover(burnt=False):
         export(parts, "wreck_truck", COL, "wreck_truck.blend", slump=(0.035, 0.06, 0.02))
     else:
         parts = [
-            finish(GRN, "green", (0.208, 0.24, 0.166, 1), 0.72, 0.15),
-            finish(CANVAS, "canvas", (0.34, 0.33, 0.26, 1), 0.95, 0.0),
-            finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08),
+            finish(GRN, "green", (0.208, 0.24, 0.166, 1), 0.72, 0.15, tex="t_paintolive.jpg", uv=1.5),
+            finish(CANVAS, "canvas", (0.34, 0.33, 0.26, 1), 0.95, 0.0, tex="t_canvas.jpg", uv=1.1),
+            finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08, tex="t_gunsteel.jpg", uv=0.5),
             finish(GLASS, "glass", (0.06, 0.08, 0.10, 1), 0.10, 0.55),
-            finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0),
+            finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
             finish(LAMP, "lamp", (0.75, 0.78, 0.80, 1), 0.25, 0.4),
             finish(AMBER, "amber", (0.85, 0.48, 0.10, 1), 0.35, 0.2, emis=(0.5, 0.25, 0.04, 1)),
         ]
@@ -351,10 +389,10 @@ def build_technical(burnt=False):
         export(parts, "wreck_car", COL, "wreck_car.blend", slump=(-0.03, -0.055, 0.015))
     else:
         parts = [
-            finish(PAINT, "paint", (0.55, 0.52, 0.47, 1), 0.55, 0.25),
-            finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08),
+            finish(PAINT, "paint", (0.55, 0.52, 0.47, 1), 0.55, 0.25, tex="t_paintsand.jpg", uv=1.6),
+            finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08, tex="t_gunsteel.jpg", uv=0.5),
             finish(GLASS, "glass", (0.06, 0.08, 0.10, 1), 0.10, 0.55),
-            finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0),
+            finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
             finish(RIM, "rim", (0.30, 0.30, 0.30, 1), 0.5, 0.5),
             finish(LAMP, "lamp", (0.75, 0.78, 0.80, 1), 0.25, 0.4),
             finish(GUN, "gun", (0.09, 0.09, 0.10, 1), 0.55, 0.6),

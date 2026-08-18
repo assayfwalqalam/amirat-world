@@ -272,7 +272,44 @@ COLLIDERS.append({"c": [0, (BODY_FLOOR + belt) / 2, -0.05], "h": [W / 2, (belt -
 COLLIDERS.append({"c": [0, ws_base + 0.25, 0.2], "h": [W / 2 - 0.15, 0.35, 1.05]})
 
 # ------------------------------------------------------------- materials
-def finish(objs, name, base, rough, metal, emis=None):
+# ---------------------------------------------------------------- surfaces
+# A flat colour is why these read as toys beside the photographs. Each family
+# of parts gets a photographed-looking sheet instead: chalky desert paint,
+# olive drab, tyre rubber, parkerised steel, gun furniture, canvas. The sheet
+# goes STRAIGHT into Base Color - a colour multiplied over it in the node tree
+# is dropped by the glTF exporter every time - so the tone is baked in.
+_TEXCACHE = {}
+
+
+def surface(mat, tex_file, uv_scale, ob=None):
+    if not tex_file:
+        return mat
+    path = os.path.abspath(os.path.join(ASSETS, tex_file))
+    if not os.path.exists(path):
+        print("no war texture at", path)
+        return mat
+    # never hold an Image across a scene reset: the datablock is freed and the
+    # python handle throws "StructRNA of type Image has been removed"
+    img = bpy.data.images.get(os.path.basename(path))
+    if img is None:
+        img = bpy.data.images.load(path)
+        img.pack()
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    tn = nt.nodes.new('ShaderNodeTexImage')
+    tn.image = img
+    tn.location = (-620, 240)
+    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+    if ob is not None:
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.cube_project(cube_size=uv_scale)
+        bpy.ops.object.mode_set(mode='OBJECT')
+    return mat
+
+
+def finish(objs, name, base, rough, metal, emis=None, tex=None, uv=1.0):
     if not objs:
         return None
     bpy.ops.object.select_all(action='DESELECT')
@@ -297,15 +334,16 @@ def finish(objs, name, base, rough, metal, emis=None):
         b2.inputs["Emission Strength"].default_value = 0.4
     ob.data.materials.clear()
     ob.data.materials.append(m)
+    surface(m, tex, uv, ob)
     return ob
 
 
 parts = [
-    finish(BODY, "body", (0.352, 0.337, 0.271, 1), 0.74, 0.12),     # sand-olive paint
+    finish(BODY, "body", (0.352, 0.337, 0.271, 1), 0.74, 0.12, tex="t_paintsand.jpg", uv=1.7),     # sand-olive paint
     finish(GLASS, "glass", (0.06, 0.08, 0.10, 1), 0.10, 0.55),
-    finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.82, 0.10),
-    finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0),
-    finish(RIM, "rim", (0.16, 0.155, 0.14, 1), 0.55, 0.5),
+    finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.82, 0.10, tex="t_gunsteel.jpg", uv=0.5),
+    finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
+    finish(RIM, "rim", (0.16, 0.155, 0.14, 1), 0.55, 0.5, tex="t_gunsteel.jpg", uv=0.3),
     finish(LAMP, "lamp", (0.75, 0.78, 0.80, 1), 0.25, 0.4),
     finish(AMBER, "amber", (0.85, 0.48, 0.10, 1), 0.35, 0.2, emis=(0.6, 0.3, 0.05, 1)),
 ]
