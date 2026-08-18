@@ -526,12 +526,18 @@ def slope_cut(ob, extra=0.0):
     """Take the diagonal off a solid mass so its top follows the flight.
     One cut on one block: the stair and its wall are each a single piece of
     masonry, never a comb of separate blocks."""
-    cutter = solid(3.4, flight_len * 2.2, 8.0, (SX, ymid, 0), False)
+    # THE PIVOT LAW, again: a box that already stands at its place swings
+    # about the WORLD ORIGIN when its rotation is applied, so this cutter was
+    # landing nowhere near the stair and cutting nothing - which is why the
+    # side wall stayed a blank full-height slab with the flight buried behind
+    # it. Build at the origin, turn it there, then move it.
+    cutter = solid(3.4, flight_len * 2.2, 8.0, (0, 0, 0), False)
     cutter.rotation_euler[0] = ang
     bpy.context.view_layer.objects.active = cutter
     bpy.ops.object.transform_apply(rotation=True)
     cutter.location = (SX, ymid,
                        rise * ((ymid - y0) / run + 1.0) + 4.0 / math.cos(ang) + 0.02 + extra)
+    bpy.ops.object.transform_apply(location=True)
     cut(ob, cutter)
 
 
@@ -540,7 +546,9 @@ def slope_cut(ob, extra=0.0):
 STW = 1.35
 body = solid(STW, flight_len, top_z + 0.42,
              (SX, ymid, (top_z + 0.42) / 2), False)
-slope_cut(body)
+for _i in range(steps):
+    cut(body, solid(STW + 0.4, run * 1.04, 14.0,
+                    (SX, y0 + _i * run, rise * (_i + 1) + 7.0), False))
 shell.append(body)
 for i in range(steps):
     h = rise * (i + 1)
@@ -551,9 +559,19 @@ for i in range(steps):
 # HIS RULING: the SIDE and the BACK are walled, and the wall follows the
 # height of each step. Nothing else is closed in - the flight is open to the
 # air on the way up and open at the top.
+# HIS RULING, EXACTLY: the wall is there, and IT ENDS AT EACH STEP'S HEIGHT.
+# Carried a metre above the treads it becomes a five-metre triangle that
+# buries the whole flight - which is what he was looking at. Its top is the
+# stair line itself, so from the side the steps show, climbing.
 side_x = SX + stair_side * (STW / 2 + 0.16)
-cheek = solid(0.32, flight_len, top_z + 1.35, (side_x, ymid, (top_z + 1.35) / 2))
-slope_cut(cheek, 0.92)                     # its top rides a step above the treads
+cheek = solid(0.34, flight_len, top_z + 0.42, (side_x, ymid, (top_z + 0.42) / 2))
+# Cut it STEP BY STEP rather than with one rotated plane. A rotated cutter
+# depends on which way its pivot swings and how its own half-height projects;
+# eleven upright boxes cannot be misread. Each removes everything above its
+# own step, so the wall's top IS the stair, tread by tread.
+for _i in range(steps):
+    cut(cheek, solid(1.2, run * 1.04, 14.0,
+                     (side_x, y0 + _i * run, rise * (_i + 1) + 7.0), False))
 erode(cheek, levels=1, fine=0.02, broad=0.03)
 shell.append(cheek)
 # the back wall, at the head of the flight, no taller than the roof it meets

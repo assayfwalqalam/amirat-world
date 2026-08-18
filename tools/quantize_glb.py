@@ -91,38 +91,60 @@ def quantize(path):
         blobs.append(bytearray(data))
         return len(views) - 1
 
+    # THE TRANSFORM IS PER MESH, NOT PER PRIMITIVE. A model like the Qasr is
+    # one mesh of seven primitives - stone, gold, glass, water and so on - all
+    # drawn by ONE node. Quantising each primitive to its own box and writing
+    # only the last one's scale onto that node throws six of the seven parts
+    # somewhere else: domes beside their towers, the fountain's water spread
+    # across the sky as a blue slab. Every primitive of a mesh shares one box.
     for mesh in js["meshes"]:
+        mn = [1e30, 1e30, 1e30]
+        mx = [-1e30, -1e30, -1e30]
+        ok_box = False
+        for prim in mesh["primitives"]:
+            if "POSITION" not in prim["attributes"]:
+                continue
+            acc = js["accessors"][prim["attributes"]["POSITION"]]
+            if acc["componentType"] != 5126:
+                continue
+            vals, _, _ = get_floats(js, binc, prim["attributes"]["POSITION"])
+            if not vals:
+                continue
+            for v in vals:
+                for k in range(3):
+                    if v[k] != v[k]:            # NaN: leave this model alone
+                        return None
+                    mn[k] = min(mn[k], v[k])
+                    mx[k] = max(mx[k], v[k])
+            ok_box = True
+        if not ok_box:
+            continue
+        span = max(1e-6, max(mx[k] - mn[k] for k in range(3)))
+        scale = span / 32767.0
+        mesh["_qpos"] = {"offset": mn, "scale": [scale, scale, scale]}
+
         for prim in mesh["primitives"]:
             attrs = prim["attributes"]
 
-            # ---- POSITION -> int16 with the scale folded into the node
-            if "POSITION" in attrs:
+            if "POSITION" in attrs and js["accessors"][attrs["POSITION"]]["componentType"] == 5126:
                 vals, acc, nc = get_floats(js, binc, attrs["POSITION"])
-                mn = [min(v[k] for v in vals) for k in range(3)]
-                mx = [max(v[k] for v in vals) for k in range(3)]
-                # a model with a NaN in it cannot be quantised; leave it be
-                if any(not (mn[k] == mn[k] and mx[k] == mx[k]) for k in range(3)):
-                    continue
-                span = max(1e-6, max(mx[k] - mn[k] for k in range(3)))
-                scale = span / 32767.0
                 data = bytearray()
                 for v in vals:
                     for k in range(3):
                         q = int(round((v[k] - mn[k]) / scale))
                         data += struct.pack("<h", max(-32768, min(32767, q)))
-                    data += b"\0\0"                       # pad VEC3 to 8 bytes
+                    data += b"\0\0"
                 bvi = add_view(bytes(data), 34962)
                 js["bufferViews"][bvi]["byteStride"] = 8
                 js["accessors"].append({
                     "bufferView": bvi, "componentType": 5122, "count": len(vals),
-                    "type": "VEC3", "min": [0, 0, 0], "max": [int(round((mx[k] - mn[k]) / scale)) for k in range(3)],
+                    "type": "VEC3", "min": [0, 0, 0],
+                    "max": [int(round((mx[k] - mn[k]) / scale)) for k in range(3)],
                 })
                 attrs["POSITION"] = len(js["accessors"]) - 1
-                prim["_qpos"] = {"offset": mn, "scale": [scale, scale, scale]}
                 changed = True
 
-            # ---- NORMAL -> int8
-            if "NORMAL" in attrs:
+            if "NORMAL" in attrs and js["accessors"][attrs["NORMAL"]]["componentType"] == 5126:
                 vals, acc, nc = get_floats(js, binc, attrs["NORMAL"])
                 data = bytearray()
                 for v in vals:
@@ -138,7 +160,6 @@ def quantize(path):
                 attrs["NORMAL"] = len(js["accessors"]) - 1
                 changed = True
 
-            # ---- COLOR_0: one flat colour is a material tint, not vertex data
             if "COLOR_0" in attrs:
                 a = js["accessors"][attrs["COLOR_0"]]
                 if a["componentType"] == 5126:
@@ -156,7 +177,7 @@ def quantize(path):
         return None
 
     # the quantised positions need their scale on the node that draws them
-    if any("_qpos" in pr for m in js["meshes"] for pr in m["primitives"]):
+    if any("_qpos" in m for m in js["meshes"]):
         js.setdefault("extensionsUsed", [])
         if "KHR_mesh_quantization" not in js["extensionsUsed"]:
             js["extensionsUsed"].append("KHR_mesh_quantization")
@@ -167,25 +188,21 @@ def quantize(path):
             mi = node.get("mesh")
             if mi is None:
                 continue
-            q = None
-            for pr in js["meshes"][mi]["primitives"]:
-                if "_qpos" in pr:
-                    q = pr["_qpos"]
+            q = js["meshes"][mi].get("_qpos")
             if not q:
                 continue
             if "matrix" in node:          # leave hand-made matrices alone
-                continue
-            s = node.get("scale", [1, 1, 1])
-            t = node.get("translation", [0, 0, 0])
-            node["scale"] = [s[i] * q["scale"][i] for i in range(3)]
-            node["translation"] = [t[i] + q["offset"][i] * s[i] for i in range(3)]
+                return None
+            s0 = node.get("scale", [1, 1, 1])
+            t0 = node.get("translation", [0, 0, 0])
+            node["scale"] = [s0[i] * q["scale"][i] for i in range(3)]
+            node["translation"] = [t0[i] + q["offset"][i] * s0[i] for i in range(3)]
     for m in js["meshes"]:
-        for pr in m["primitives"]:
-            pr.pop("_qpos", None)
+        m.pop("_qpos", None)
 
-    # Drop what nothing points at any more. The OLD float accessors are still
-    # in the file after the swap, and if they are counted as users their
-    # bufferViews survive and the file grows instead of shrinking.
+    # Drop what nothing points at any more. The OLD float accessors survive the
+    # swap, and if they are counted as users their bufferViews survive with
+    # them and the file GROWS instead of shrinking.
     live_acc = set()
     for m2 in js["meshes"]:
         for pr2 in m2["primitives"]:
