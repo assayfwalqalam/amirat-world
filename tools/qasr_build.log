@@ -1,18 +1,15 @@
 ﻿blender.exe : TBBmalloc: skip allocation functions replacement in ucrtbase.dll: unknown prologue for function _msize
-At line:1 char:334
-+ ... irat-world; & "C:\Users\sandk\Tools\blender-4.2.1-windows-x64\blender ...
+At line:1 char:458
++ ... e-Command { & "C:\Users\sandk\Tools\blender-4.2.1-windows-x64\blender ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (TBBmalloc: skip...function _msize:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-04:07:14 | INFO: Starting glTF 2.0 export
-04:07:14 | INFO: Extracting primitive: Cube
-04:07:15 | INFO: Primitives created: 6
-04:07:15 | INFO: Finished glTF 2.0 export in 1.0419013500213623 s
-TOP 81.5 gold Cylinder.035
-TOP 78.8 gold Sphere.014
-TOP 77.7 gold Sphere.013
-RESULT qasr verts=252762 tris=470174
+04:31:20 | INFO: Starting glTF 2.0 export
+04:31:20 | INFO: Extracting primitive: stone
+04:31:21 | INFO: Primitives created: 9
+04:31:21 | INFO: Finished glTF 2.0 export in 0.8882546424865723 s
+RESULT qasr verts=234586 tris=411482
 INFO Draco mesh compression is available, use library at C:\Users\sandk\Tools\blender-4.2.1-windows-x64\4.2\python\lib\site-packages\extern_draco.dll
 
 WROTE C:\Users\sandk\amirat-world\assets\models\palace\qasr.glb
