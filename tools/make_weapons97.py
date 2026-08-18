@@ -98,13 +98,20 @@ def build_ak():
     fresh()
     WOOD, STEEL, DARK = [], [], []
     # buttplate and the tapering stock with its dropped heel
-    box(0.032, 0.02, 0.115, (0, 0.01, -0.015), DARK)
-    b = box(0.036, 0.245, 0.095, (0, 0.135, -0.012), WOOD, rx=0.085)
+    box(0.032, 0.02, 0.112, (0, 0.012, -0.018), DARK)
+    # The stock is not a plank: it is deep at the butt, thins to the wrist,
+    # and the comb slopes down to a dropped heel. Three masses do it.
+    box(0.036, 0.075, 0.100, (0, 0.055, -0.020), WOOD, rx=0.06)
+    box(0.035, 0.095, 0.082, (0, 0.145, -0.012), WOOD, rx=0.10)
+    b = box(0.033, 0.090, 0.062, (0, 0.228, 0.001), WOOD, rx=0.13)
+    box(0.030, 0.055, 0.030, (0, 0.268, 0.014), WOOD)          # the wrist into the receiver
     # receiver: the long box, slight taper at top cover
     box(0.038, 0.275, 0.062, (0, 0.395, 0.002), STEEL)
     box(0.034, 0.27, 0.012, (0, 0.395, 0.038), STEEL)          # the top cover crown
+    box(0.026, 0.26, 0.010, (0, 0.395, 0.046), STEEL)          # its crowned ridge
     # pistol grip, raked back
-    box(0.030, 0.032, 0.095, (0, 0.318, -0.075), WOOD, rx=0.42)
+    box(0.030, 0.034, 0.060, (0, 0.322, -0.058), WOOD, rx=0.42)
+    box(0.028, 0.031, 0.055, (0, 0.301, -0.104), WOOD, rx=0.42)   # the grip tapers
     # trigger guard and trigger
     box(0.026, 0.075, 0.006, (0, 0.362, -0.052), DARK)
     box(0.006, 0.028, 0.032, (0, 0.352, -0.038), DARK, rx=0.25)
