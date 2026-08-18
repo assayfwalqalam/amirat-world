@@ -828,7 +828,10 @@
           'vec3 trodA = texture2D(tGrav, wxz * 0.115).rgb;',
           'vec3 trodB = texture2D(tSand, wxz * 0.034 + vec2(0.6, 0.2)).rgb;',
           'vec3 trod = mix(trodA, trodB, 0.42);',
-          'trod = mix(trod, vec3(dot(trod, vec3(0.36, 0.5, 0.14))), 0.55) * vec3(1.05, 0.99, 0.90);',
+          /* it is earth, not concrete: only part of the colour is taken out,
+             and what is left leans warm. Fully greyed it read as pale
+             pavement under the moon, which is what every night shot showed. */
+          'trod = mix(trod, vec3(dot(trod, vec3(0.36, 0.5, 0.14))), 0.30) * vec3(0.95, 0.84, 0.68);',
           'trod *= (0.78 + 0.38 * macro2) * (0.90 + 0.20 * fine);',
           'col = mix(col, trod, town * 0.85);',
           'col *= 0.94 + 0.12 * fine;',
@@ -950,6 +953,11 @@
     var m = new THREE.Mesh(geo, groundMat);
     m.position.set(ox, 0, oz);
     m.frustumCulled = true;
+    /* the ground streams in and out with the player; the town's weld must
+       never swallow a chunk. It used to: the welded copy froze in place as a
+       dark ghost and the real chunk was removed from the scene with its
+       geometry thrown away, which is where the black patches came from. */
+    m.userData.noCrunch = true;
     scene.add(m);
     var rec = { mesh: m, seg: seg, veg: null, ci: ci, cj: cj };
     if (seg >= VEG_SEG && W.scatter) rec.veg = W.scatter(W, ci, cj, CH, seg);
@@ -1110,6 +1118,7 @@
         ].join('\n'));
     };
     water = new THREE.Mesh(g, m);
+    water.userData.noCrunch = true;   /* it follows the player, never weld it */
     water.position.y = WATER_Y;
     water.renderOrder = 1;
     waterMat = m;

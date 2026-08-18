@@ -651,7 +651,7 @@ CLOTHY = {"awning", "carpet", "cushions", "sacks"}
 tex_file = None
 gain = 2.4
 if KIND in WOODY:
-    tex_file = "t_wood_d.jpg"
+    tex_file = "t_woodp_d.jpg"
 elif KIND in CLAYY:
     tex_file = "t_clay_d.jpg"
 elif KIND in CLOTHY:
@@ -663,12 +663,12 @@ if tex_file is not None:
         img = bpy.data.images.load(path)
         tn2 = nt.nodes.new('ShaderNodeTexImage')
         tn2.image = img
-        mix2 = nt.nodes.new('ShaderNodeMixRGB')
-        mix2.blend_type = 'MULTIPLY'
-        mix2.inputs['Fac'].default_value = 1.0
-        mix2.inputs['Color2'].default_value = (TINT[0] * gain, TINT[1] * gain, TINT[2] * gain, 1)
-        nt.links.new(tn2.outputs['Color'], mix2.inputs['Color1'])
-        nt.links.new(mix2.outputs['Color'], bsdf.inputs['Base Color'])
+        # The texture goes straight into Base Color. The multiply that used
+        # to sit here was dropped by the glTF exporter every time (checked by
+        # parsing p_cart.glb: baseColorFactor absent), so the props have
+        # always shipped as the bare photograph. The tone is baked into the
+        # texture instead, light enough to read by moonlight.
+        nt.links.new(tn2.outputs['Color'], bsdf.inputs['Base Color'])
         img.pack()
 
 while len(ob.data.color_attributes):

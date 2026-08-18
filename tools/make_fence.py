@@ -344,7 +344,7 @@ nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 bsdf.inputs["Roughness"].default_value = 0.94
-tex_choice = "t_plank_d.jpg" if STYLE in ("plank", "plankgate") else "t_wood_d.jpg"
+tex_choice = "t_plank_d.jpg" if STYLE in ("plank", "plankgate") else "t_woodp_d.jpg"
 tex_path = os.path.abspath(os.path.join(ASSETS, tex_choice))
 tn = None
 if os.path.exists(tex_path):

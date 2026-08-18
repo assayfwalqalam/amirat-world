@@ -6,14 +6,19 @@
 # spike.  In the reference the projecting beams are bleached timber, a little
 # darker than the wall and never black.  Vertex colour and baseColorFactor can
 # only DARKEN a texture in glTF, so the light has to be baked in here.
-import math, os, random
+import math, os, random, sys
 from PIL import Image, ImageFilter
 
 SIZE = 512
-OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "t_beam_d.jpg")
-random.seed(41)
+KIND = sys.argv[1] if len(sys.argv) > 1 else "beam"
+# beam: bleached roof timber. prop: the barrels, carts, stalls and shutters,
+# a little darker and warmer but still light enough to read by moonlight.
+BASE = (160, 140, 115) if KIND == "beam" else (116, 90, 66)
+OUT = os.path.join(os.path.dirname(__file__), "..", "assets",
+                   "t_beam_d.jpg" if KIND == "beam" else "t_woodp_d.jpg")
+random.seed(41 if KIND == "beam" else 77)
 
-im = Image.new("RGB", (SIZE, SIZE), (152, 134, 110))
+im = Image.new("RGB", (SIZE, SIZE), BASE)
 px = im.load()
 
 # the grain runs down the image; each stripe is a fibre with its own tone
@@ -21,7 +26,7 @@ stripe = [0.0] * SIZE
 x = 0
 while x < SIZE:
     w = random.randint(2, 9)
-    t = random.uniform(-16, 12)
+    t = random.uniform(-16, 12) * (1.0 if KIND == "beam" else 1.7)
     for i in range(w):
         if x + i < SIZE:
             stripe[x + i] = t
@@ -35,9 +40,9 @@ for y in range(SIZE):
         # fine cross-grain checks, as weathered wood splits
         if random.random() < 0.004:
             v -= random.uniform(10, 26)
-        r = max(0, min(255, int(160 + v)))
-        g = max(0, min(255, int(140 + v * 0.94)))
-        b = max(0, min(255, int(115 + v * 0.86)))
+        r = max(0, min(255, int(BASE[0] + v)))
+        g = max(0, min(255, int(BASE[1] + v * 0.94)))
+        b = max(0, min(255, int(BASE[2] + v * 0.86)))
         px[xx, y] = (r, g, b)
 
 # knots: a dark eye with the grain bending round it

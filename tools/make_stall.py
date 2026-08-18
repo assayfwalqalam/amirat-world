@@ -334,7 +334,7 @@ def make_mat(name, tint, rough, tex=None):
     return m
 
 
-make_mat("wood", (0.22, 0.15, 0.10), 0.92, "t_wood_d.jpg")
+make_mat("wood", (0.22, 0.15, 0.10), 0.92, "t_woodp_d.jpg")
 make_mat("cloth", cloth_tint, 0.9, "t_cloth_d.jpg")
 make_mat("goods", GOODS_TINT, 0.85, None if TRADE == "metal" else "t_clay_d.jpg")
 

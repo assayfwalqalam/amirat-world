@@ -235,7 +235,7 @@ if wd:
     nt3 = m3.node_tree
     b3 = nt3.nodes["Principled BSDF"]
     b3.inputs["Roughness"].default_value = 0.92
-    path = os.path.abspath(os.path.join(ASSETS, "t_wood_d.jpg"))
+    path = os.path.abspath(os.path.join(ASSETS, "t_woodp_d.jpg"))
     if os.path.exists(path):
         img = bpy.data.images.load(path)
         tn3 = nt3.nodes.new('ShaderNodeTexImage')

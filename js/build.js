@@ -1208,6 +1208,21 @@
     wander(mosque[0], mosque[1], plazaB[0], plazaB[1], 4.2, 24, 3, 6091);
     wander(gate[0], gate[1], plazaA[0], plazaA[1], 4.4, 34, 3, 7103);
 
+    /* the ring road just inside the wall: without it the whole outer band is
+       out of reach of any way, and the town stands in the middle of its own
+       walls with a bare ring around it */
+    var RG = S - 20;
+    var ring = [[-RG, -RG], [RG, -RG], [RG, RG], [-RG, RG], [-RG, -RG]];
+    for (var rr = 0; rr < 4; rr++) {
+      wander(ring[rr][0], ring[rr][1], ring[rr + 1][0], ring[rr + 1][1],
+             3.6, 30, 3, 8117 + rr * 131);
+    }
+    /* and four ways out from the middle to meet it */
+    wander(well[0], well[1], -RG + 14, -RG + 26, 3.4, 34, 3, 9127);
+    wander(well[0], well[1], RG - 20, -RG + 18, 3.4, 34, 3, 9137);
+    wander(plazaB[0], plazaB[1], -RG + 18, RG - 22, 3.4, 34, 3, 9151);
+    wander(plazaC[0], plazaC[1], RG - 16, RG - 18, 3.4, 34, 3, 9161);
+
     /* lanes branching off, until the ground is served */
     var arteries = WAYS.slice();
     for (var b = 0; b < 26; b++) {
@@ -1244,15 +1259,15 @@
       if (Math.hypot(x + 40, z + 34) < 36) return true;   /* the mosque */
       if (Math.hypot(x + 40, z - 3) < 27) return true;    /* its courtyard */
       if (Math.hypot(x - 6, z - 8) < 14) return true;     /* the well square */
-      if (Math.abs(x) > S - 30 || Math.abs(z) > S - 30) return true;
+      if (Math.abs(x) > S - 14 || Math.abs(z) > S - 14) return true;
       return false;
     }
 
     /* Scatter candidates over the whole town, keep the ones that fit. The
        leftovers between them become the alleys and dead ends. */
     var STEP = 5.0;
-    for (var gz = -S + 34; gz < S - 34; gz += STEP) {
-      for (var gx = -S + 34; gx < S - 34; gx += STEP) {
+    for (var gz = -S + 18; gz < S - 18; gz += STEP) {
+      for (var gx = -S + 18; gx < S - 18; gx += STEP) {
         var sd = ((gx * 73856093) ^ (gz * 19349663)) | 0;
         var x = gx + (hashU(sd) - 0.5) * STEP * 1.6;
         var z = gz + (hashU(sd ^ 0x9e3) - 0.5) * STEP * 1.6;
@@ -1274,7 +1289,11 @@
           var pl = placed[i];
           /* every pair is judged by both footprints, so a long range keeps
              its neighbours further off than a narrow tower does */
-          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.80 ? 0.71 : 0.93);
+          /* in the reference, houses share walls as often as they stand
+             apart: nearly half are allowed to crowd right up to a neighbour,
+             which is what makes blocks and narrow alleys instead of a field
+             of separate boxes */
+          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.55 ? 0.60 : 0.92);
           if (Math.hypot(x - pl[0], z - pl[1]) < need) { ok = false; break; }
         }
         if (!ok) continue;

@@ -252,7 +252,7 @@ wd = join_group(wood, "wood", 0.9)
 if wd:
     wd.data.materials.clear()
     tintw = (0.10, 0.085, 0.07) if KIND == "firering" else (0.42, 0.35, 0.27)
-    wd.data.materials.append(tex_mat(wd, "wood", "t_wood_d.jpg", tintw))
+    wd.data.materials.append(tex_mat(wd, "wood", "t_woodp_d.jpg", tintw))
     parts.append(wd)
 st = join_group(stone, "stone", 1.8)
 if st:
