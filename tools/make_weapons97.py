@@ -274,10 +274,26 @@ def build_dshk():
     box(0.075, 0.30, 0.085, (0, 0.0, 0.0), DARK)
     box(0.065, 0.16, 0.03, (0, 0.02, 0.055), DARK)
     cyl(0.055, 0.07, (0.0, 0.05, 0.075), DARK, rot=(0, math.pi / 2, 0), verts=14)
-    # spade grips + trigger bar
+    # the 50-round drum hanging on the right, which is half of what a DShK
+    # looks like and was missing entirely
+    cyl(0.085, 0.075, (0.085, 0.05, -0.02), DARK, rot=(0, math.pi / 2, 0), verts=18)
+    cyl(0.088, 0.012, (0.124, 0.05, -0.02), STEEL, rot=(0, math.pi / 2, 0), verts=18)
+    box(0.05, 0.05, 0.02, (0.05, 0.06, 0.03), DARK)                  # the feed lip
+    # spade grips: two proper handles on a yoke, not two stubs
+    box(0.17, 0.04, 0.04, (0, -0.142, 0.005), DARK)      # the yoke, ON the receiver
     for sx in (-1, 1):
-        cyl(0.011, 0.10, (sx * 0.045, -0.185, -0.01), STEEL, rot=(0.9, 0, 0), verts=8)
-    box(0.08, 0.02, 0.02, (0, -0.16, 0.01), DARK)
+        cyl(0.015, 0.115, (sx * 0.075, -0.168, -0.028), STEEL, rot=(0.5, 0, 0), verts=8)
+        cyl(0.021, 0.028, (sx * 0.075, -0.192, -0.075), DARK, rot=(0.5, 0, 0), verts=8)
+    box(0.075, 0.022, 0.022, (0, -0.152, -0.022), DARK)              # trigger bar
+    # rear sight over the receiver
+    box(0.03, 0.02, 0.045, (0, -0.10, 0.075), STEEL)
+    # THE MOUNT: on the technical it sits on a pintle, but standing on its own
+    # in the palette it needs legs or it is a gun lying in the air
+    cyl(0.022, 0.16, (0, -0.02, -0.10), DARK, verts=10)
+    for a3 in range(3):
+        aa = a3 / 3.0 * 2 * math.pi + 0.5
+        cyl(0.016, 0.42, (math.cos(aa) * 0.10, -0.02 + math.sin(aa) * 0.10, -0.28), DARK,
+            rot=(0.5 * math.sin(aa), 0, -0.5 * math.cos(aa)), verts=8)
     parts = [
         finish(STEEL, "steel", (0.07, 0.072, 0.075, 1), 0.45, 0.8),
         finish(DARK, "dark", (0.05, 0.052, 0.055, 1), 0.6, 0.5),
