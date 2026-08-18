@@ -12,6 +12,7 @@ MODELS = os.path.join(ROOT, "assets", "models")
 
 # order matters: the first pattern that matches decides the group
 GROUPS = [
+    ("The Qasr",    [r"^palace/qasr$"]),
     ("Buildings",   [r"^kit/"]),
     ("Buildings",   [r"^bh\d+$", r"^m_mosque$", r"^mosque/"]),
     ("City walls",  [r"^w_"]),

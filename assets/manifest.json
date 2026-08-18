@@ -1,6 +1,15 @@
 {
  "groups": [
   {
+   "name": "The Qasr",
+   "items": [
+    {
+     "k": "palace/qasr",
+     "n": "Qasr"
+    }
+   ]
+  },
+  {
    "name": "Buildings",
    "items": [
     {
@@ -773,48 +782,64 @@
      "n": "Palm"
     },
     {
-     "k": "tree/blossom_1",
-     "n": "Blossom 1"
+     "k": "tree/blossom_2x_1",
+     "n": "Blossom 2x 1"
     },
     {
-     "k": "tree/blossom_10",
-     "n": "Blossom 10"
+     "k": "tree/blossom_2x_2",
+     "n": "Blossom 2x 2"
     },
     {
-     "k": "tree/blossom_2",
-     "n": "Blossom 2"
+     "k": "tree/blossom_2x_3",
+     "n": "Blossom 2x 3"
     },
     {
-     "k": "tree/blossom_3",
-     "n": "Blossom 3"
+     "k": "tree/blossom_2x_4",
+     "n": "Blossom 2x 4"
     },
     {
-     "k": "tree/blossom_4",
-     "n": "Blossom 4"
+     "k": "tree/blossom_2x_5",
+     "n": "Blossom 2x 5"
     },
     {
-     "k": "tree/blossom_5",
-     "n": "Blossom 5"
+     "k": "tree/blossom_3x_1",
+     "n": "Blossom 3x 1"
     },
     {
-     "k": "tree/blossom_6",
-     "n": "Blossom 6"
+     "k": "tree/blossom_3x_2",
+     "n": "Blossom 3x 2"
     },
     {
-     "k": "tree/blossom_7",
-     "n": "Blossom 7"
+     "k": "tree/blossom_3x_3",
+     "n": "Blossom 3x 3"
     },
     {
-     "k": "tree/blossom_8",
-     "n": "Blossom 8"
+     "k": "tree/blossom_3x_4",
+     "n": "Blossom 3x 4"
     },
     {
-     "k": "tree/blossom_9",
-     "n": "Blossom 9"
+     "k": "tree/blossom_3x_5",
+     "n": "Blossom 3x 5"
     },
     {
-     "k": "tree/blossom_show",
-     "n": "Blossom show"
+     "k": "tree/blossom_4x_1",
+     "n": "Blossom 4x 1"
+    },
+    {
+     "k": "tree/blossom_4x_2",
+     "n": "Blossom 4x 2"
+    },
+    {
+     "k": "tree/blossom_4x_3",
+     "n": "Blossom 4x 3"
+    },
+    {
+     "k": "tree/blossom_4x_4",
+     "n": "Blossom 4x 4"
+    },
+    {
+     "k": "tree/blossom_4x_5",
+     "n": "Blossom 4x 5"
     },
     {
      "k": "tree/cypress_1",
@@ -980,6 +1005,10 @@
     {
      "k": "bush_dry",
      "n": "Bush dry"
+    },
+    {
+     "k": "bush_dry.hi",
+     "n": "Bush dry.hi"
     },
     {
      "k": "fl_orange",
@@ -1232,16 +1261,24 @@
      "n": "Grand"
     },
     {
+     "k": "lantern.hi",
+     "n": "Lantern.hi"
+    },
+    {
      "k": "p_stones",
      "n": "Stones"
     },
     {
-     "k": "p_well",
-     "n": "Well"
+     "k": "p_torch.hi",
+     "n": "Torch.hi"
     },
     {
-     "k": "palace/castle",
-     "n": "Castle"
+     "k": "p_torchpost.hi",
+     "n": "Torchpost.hi"
+    },
+    {
+     "k": "p_well",
+     "n": "Well"
     },
     {
      "k": "palace/dome_onion",
