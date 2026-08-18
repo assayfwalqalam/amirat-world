@@ -141,6 +141,7 @@
   <button id="imp" class="ghost">Import</button>
   <div class="grow"></div>
   <button id="day" class="on">Daylight</button>
+  <button id="mesa" title="Raise a level mound under the palace, cut to its size">Mound under palace</button>
   <button id="town" class="ghost">Add the town</button>
   <button id="clear" class="ghost">Clear</button>
   <button id="play">Walk it ▸</button>
@@ -173,7 +174,18 @@
       <button id="ungrp" style="flex:1">Ungroup</button>
     </div>
     <div class="phead" style="margin:10px -6px 0;border-top:1px solid var(--line)">Scatter</div>
+    <div class="row"><label>Shape</label>
+      <select id="bShape">
+        <option value="circle">circle</option>
+        <option value="rect">rectangle</option>
+        <option value="free">area you draw</option>
+      </select></div>
+    <div class="row" id="rowFree" style="display:none">
+      <button id="bFreeStart" style="flex:1">Draw the area</button>
+      <button id="bFreeClear">Clear</button></div>
     <div class="row"><label>Radius</label><input id="bR" type="number" step="1" value="16"></div>
+    <div class="row" id="rowRect" style="display:none"><label>Depth</label>
+      <input id="bR2" type="number" step="1" value="16"></div>
     <div class="row"><label>How many</label><input id="bN" type="number" step="1" value="14"></div>
     <div class="row"><label>Spacing</label><input id="bGap" type="number" step="0.2" value="2.6"></div>
     <div class="row"><label>Size from</label><input id="bSmin" type="number" step="0.05" value="0.85"></div>

@@ -646,31 +646,87 @@
     var v = parseFloat(el.value);
     return isFinite(v) ? v : dflt;
   }
-  function scatterAt(p) {
-    var keys = ($('bMix') && $('bMix').checked && MIX.length) ? MIX.slice() : (armed ? [armed] : []);
-    if (!keys.length) { toast('pick an asset, or add some to the mix'); return; }
-    var R = Math.max(1, num('bR', 16)), N = Math.max(1, Math.round(num('bN', 14)));
+  /* The shape the scatter fills. Circle and rectangle come from the numbers;
+     the free one is a ring of points he clicked on the ground. */
+  var freeArea = [];          /* the drawn outline, in world x/z */
+  var freeDrawing = false;
+
+  function scatterShape() { var e = $('bShape'); return e ? e.value : 'circle'; }
+
+  function inFree(x, z) {
+    /* the usual crossing test: a ray east from the point, count the edges */
+    var n = freeArea.length, inside = false;
+    for (var i = 0, j = n - 1; i < n; j = i++) {
+      var a = freeArea[i], b = freeArea[j];
+      if ((a.z > z) !== (b.z > z) &&
+          x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+
+  /* Where one thing would land. Everything the panel says is honoured, and
+     the same function draws the preview and does the placing, so what he
+     sees under the cursor is exactly what he gets. */
+  function scatterPoints(p, seed) {
+    var N = Math.max(1, Math.round(num('bN', 14)));
     var gap = Math.max(0, num('bGap', 2.6));
-    var sMin = num('bSmin', 0.85), sMax = num('bSmax', 1.35);
     var edge = Math.min(0.95, Math.max(0, num('bEdge', 0.55)));
-    var turn = !$('bRot') || $('bRot').checked;
+    var R = Math.max(1, num('bR', 16)), R2 = Math.max(1, num('bR2', 16));
+    var shape = scatterShape();
+    var rnd = (function (s0) {          /* the same layout every hover */
+      var st = s0 || 1;
+      return function () { st = (st * 1664525 + 1013904223) & 0xffffffff; return (st >>> 8) / 16777216; };
+    })(seed || 1);
+    var box = null;
+    if (shape === 'free') {
+      if (freeArea.length < 3) return [];
+      var mnx = 1e9, mxx = -1e9, mnz = 1e9, mxz = -1e9;
+      freeArea.forEach(function (q) {
+        mnx = Math.min(mnx, q.x); mxx = Math.max(mxx, q.x);
+        mnz = Math.min(mnz, q.z); mxz = Math.max(mxz, q.z);
+      });
+      box = { mnx: mnx, mxx: mxx, mnz: mnz, mxz: mxz };
+    }
     var made = [], tries = 0;
-    while (made.length < N && tries < N * 60) {
+    while (made.length < N && tries < N * 80) {
       tries++;
-      var a = Math.random() * 6.283;
-      /* pow > 0.5 packs the middle and thins the rim */
-      var rr = Math.pow(Math.random(), 0.5 + edge) * R;
-      var x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr;
+      var x, z;
+      if (shape === 'circle') {
+        var a = rnd() * 6.283;
+        var rr = Math.pow(rnd(), 0.5 + edge) * R;
+        x = p.x + Math.cos(a) * rr; z = p.z + Math.sin(a) * rr;
+      } else if (shape === 'rect') {
+        x = p.x + (rnd() * 2 - 1) * R;
+        z = p.z + (rnd() * 2 - 1) * R2;
+      } else {
+        x = box.mnx + rnd() * (box.mxx - box.mnx);
+        z = box.mnz + rnd() * (box.mxz - box.mnz);
+        if (!inFree(x, z)) continue;
+      }
       var ok = true;
       for (var i = 0; i < made.length; i++) {
         var dx = made[i].x - x, dz = made[i].z - z;
         if (dx * dx + dz * dz < gap * gap) { ok = false; break; }
       }
       if (!ok) continue;
-      var key = keys[(Math.random() * keys.length) | 0];
-      var y = W.heightAt(x, z);
-      var sc = sMin + Math.random() * Math.max(0, sMax - sMin);
-      made.push(addObject(key, x, y, z, turn ? Math.random() * 6.283 : placeRot, sc));
+      made.push({ x: x, z: z, r: rnd(), s: rnd() });
+    }
+    return made;
+  }
+
+  function scatterAt(p) {
+    var keys = ($('bMix') && $('bMix').checked && MIX.length) ? MIX.slice() : (armed ? [armed] : []);
+    if (!keys.length) { toast('pick an asset, or add some to the mix'); return; }
+    var sMin = num('bSmin', 0.85), sMax = num('bSmax', 1.35);
+    var turn = !$('bRot') || $('bRot').checked;
+    var pts = scatterPoints(p, (Date.now() & 0xffff) | 1);
+    var made = [];
+    for (var q = 0; q < pts.length; q++) {
+      var pt = pts[q];
+      var key = keys[(pt.r * keys.length) | 0];
+      var y = W.heightAt(pt.x, pt.z);
+      var sc = sMin + pt.s * Math.max(0, sMax - sMin);
+      made.push(addObject(key, pt.x, y, pt.z, turn ? pt.r * 6.283 : placeRot, sc));
     }
     if (!made.length) { toast('nothing fitted · widen the radius or close the spacing'); return; }
     push({ undo: function () { made.forEach(removeRecord); refreshList(); },
@@ -832,6 +888,93 @@
     W.wake();
   }
 
+  /* Put the mound under the palace, cut to its own size. The table is the
+     palace's own footprint with a walk round it; the skirt is long enough to
+     fall away naturally rather than drop like a kerb. */
+  function mesaUnderQasr() {
+    var q = null;
+    PLACED.forEach(function (r) {
+      if (!r.dead && /qasr|palace/i.test(r.key || '')) q = r;
+    });
+    if (!q) { toast('no palace in the layout to raise'); return; }
+    var halfX = 12, halfZ = 12;
+    if (q.obj) {
+      var b = new T.Box3().setFromObject(q.obj);
+      halfX = (b.max.x - b.min.x) / 2;
+      halfZ = (b.max.z - b.min.z) / 2;
+    }
+    var MARGIN = 22;                 /* the space left to walk round it */
+    W.mesaUnder(q.x, q.z, halfX + MARGIN, halfZ + MARGIN, 130, 12);
+    toast('mound set under the palace \u00b7 ' +
+          Math.round((halfX + MARGIN) * 2) + ' by ' + Math.round((halfZ + MARGIN) * 2) + ' m on top');
+    W.wake();
+  }
+  W.mesaUnderQasr = mesaUnderQasr;
+
+  /* ------------------------------------------------- the scatter preview
+     While the cursor is over the ground in scatter mode, the area and every
+     place a thing would land are drawn live: move the mouse, change a number,
+     redraw the outline and the marks. Nothing is committed until he clicks. */
+  var scatPrev = null;
+
+  function scatterPreview(p) {
+    if (!scatPrev) {
+      scatPrev = new T.Group();
+      scatPrev.userData.giz = true;              /* never pickable */
+      var lm = new T.LineBasicMaterial({ color: 0xffd479, depthTest: false, transparent: true, opacity: 0.9 });
+      scatPrev.userData.lm = lm;
+      var dm = new T.MeshBasicMaterial({ color: 0x9ff0a0, depthTest: false, transparent: true, opacity: 0.85 });
+      scatPrev.userData.dm = dm;
+      scatPrev.renderOrder = 999;
+      scene.add(scatPrev);
+    }
+    while (scatPrev.children.length) {
+      var c0 = scatPrev.children.pop();
+      if (c0.geometry) c0.geometry.dispose();
+      scatPrev.remove(c0);
+    }
+    if (!p) { scatPrev.visible = false; return; }
+    scatPrev.visible = true;
+    var shape = scatterShape();
+    var R = Math.max(1, num('bR', 16)), R2 = Math.max(1, num('bR2', 16));
+    var pts = [];
+    if (shape === 'circle') {
+      for (var i = 0; i <= 64; i++) {
+        var a = i / 64 * 6.283;
+        var x = p.x + Math.cos(a) * R, z = p.z + Math.sin(a) * R;
+        pts.push(new T.Vector3(x, W.heightAt(x, z) + 0.15, z));
+      }
+    } else if (shape === 'rect') {
+      var cor = [[-R, -R2], [R, -R2], [R, R2], [-R, R2], [-R, -R2]];
+      for (var k = 0; k < cor.length - 1; k++) {
+        for (var t = 0; t <= 8; t++) {
+          var fx = cor[k][0] + (cor[k + 1][0] - cor[k][0]) * t / 8;
+          var fz = cor[k][1] + (cor[k + 1][1] - cor[k][1]) * t / 8;
+          pts.push(new T.Vector3(p.x + fx, W.heightAt(p.x + fx, p.z + fz) + 0.15, p.z + fz));
+        }
+      }
+    } else {
+      for (var f = 0; f <= freeArea.length; f++) {
+        var q = freeArea[f % freeArea.length];
+        if (!q) break;
+        pts.push(new T.Vector3(q.x, W.heightAt(q.x, q.z) + 0.15, q.z));
+      }
+    }
+    if (pts.length > 1) {
+      var g = new T.BufferGeometry().setFromPoints(pts);
+      scatPrev.add(new T.Line(g, scatPrev.userData.lm));
+    }
+    /* and a mark wherever something would stand */
+    var marks = scatterPoints(p, 1337);
+    var dot = new T.CylinderGeometry(0.34, 0.34, 0.08, 8);
+    marks.forEach(function (m) {
+      var mesh = new T.Mesh(dot, scatPrev.userData.dm);
+      mesh.position.set(m.x, W.heightAt(m.x, m.z) + 0.12, m.z);
+      mesh.userData.giz = true;
+      scatPrev.add(mesh);
+    });
+  }
+
   function editorStep(dt) {
     if (!document.hasFocus()) keys = {};
     if (hoverPending && hoverWork) { var hp = hoverPending; hoverPending = null; hoverWork(hp); }
@@ -971,6 +1114,12 @@
         gizHighlight(hov ? hov.part : null);
         renderer.domElement.style.cursor = hov ? 'move' : '';
       }
+      if (mode === 'scatter') {
+        var gp = groundPoint(e);
+        if (freeDrawing) { scatterPreview(gp); }
+        else scatterPreview(gp);
+        W.wake();
+      } else if (scatPrev && scatPrev.visible) { scatterPreview(null); }
       if (mode === 'place' && ghost) {
         var g = placePoint(e);
         if (g) {
@@ -1013,7 +1162,16 @@
       }
       if (e.button === 0 && mode === 'scatter' && !wasDrag) {
         var gs = groundPoint(e);
-        if (gs) scatterAt(gs);
+        if (gs) {
+          if (freeDrawing) {
+            freeArea.push({ x: gs.x, z: gs.z });
+            toast(freeArea.length + ' corner' + (freeArea.length === 1 ? '' : 's') +
+                  ' \u00b7 click Draw the area again to close it');
+            scatterPreview(gs);
+          } else {
+            scatterAt(gs);
+          }
+        }
       }
       if (marquee) { marqueeEnd(e); return; }
       if (dragStart && wasDrag) commitDrag();
@@ -1268,6 +1426,29 @@
       r.readAsText(f);
       e.target.value = '';
     };
+    /* the mound, sized to whatever palace is standing in the layout */
+    var mesaBtn = document.getElementById('mesa');
+    if (mesaBtn) mesaBtn.onclick = function () { mesaUnderQasr(); };
+
+    var shapeSel = document.getElementById('bShape');
+    if (shapeSel) shapeSel.onchange = function () {
+      var sh = shapeSel.value;
+      var rr = document.getElementById('rowRect'), rf = document.getElementById('rowFree');
+      if (rr) rr.style.display = (sh === 'rect') ? '' : 'none';
+      if (rf) rf.style.display = (sh === 'free') ? '' : 'none';
+    };
+    var fs = document.getElementById('bFreeStart');
+    if (fs) fs.onclick = function () {
+      freeDrawing = !freeDrawing;
+      if (freeDrawing) { freeArea.length = 0; toast('click round the ground to draw the area'); }
+      else toast(freeArea.length >= 3 ? 'area closed \u00b7 ' + freeArea.length + ' corners'
+                                      : 'need at least three corners');
+      fs.textContent = freeDrawing ? 'Close the area' : 'Draw the area';
+    };
+    var fc = document.getElementById('bFreeClear');
+    if (fc) fc.onclick = function () { freeArea.length = 0; freeDrawing = false;
+      if (fs) fs.textContent = 'Draw the area'; toast('area cleared'); };
+
     $('day').onclick = function () {
       W.setDaylight(!W.DAYLIGHT);
       $('day').textContent = W.DAYLIGHT ? 'Daylight' : 'Night';

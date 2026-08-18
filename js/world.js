@@ -195,6 +195,7 @@
      water) riding on top of whatever the world made - either path. Stored
      beside the layout, so a town and its hill travel together. */
   var LPATCH = null;
+  var shapeLandPatchLater = false;
   try {
     var lraw = JSON.parse(localStorage.getItem('amirat.layout.land'));
     if (lraw && lraw.n && lraw.elev && lraw.elev.length === lraw.n * lraw.n) {
@@ -203,7 +204,85 @@
       LPATCH.water = new Float32Array(lraw.water || new Array(lraw.n * lraw.n).fill(0));
     }
   } catch (e) { LPATCH = null; }
+  if (LPATCH) shapeLandPatchLater = true;
   W.LPATCH = LPATCH;
+  /* HIS ORDER for the ground he raised himself: keep it, but make the TOP
+     FLAT so the whole Qasr can stand on it, and let it fall away smoothly so
+     a wall can run round the bottom. A brush stroke leaves a lumpy dome; this
+     smooths the sides and then cuts the crown level, which is a mesa. */
+  function shapeLandPatch(lp) {
+    if (!lp || !lp.elev) return lp;
+    var n = lp.n, e = lp.elev;
+    var tmp = new Float32Array(e.length);
+    for (var pass = 0; pass < 4; pass++) {       /* the natural slope */
+      for (var v = 0; v < n; v++) {
+        for (var u = 0; u < n; u++) {
+          var sum = 0, cnt = 0;
+          for (var dv = -1; dv <= 1; dv++) {
+            for (var du = -1; du <= 1; du++) {
+              var uu = u + du, vv = v + dv;
+              if (uu < 0 || vv < 0 || uu >= n || vv >= n) continue;
+              sum += e[vv * n + uu]; cnt++;
+            }
+          }
+          tmp[v * n + u] = sum / cnt;
+        }
+      }
+      e.set(tmp);
+    }
+    var mx = 0;
+    for (var i = 0; i < e.length; i++) if (e[i] > mx) mx = e[i];
+    if (mx > 1.2) {
+      /* the crown is cut level a little below the peak, so the whole top is
+         one table and the sides keep the smooth fall the blur gave them */
+      var top = mx * 0.88;
+      for (var j = 0; j < e.length; j++) if (e[j] > top) e[j] = top;
+    }
+    lp.shaped = true;
+    return lp;
+  }
+  W.shapeLandPatch = shapeLandPatch;
+
+  /* HIS ORDER: one mound, under the Qasr, no bigger than it needs to be -
+     the whole palace standing on a level table with room to walk round it,
+     and the sides falling away smoothly enough that a wall can run round the
+     bottom. Built from numbers rather than brushed by hand, so the top is
+     dead flat and the fall is even the whole way round.
+
+       cx, cz   where the palace stands
+       topX/topZ  half the flat table, in metres
+       skirt    how far the ground takes to come down
+       h        how high the table stands */
+  W.mesaUnder = function (cx, cz, topX, topZ, skirt, h) {
+    var n = 128, size = 1200;
+    var lp = { n: n, size: size, elev: new Float32Array(n * n),
+               water: new Float32Array(n * n), shaped: true, mesa: true };
+    var step = size / (n - 1), hs = size / 2;
+    for (var v = 0; v < n; v++) {
+      var wz = -hs + v * step;
+      for (var u = 0; u < n; u++) {
+        var wx = -hs + u * step;
+        /* distance outside the flat table, measured as a rounded rectangle so
+           a long palace gets a long table rather than a circle round it */
+        var dx = Math.max(0, Math.abs(wx - cx) - topX);
+        var dz = Math.max(0, Math.abs(wz - cz) - topZ);
+        var d = Math.sqrt(dx * dx + dz * dz);
+        var t = d <= 0 ? 1 : (d >= skirt ? 0 : 1 - d / skirt);
+        /* smoothstep both ends: no crease at the rim, no lip at the foot */
+        t = t * t * (3 - 2 * t);
+        lp.elev[v * n + u] = h * t;
+      }
+    }
+    LPATCH = lp;
+    W.LPATCH = lp;
+    try { localStorage.setItem('amirat.layout.land', JSON.stringify({
+      n: n, size: size, elev: Array.from(lp.elev), water: Array.from(lp.water),
+      shaped: true, mesa: true
+    })); } catch (e) {}
+    if (W.touchTerrain) W.touchTerrain(cx, cz, topX + topZ + skirt + 60);
+    return lp;
+  };
+
   function lpatchAt(grid, x, z) {
     var n = LPATCH.n, hs = LPATCH.size / 2;
     var u = (x + hs) / LPATCH.size * (n - 1);
@@ -221,8 +300,12 @@
     if (!W.CLASSIC) {
       /* the fresh field: level ground with a long breathing swell, and his
          map as the one and only sculptor */
-      var hp = 6.0 + (fbm(x * 0.0011 + 3.7, z * 0.0011 - 8.1, 3) - 0.5) * 7.0
-                   + (fbm(x * 0.0060 - 1.9, z * 0.0060 + 4.2, 2) - 0.5) * 1.6;
+      /* HIS ORDER: the world is FLAT. It used to breathe - a seven-metre
+         swell over about a kilometre and a smaller one over a hundred metres
+         - which is the mound that turned up under the town for no reason
+         anyone asked for. The only things that shape the land now are his
+         map and his own brush. */
+      var hp = 6.0;
       if (MAPW) {
         var mep = mapAt(MAPW.elev, x, z) - 128;
         /* his mountains rise for real; his basins sink for real */
@@ -381,6 +464,9 @@
   };
 
   W.setLandPatch = function (lp) { LPATCH = lp; W.LPATCH = lp; };
+  /* the stroke the editor is painting stays raw while the hand is moving;
+     it is shaped when the world reads it */
+  if (shapeLandPatchLater && LPATCH && !LPATCH.shaped && !W.EDITOR) shapeLandPatch(LPATCH);
   W.heightAt = function (x, z) {
     var h = heightRaw(x, z);
     if (LPATCH) {
