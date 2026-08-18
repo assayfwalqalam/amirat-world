@@ -224,13 +224,23 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
     for wl in (back, left, right, front):
         weld(wl)
         out.append(wl)
-    # a patch or two of newer render, stuck on over the old
+    # a patch or two of newer render, stuck on over the old. NEVER over the
+    # doorway: a house-coloured slab across the door was exactly the owner's
+    # "the doors do not show" - the door was there, plastered over.
     for i in range(random.randint(1, 3)):
         if random.random() < 0.5:
-            out.append(patch(cx + random.uniform(-w * 0.32, w * 0.32),
-                             cy - d / 2 + T / 2 - 0.04,
-                             z0 + random.uniform(h * 0.2, h * 0.66),
-                             random.uniform(1.2, 2.8), random.uniform(0.9, 2.0), 'y'))
+            pw = random.uniform(1.2, 2.8)
+            ph2 = random.uniform(0.9, 2.0)
+            px = cx + random.uniform(-w * 0.32, w * 0.32)
+            pz = z0 + random.uniform(h * 0.2, h * 0.66)
+            if front_door:
+                clear = dw / 2 + pw / 2 + 0.35
+                if abs(px - dx) < clear and pz - ph2 / 2 < z0 + dh + 0.3:
+                    px = dx + clear * (1 if px >= dx else -1)
+                    px = max(cx - w / 2 + pw / 2 + 0.3, min(cx + w / 2 - pw / 2 - 0.3, px))
+                    if abs(px - dx) < dw / 2 + pw / 2 + 0.2:
+                        pz = z0 + dh + 0.5 + ph2 / 2
+            out.append(patch(px, cy - d / 2 + T / 2 - 0.04, pz, pw, ph2, 'y'))
         else:
             sgn = 1 if random.random() < 0.5 else -1
             out.append(patch(cx + sgn * (w / 2 - T / 2 + 0.04),
@@ -301,12 +311,30 @@ steps = 11
 rise = (top_z + 0.42) / steps
 run = 0.46
 SX = stair_side * (W / 2 + 0.68)
+# One continuous wedge of masonry under the flight - a comb of separate
+# blocks showed a straight seam falling from every tread. The diagonal is
+# cut from a single mass; thin tread caps give the stepped top; collision
+# stays per-step so the climb is true.
+y0 = -D / 2 + 0.9
+flight_len = steps * run
+body = solid(1.35, flight_len, top_z + 0.42,
+             (SX, y0 + (flight_len - run) / 2, (top_z + 0.42) / 2), False)
+ang = math.atan2(rise, run)
+cutter = solid(3.0, flight_len * 2.2, 8.0,
+               (SX, y0 + (flight_len - run) / 2, 0), False)
+cutter.rotation_euler[0] = ang
+bpy.context.view_layer.objects.active = cutter
+bpy.ops.object.transform_apply(rotation=True)
+ymid = y0 + (flight_len - run) / 2
+cutter.location = (SX, ymid,
+                   rise * ((ymid - y0) / run + 1.0) + 4.0 / math.cos(ang) + 0.02)
+cut(body, cutter)
+shell.append(body)
 for i in range(steps):
-    # each step is a solid block standing on the ground, not a floating tread,
-    # so the flight reads as the mass of masonry it would really be
     h = rise * (i + 1)
-    shell.append(solid(1.35, run, h,
-                       (SX, -D / 2 + 0.9 + i * run, h / 2)))
+    shell.append(solid(1.35, run * 1.03, 0.14, (SX, y0 + i * run, h - 0.07), False))
+    COLLIDERS.append({"c": [round(SX, 3), round(h / 2, 3), round(-(y0 + i * run), 3)],
+                      "h": [0.675, round(h / 2, 3), round(run / 2, 3)]})
 # the cheek wall that carries the flight, closing its open side
 timber.append(solid(0.22, steps * run, 0.55,
                     (SX + stair_side * 0.72, -D / 2 + 0.9 + (steps - 1) * run / 2, 0.3), False))
@@ -386,7 +414,8 @@ house.data.materials.append(mat)
 # about two buildings in five wear the banded pakhsa wall
 _w = (SEED * 2654435761) % 100
 # all six walls he approved: plain 24, banded 24, light 12, dark 14, darkdom 12, mix 14
-if _w < 24:   tex_name = "t_adobe_d.jpg"
+if _w < 18:   tex_name = "t_ashlar_d.jpg"   # the mosque's stone, his pick
+elif _w < 24: tex_name = "t_adobe_d.jpg"
 elif _w < 48: tex_name = "t_adobe2_d.jpg"
 elif _w < 60: tex_name = "t_adobe3_d.jpg"
 elif _w < 74: tex_name = "t_adobe4_d.jpg"

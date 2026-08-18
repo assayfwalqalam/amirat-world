@@ -215,19 +215,24 @@ for q in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
     cyl(0.16, 0.0, 0.8, (qx, qy, HH + 5.1), verts=8)
 
 # ---------------------------------------------------------- the minaret
+# SQUARE AND TIERED, by his picture: stepped ashlar tiers, a window in each,
+# cornice slabs between, an open gallery, the dome only as the cap.
 mx, my = -HW / 2 - 4.6, -HD / 2 - 4.6
-shaft = cyl(2.2, 2.6, 26, (mx, my, 13), verts=20, collide=True)
-erode(shaft, 1, 0.02, 0.04)
 box(6.4, 6.4, 3.0, (mx, my, 1.5))
-cyl(3.4, 3.4, 0.7, (mx, my, 26.4), verts=20)
-gal = cyl(2.6, 2.6, 2.4, (mx, my, 27.8), verts=18, collide=True)
-for i in range(12):
-    a = i * math.pi * 2 / 12
-    cyl(0.14, 0.14, 2.2, (mx + math.cos(a) * 3.0, my + math.sin(a) * 3.0, 27.6), verts=6)
-cyl(3.4, 3.4, 0.5, (mx, my, 28.9), verts=20)
-cyl(1.9, 2.1, 4.2, (mx, my, 31.2), verts=16)
-dome(2.0, (mx, my, 33.3))
-cyl(0.22, 0.0, 1.5, (mx, my, 35.4), verts=10)
+tz = 3.0
+for (tw, th) in ((4.3, 11.0), (3.5, 8.0), (2.8, 6.0)):
+    tier = box(tw, tw, th, (mx, my, tz + th / 2), collide=True)
+    arch_opening(tier, mx, my - tw / 2 + 0.01, tz + th * 0.62, 0.75, 1.5, tw + 1.2, 'y')
+    box(tw + 0.7, tw + 0.7, 0.5, (mx, my, tz + th + 0.25))
+    tz += th + 0.5
+gal = box(2.6, 2.6, 0.5, (mx, my, tz + 0.25), collide=True)
+for gx in (-1, 1):
+    for gy in (-1, 1):
+        box(0.22, 0.22, 2.3, (mx + gx * 1.05, my + gy * 1.05, tz + 1.55))
+box(2.9, 2.9, 0.45, (mx, my, tz + 2.9))
+cyl(1.15, 1.3, 1.6, (mx, my, tz + 3.9), verts=14)
+dome(1.35, (mx, my, tz + 4.9))
+cyl(0.2, 0.0, 1.3, (mx, my, tz + 6.6), verts=10)
 
 # ------------------------------------------------- the courtyard arcade
 CY = -HD / 2 - 17.0

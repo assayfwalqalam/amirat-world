@@ -127,6 +127,7 @@
   <button id="mSelect" class="on">Select</button>
   <button id="mPlace">Place</button>
   <button id="mScatter">Scatter</button>
+  <button id="mLand">Land</button>
   <div class="sep"></div>
   <button id="snapGrid" class="ghost">Grid off</button>
   <button id="snapGround" class="on">Sit on ground</button>
@@ -167,6 +168,10 @@
       <button id="row" style="flex:1">+ Row</button>
       <button id="del" style="flex:1">Delete</button>
     </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button id="grp" style="flex:1">Group</button>
+      <button id="ungrp" style="flex:1">Ungroup</button>
+    </div>
     <div class="phead" style="margin:10px -6px 0;border-top:1px solid var(--line)">Scatter</div>
     <div class="row"><label>Radius</label><input id="bR" type="number" step="1" value="16"></div>
     <div class="row"><label>How many</label><input id="bN" type="number" step="1" value="14"></div>
@@ -196,5 +201,22 @@
 <input id="file" type="file" accept="application/json" style="display:none">
 
 <script>document.write('<script src="js/bootedit.js?t=' + Date.now() + '"><\/script>')</script>
+<div id="landPanel" style="display:none;position:fixed;right:12px;top:64px;background:#1c1a17e6;border:1px solid #3a352e;border-radius:8px;padding:10px;width:230px;color:#d8cfc0;font:13px/1.5 system-ui;z-index:30">
+  <div style="font-weight:600;margin-bottom:6px">The Land</div>
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+    <button class="lb on" id="lbRaise">Raise</button>
+    <button class="lb" id="lbLower">Lower</button>
+    <button class="lb" id="lbSmooth">Smooth</button>
+    <button class="lb" id="lbFlat">Flatten</button>
+    <button class="lb" id="lbWater">Water</button>
+    <button class="lb" id="lbDry">Dry</button>
+  </div>
+  <label style="display:block">Brush <span id="lbRadV">18</span> m
+    <input id="lbRad" type="range" min="4" max="70" value="18" style="width:100%"></label>
+  <label style="display:block">Strength <span id="lbStrV">6</span>
+    <input id="lbStr" type="range" min="1" max="20" value="6" style="width:100%"></label>
+  <div style="margin-top:6px;opacity:.75">Paint on the ground. Mountains, valleys, rivers - the game grows them where you brush.</div>
+  <button id="lbReset" style="width:100%;margin-top:8px">Flatten everything back</button>
+</div>
 </body>
 </html>

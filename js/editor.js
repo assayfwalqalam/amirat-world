@@ -179,6 +179,7 @@
       else { SEL.push(rec); mark(rec); }
     }
     refreshPanel(); refreshList(); updateGizmo();
+    expandGroups();
   }
 
   /* ------------------------------------------------------------- gizmo
@@ -259,6 +260,26 @@
     return out;
   }
 
+  var GRPSEQ = 1;
+  function expandGroups() {
+    /* a group moves as one: selecting any member selects them all */
+    var want = {};
+    SEL.forEach(function (r) { if (r.grp) want[r.grp] = 1; });
+    PLACED.forEach(function (r) {
+      if (r.grp && want[r.grp] && SEL.indexOf(r) < 0) SEL.push(r);
+    });
+  }
+  function groupSel() {
+    if (SEL.length < 2) { toast('select at least two things to group'); return; }
+    var id = 'g' + (GRPSEQ++) + '_' + Date.now() % 100000;
+    SEL.forEach(function (r) { r.grp = id; });
+    refreshList(); toast('grouped ' + SEL.length + ' \u00b7 they move as one now');
+  }
+  function ungroupSel() {
+    var n = 0;
+    SEL.forEach(function (r) { if (r.grp) { r.grp = null; n++; } });
+    refreshList(); toast(n ? 'ungrouped ' + n : 'nothing grouped here');
+  }
   function selCentre() {
     if (!SEL.length) return null;
     var c = new T.Vector3();
@@ -405,6 +426,75 @@
     });
   }
 
+  /* --------------------------------------------------------- the land
+     His land modifier: paint the ground itself. A local grid rides over the
+     world's own terrain (world.js samples it inside heightAt); the brushes
+     raise, lower, smooth, flatten, wet and dry it; every stroke rebuilds
+     only the chunks it touched, and the whole grid saves with the town. */
+  var LAND = null, landBrush = 'raise', landRad = 18, landStr = 6;
+  var landStroke = null, landDirty = false;
+  function landInit() {
+    if (LAND) return;
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem('amirat.layout.land')); } catch (e) {}
+    if (raw && raw.n && raw.elev && raw.elev.length === raw.n * raw.n) {
+      LAND = { n: raw.n, size: raw.size,
+               elev: new Float32Array(raw.elev),
+               water: new Float32Array(raw.water || raw.n * raw.n) };
+    } else {
+      LAND = { n: 128, size: 1200,
+               elev: new Float32Array(128 * 128),
+               water: new Float32Array(128 * 128) };
+    }
+    W.setLandPatch(LAND);
+  }
+  function landSave() {
+    if (!LAND || !landDirty) return;
+    try {
+      localStorage.setItem('amirat.layout.land', JSON.stringify({
+        n: LAND.n, size: LAND.size,
+        elev: Array.from(LAND.elev, function (v) { return Math.round(v * 100) / 100; }),
+        water: Array.from(LAND.water, function (v) { return Math.round(v * 100) / 100; })
+      }));
+      landDirty = false;
+    } catch (e) { toast('the land would not save: ' + e.message); }
+  }
+  function landStamp(x, z) {
+    if (!LAND) return;
+    var n = LAND.n, hs = LAND.size / 2, cell = LAND.size / (n - 1);
+    var gx0 = Math.max(0, Math.floor((x - landRad + hs) / cell));
+    var gx1 = Math.min(n - 1, Math.ceil((x + landRad + hs) / cell));
+    var gz0 = Math.max(0, Math.floor((z - landRad + hs) / cell));
+    var gz1 = Math.min(n - 1, Math.ceil((z + landRad + hs) / cell));
+    var k = landStr * 0.05;
+    for (var gz = gz0; gz <= gz1; gz++) {
+      for (var gx = gx0; gx <= gx1; gx++) {
+        var wx = gx * cell - hs, wz = gz * cell - hs;
+        var d = Math.hypot(wx - x, wz - z);
+        if (d > landRad) continue;
+        var fall = Math.pow(1 - d / landRad, 1.6);
+        var i = gz * n + gx;
+        if (landBrush === 'raise') LAND.elev[i] += k * fall * 3.2;
+        else if (landBrush === 'lower') LAND.elev[i] -= k * fall * 3.2;
+        else if (landBrush === 'flat') LAND.elev[i] *= Math.max(0, 1 - fall * 0.35);
+        else if (landBrush === 'water') LAND.water[i] = Math.min(4, LAND.water[i] + k * fall * 2.0);
+        else if (landBrush === 'dry') LAND.water[i] = Math.max(0, LAND.water[i] - k * fall * 2.6);
+        else if (landBrush === 'smooth') {
+          var sum = 0, cnt = 0;
+          for (var oz = -1; oz <= 1; oz++) {
+            for (var ox = -1; ox <= 1; ox++) {
+              var j = (gz + oz) * n + (gx + ox);
+              if (j >= 0 && j < n * n) { sum += LAND.elev[j]; cnt++; }
+            }
+          }
+          LAND.elev[i] += (sum / cnt - LAND.elev[i]) * fall * 0.5;
+        }
+      }
+    }
+    landDirty = true;
+    W.touchTerrain(x, z, landRad + cell * 2);
+  }
+
   /* ---------------------------------------------------------- raycasting */
   var rc;
   function pointerRay(ev) {
@@ -425,6 +515,18 @@
       if (o) return { rec: o.userData.rec, point: hits[i].point };
     }
     return null;
+  }
+  function placePoint(ev) {
+    /* His order: things go where you point them - on a roof, a wall top, a
+       terrace - not only on the ground. A placed model hit wins; the ground
+       is the fallback. */
+    var hit = pickObject(ev);
+    var g = groundPoint(ev);
+    if (hit && (!g || pointerRay(ev).ray.origin.distanceTo(hit.point) <
+                      pointerRay(ev).ray.origin.distanceTo(g))) {
+      return new T.Vector3(hit.point.x, hit.point.y, hit.point.z);
+    }
+    return g;
   }
   function groundPoint(ev) {
     /* march the ray until it drops below the heightfield · works on any slope */
@@ -506,6 +608,8 @@
     $('mSelect').classList.toggle('on', m === 'select');
     $('mPlace').classList.toggle('on', m === 'place');
     var sb = $('mScatter'); if (sb) sb.classList.toggle('on', m === 'scatter');
+    var lb = $('mLand'); if (lb) lb.classList.toggle('on', m === 'land');
+    var lp = $('landPanel'); if (lp) lp.style.display = m === 'land' ? 'block' : 'none';
     if (m === 'select' && ghost) { ghost.visible = false; }
   }
 
@@ -574,6 +678,7 @@
     $('sc').value = fmt(one.sc);
   }
 
+  var listAnchor = null;
   function refreshList() {
     var box = $('objs');
     box.innerHTML = '';
@@ -581,9 +686,27 @@
     for (var i = PLACED.length - 1; i >= PLACED.length - n; i--) {
       (function (rec) {
         var e = document.createElement('div');
-        e.className = 'o' + (SEL.indexOf(rec) >= 0 ? ' sel' : '');
-        e.textContent = rec.key;
-        e.onclick = function (ev) { select(rec, ev.ctrlKey || ev.shiftKey); focusOn(rec); };
+        e.className = 'o' + (SEL.indexOf(rec) >= 0 ? ' sel' : '')
+                    + (rec.grp ? ' grp' : '');
+        e.textContent = (rec.grp ? '\u29c9 ' : '') + rec.key;
+        e.onclick = function (ev) {
+          if (ev.ctrlKey && listAnchor && listAnchor !== rec &&
+              PLACED.indexOf(listAnchor) >= 0) {
+            /* his range: hold control, click above or below - everything
+               between joins the selection, both ends included */
+            var i0 = PLACED.indexOf(listAnchor), i1 = PLACED.indexOf(rec);
+            var lo = Math.min(i0, i1), hi = Math.max(i0, i1);
+            for (var k = lo; k <= hi; k++) {
+              if (SEL.indexOf(PLACED[k]) < 0) SEL.push(PLACED[k]);
+            }
+            expandGroups();
+            remark(); updateGizmo(); refreshPanel(); refreshList();
+          } else {
+            select(rec, ev.shiftKey);
+            listAnchor = rec;
+            focusOn(rec);
+          }
+        };
         box.appendChild(e);
       })(PLACED[i]);
     }
@@ -602,14 +725,17 @@
   /* ------------------------------------------------------- save and load */
   function serialise() {
     return PLACED.map(function (p) {
-      return { k: p.key, p: [fmt(p.x), fmt(p.y), fmt(p.z)], r: fmt(p.rot), s: fmt(p.sc) };
+      var o2 = { k: p.key, p: [fmt(p.x), fmt(p.y), fmt(p.z)], r: fmt(p.rot), s: fmt(p.sc) };
+      if (p.grp) o2.g = p.grp;
+      return o2;
     });
   }
   function loadLayout(list, quiet) {
     PLACED.slice().forEach(removeRecord);
     SEL.length = 0;
     list.forEach(function (o) {
-      addObject(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, o.s === undefined ? 1 : o.s, true);
+      var r2 = addObject(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, o.s === undefined ? 1 : o.s, true);
+      if (r2 && o.g) r2.grp = o.g;
     });
     refreshList(); refreshPanel();
     if (!quiet) toast('loaded ' + list.length + ' objects');
@@ -709,10 +835,17 @@
         var gh = pickGizmo(e);
         if (gh) { beginGizDrag(e, gh); gizHighlight(gh.part); return; }
       }
+      if (e.button === 0 && mode === 'land') {
+        landInit();
+        var lg = groundPoint(e);
+        if (lg) { landStroke = { t: 0 }; landStamp(lg.x, lg.z); }
+        return;
+      }
       if (e.button === 0 && mode === 'select') {
         var hit = pickObject(e);
         if (hit) {
           if (SEL.indexOf(hit.rec) < 0) select(hit.rec, e.ctrlKey || e.shiftKey);
+          expandGroups();
           dragStart = {
             point: hit.point.clone(),
             recs: SEL.map(function (r) { return { r: r, x: r.x, y: r.y, z: r.z, rot: r.rot }; })
@@ -745,7 +878,7 @@
         else { renderer.domElement.style.cursor = ''; }
       }
       if (mode === 'place' && ghost) {
-        var g = groundPoint(e);
+        var g = placePoint(e);
         if (g) {
           if (runMode && runPrev && runPrev.obj) {
             /* the next slot butts against the last piece; the cursor only
@@ -773,15 +906,20 @@
         dragSelection(e);
         W.wake();
       }
+      if (mouse.down && mouse.btn === 0 && mode === 'land' && landStroke) {
+        var lg2 = groundPoint(e);
+        if (lg2) { landStamp(lg2.x, lg2.z); W.wake(); }
+      }
     });
 
     cv.addEventListener('pointerup', function (e) {
       cv.releasePointerCapture(e.pointerId);
       var wasDrag = mouse.moved > 6;
       mouse.down = false; mouse.look = false;
+      if (landStroke) { landStroke = null; landSave(); }
       if (gizDrag) { endGizDrag(); gizHighlight(null); return; }
       if (e.button === 0 && mode === 'place' && armed && !wasDrag) {
-        var g = (runMode && runSlot) ? runSlot : groundPoint(e);
+        var g = (runMode && runSlot) ? runSlot : placePoint(e);
         if (g) placeAt(armed, g);
       }
       if (e.button === 0 && mode === 'scatter' && !wasDrag) {
@@ -920,6 +1058,25 @@
   /* --------------------------------------------------------------- wire */
   function wireUI() {
     $('mSelect').onclick = function () { armed = null; setMode('select'); };
+    $('mLand').onclick = function () { landInit(); setMode('land'); };
+    ['Raise', 'Lower', 'Smooth', 'Flat', 'Water', 'Dry'].forEach(function (nm) {
+      $('lb' + nm).onclick = function () {
+        landBrush = nm.toLowerCase();
+        document.querySelectorAll('.lb').forEach(function (q) { q.classList.remove('on'); });
+        $('lb' + nm).classList.add('on');
+      };
+    });
+    $('lbRad').oninput = function () { landRad = +this.value; $('lbRadV').textContent = this.value; };
+    $('lbStr').oninput = function () { landStr = +this.value; $('lbStrV').textContent = this.value; };
+    $('lbReset').onclick = function () {
+      if (!LAND) landInit();
+      LAND.elev.fill(0); LAND.water.fill(0);
+      landDirty = true; landSave();
+      W.touchTerrain(0, 0, LAND.size);
+      toast('the land is flat again');
+    };
+    $('grp').onclick = groupSel;
+    $('ungrp').onclick = ungroupSel;
     $('mPlace').onclick = function () { setMode('place'); if (!armed) toast('pick an asset on the left'); };
     if ($('mScatter')) {
       $('mScatter').onclick = function () {

@@ -190,7 +190,34 @@
   W.mapGreen = MAPW ? function (x, z) { return mapAt(MAPW.green, x, z) / 255; } : null;
   W.MAPW = MAPW;
 
-  W.heightAt = function (x, z) {
+  /* ------------------------------------------- the editor's land patch
+     The land modifier: a local grid painted in the editor (raise, carve,
+     water) riding on top of whatever the world made - either path. Stored
+     beside the layout, so a town and its hill travel together. */
+  var LPATCH = null;
+  try {
+    var lraw = JSON.parse(localStorage.getItem('amirat.layout.land'));
+    if (lraw && lraw.n && lraw.elev && lraw.elev.length === lraw.n * lraw.n) {
+      LPATCH = lraw;
+      LPATCH.elev = new Float32Array(lraw.elev);
+      LPATCH.water = new Float32Array(lraw.water || new Array(lraw.n * lraw.n).fill(0));
+    }
+  } catch (e) { LPATCH = null; }
+  W.LPATCH = LPATCH;
+  function lpatchAt(grid, x, z) {
+    var n = LPATCH.n, hs = LPATCH.size / 2;
+    var u = (x + hs) / LPATCH.size * (n - 1);
+    var v = (z + hs) / LPATCH.size * (n - 1);
+    if (u < 0 || v < 0 || u > n - 1 || v > n - 1) return 0;
+    var u0 = Math.floor(u), v0 = Math.floor(v);
+    var u1 = Math.min(n - 1, u0 + 1), v1 = Math.min(n - 1, v0 + 1);
+    var fu = u - u0, fv = v - v0;
+    var a = grid[v0 * n + u0] * (1 - fu) + grid[v0 * n + u1] * fu;
+    var b2 = grid[v1 * n + u0] * (1 - fu) + grid[v1 * n + u1] * fu;
+    return a * (1 - fv) + b2 * fv;
+  }
+
+  var heightRaw = function (x, z) {
     if (!W.CLASSIC) {
       /* the fresh field: level ground with a long breathing swell, and his
          map as the one and only sculptor */
@@ -215,7 +242,7 @@
       }
       return hp;
     }
-    var b = W.biomeAt(x, z);
+    var b = W.biomeAt(x, z);   /* (old-world path continues below) */
     /* the land rides above the water table · only carved basins flood */
     var cont = fbm(x * 0.00055, z * 0.00055, 4);
     var h = (cont - 0.13) * 165;
@@ -349,6 +376,17 @@
         var sink = WATER_Y - 1.2 - sstep(120, 230, mw) * 5.5;
         h = lerp(h, Math.min(h, sink), shelf(wet));
       }
+    }
+    return h;
+  };
+
+  W.setLandPatch = function (lp) { LPATCH = lp; W.LPATCH = lp; };
+  W.heightAt = function (x, z) {
+    var h = heightRaw(x, z);
+    if (LPATCH) {
+      h += lpatchAt(LPATCH.elev, x, z);
+      var lw = lpatchAt(LPATCH.water, x, z);
+      if (lw > 0.5) h = Math.min(h, WATER_Y - 1.8 - lw * 2.2);
     }
     return h;
   };
@@ -998,6 +1036,19 @@
     });
   }
   W.vegVisible = vegVisible;
+
+  /* rebuild just the chunks a land brush touched - repainting the whole
+     country per stroke would freeze the hand */
+  W.touchTerrain = function (x, z, r) {
+    chunks.forEach(function (rec, key) {
+      var x0 = rec.ci * CH, z0 = rec.cj * CH;
+      if (x + r < x0 || x - r > x0 + CH || z + r < z0 || z - r > z0 + CH) return;
+      var seg = rec.seg;
+      disposeChunk(rec);
+      chunks.delete(key);
+      chunks.set(key, makeChunk(rec.ci, rec.cj, seg));
+    });
+  };
 
   function pumpChunks(budget) {
     var made = 0;

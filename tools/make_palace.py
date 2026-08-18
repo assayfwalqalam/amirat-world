@@ -21,6 +21,8 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 
 QSCALE = 1.4
 COLS = []
+DOORS = []
+FLIES = []
 
 
 def col(cx, cy, cz, hx, hy, hz):
@@ -265,9 +267,17 @@ def wood_window(cx, cy, z0, w, h, depth, face=(0, -1)):
 
 
 def door_leaves(cx, cy, z0, w, h, face=(0, -1), ajar=0.55, inset=0.16):
-    """A handsome double door: planked leaves with three gold straps and a
-    stud grid, hung at the jambs, standing ajar. Static for now - the swing
-    comes with the game-side hook."""
+    """The double door, recorded as DATA: the engine hangs the leaves and
+    swings them at a touch. Nothing static is baked any more."""
+    fl0 = math.hypot(face[0], face[1]) or 1.0
+    DOORS.append({"x": round(cx, 2), "z": round(-cy, 2), "y0": round(z0, 2),
+                  "w": round(w - inset * 2, 2), "h": round(h - 0.25, 2),
+                  "fx": round(face[0] / fl0, 3), "fz": round(-face[1] / fl0, 3)})
+    return
+
+
+def _door_leaves_retired(cx, cy, z0, w, h, face=(0, -1), ajar=0.55, inset=0.16):
+    """kept for reference"""
     fl = math.hypot(face[0], face[1]) or 1.0
     fx, fy = face[0] / fl, face[1] / fl
     yaw = math.atan2(fy, fx) + math.pi / 2
@@ -373,13 +383,15 @@ def minaret(cx, cy, htot):
     for bz in (htot * 0.42, htot * 0.62):
         cyl(r * 1.45, 0.9, (cx, cy, 2.2 + bz), stone, verts=16)
         cyl(r * 1.28, 1.6, (cx, cy, 2.2 + bz + 1.2), stone, verts=16)
-    cyl(0.55, shaft_h, (cx, cy, 2.2 + shaft_h / 2), stone, verts=12)
-    n_steps = int(shaft_h / 0.30)
+    box(4.6, 4.6, 0.4, (cx, cy, 0.2), stone)
+    col(cx, cy, 0.2, 2.3, 2.3, 0.2)
+    cyl(0.55, shaft_h + 1.8, (cx, cy, 0.4 + (shaft_h + 1.8) / 2), stone, verts=12)
+    n_steps = int((shaft_h + 1.6) / 0.30)
     for i in range(n_steps):
         a = i * 0.42 - math.pi / 2
         sx_ = cx + math.cos(a) * 1.45
         sy_ = cy + math.sin(a) * 1.45
-        sz2 = 2.2 + i * 0.30
+        sz2 = 0.62 + i * 0.30
         box(1.7, 0.72, 0.22, (sx_, sy_, sz2), stone, yaw=a + math.pi / 2)
         col(sx_, sy_, sz2, 0.85, 0.85, 0.12)
     cyl(r * 1.1, 0.8, (cx, cy, lz), stone, verts=16)
@@ -403,7 +415,9 @@ z7 = z6 + S6_H
 
 # S1 - THE GATE AND THE HALL (real interior; the door is open)
 box(48, 36, 2.0, (0, 0, 1.0), stone)
+col(0, 0, 1.0, 24, 18, 1.0)
 box(46, 34, 0.6, (0, 0, 2.05), stone)
+col(0, 0, 2.05, 23, 17, 0.3)
 WT = 1.7
 for sxw in (-1, 1):
     box(20.4, WT, S1_H - 2.3, (sxw * (2.8 + 10.2), 17 - WT / 2, 2.3 + (S1_H - 2.3) / 2), stone)
@@ -444,6 +458,10 @@ for i, (mw, mh) in enumerate(((7.6, 13.4), (6.4, 12.4), (5.2, 11.4))):
     arch(0, -21.6 + 0.5 * i, 0.6, mw, mh, 0.6, stone, frame=0.58, lit=None)
 arch(0, -19.9, 0.6, 5.6, 9.2, 0.7, stone, frame=0.5, lit=None)
 door_leaves(0, -19.6, 2.35, 5.0, 6.8, face=(0, -1), ajar=0.72)
+# the landing: the strip between the top tread and the plinth had no floor -
+# the very hole he fell into under the entrance door
+box(9.4, 3.0, 2.35, (0, -19.3, 2.35 / 2), stone)
+col(0, -19.3, 2.35 / 2, 4.7, 1.5, 2.35 / 2)
 # the grand stair: the hall floor stood 2.35 m above the approach with
 # nothing to climb - eight solid treads from the ground to the gate
 for i_st in range(8):
@@ -572,8 +590,10 @@ def module(cx, cy, face, gate=False):
     ceil_z = W1 - 0.9                           # room ceiling underside
     sx_, sy_ = sized(w_hx * 2 + 1.4, w_hy * 2 + 1.4)
     box(sx_, sy_, 1.6, (cx, cy, 0.8), stone)                       # plinth
+    col(cx, cy, 0.8, sx_ / 2, sy_ / 2, 0.8)
     fx_, fy_ = sized(w_hx * 2, w_hy * 2)
     box(fx_, fy_, 0.5, (cx, cy, 1.55 + 0.25), stone)               # room floor
+    col(cx, cy, 1.8, fx_ / 2, fy_ / 2, 0.25)
     box(fx_, fy_, 0.9, (cx, cy, ceil_z + 0.45), stone)             # ceiling
     # side walls (the two along-walls)
     for sa in (-1, 1):
@@ -717,6 +737,9 @@ def corner_tower(cx, cy):
         col(cx + math.cos(a8) * 8.4, cy + math.sin(a8) * 8.4, 2.0 + droom_h / 2,
             seg_w / 2 + 0.1, seg_w / 2 + 0.1, droom_h / 2)
     box(16, 16, 0.5, (cx, cy, 2.05), stone)
+    col(cx, cy, 2.05, 8, 8, 0.3)
+    cyl(10.2, 2.0, (cx, cy, 1.0), stone, verts=8, smooth=False)
+    col(cx, cy, 1.0, 7.2, 7.2, 1.0)
     arch(cx + math.cos(da) * 9.0, cy + math.sin(da) * 9.0, 2.0, 2.6, 4.2, 1.0,
          stone, frame=0.45, lit=None, face=(math.cos(da), math.sin(da)))
     door_leaves(cx + math.cos(da) * 8.6, cy + math.sin(da) * 8.6, 2.0, 2.3, 3.6,
@@ -754,11 +777,11 @@ def connector(x0, y0, x1, y1, h=7.5):
 for sxm in (-1, 1):
     for i in range(3):
         module(sxm * (38 + 30 * i), 0, (0, -1), gate=(i == 0))
-for i in range(4):
-    for sxm in (-1, 1):
-        module(sxm * 100, 30 + 30 * i, (sxm, 0))
 for i in range(5):
-    module(-60 + 30 * i, 120, (0, 1), gate=(i == 2))
+    for sxm in (-1, 1):
+        module(sxm * 100, 12 + 30 * i, (sxm, 0))
+for i in range(7):
+    module(-90 + 30 * i, 120, (0, 1), gate=(i == 3))
 
 for sxm in (-1, 1):
     corner_tower(sxm * 109, -19)
@@ -772,8 +795,9 @@ for sxm in (-1, 1):
     connector(sxm * 23, 133, sxm * 23, 138)
 
 # ============================================================ THE COURT
-# paved now, not bare ground
+# paved now, not bare ground - and SOLID
 box(174, 90, 0.5, (0, 62, 2.25), stone)
+col(0, 62, 2.25, 87, 45, 0.25)
 RW_D = 5.5
 
 def riwaq_run(x0, y0, x1, y1, face):
@@ -828,17 +852,15 @@ for (ax_, ay_, az_, br_) in SPARK_ANCHORS:
         a = random.uniform(0, 6.283)
         el = random.uniform(-0.15, 0.9)
         rr = br_ * random.uniform(1.35, 2.3)
-        px = ax_ + math.cos(a) * math.cos(el) * rr
-        py = ay_ + math.sin(a) * math.cos(el) * rr
-        pz = az_ + math.sin(el) * rr + random.uniform(0, br_ * 0.5)
-        sphere(random.uniform(0.10, 0.20), (px, py, pz),
-               spark if random.random() < 0.62 else sparkv, seg=6, rings=4)
+        FLIES.append({"x": round(ax_ + math.cos(a) * math.cos(el) * rr, 2),
+                      "z": round(-(ay_ + math.sin(a) * math.cos(el) * rr), 2),
+                      "y": round(az_ + math.sin(el) * rr + random.uniform(0, br_ * 0.5), 2),
+                      "c": 0 if random.random() < 0.62 else 1})
 for i in range(46):
-    px = random.uniform(-80, 80)
-    py = random.uniform(26, 98)
-    pz = random.uniform(3.6, 12.0)
-    sphere(random.uniform(0.09, 0.17), (px, py, pz),
-           spark if random.random() < 0.55 else sparkv, seg=6, rings=4)
+    FLIES.append({"x": round(random.uniform(-80, 80), 2),
+                  "z": round(-random.uniform(26, 98), 2),
+                  "y": round(random.uniform(3.6, 12.0), 2),
+                  "c": 0 if random.random() < 0.55 else 1})
 
 # ============================================================ MATERIALS
 def make_mesh(pool, base, rough, metal, tex=None, tint=None, emis=None, estr=0.5, uvs=6.0):
@@ -896,7 +918,7 @@ def make_mesh(pool, base, rough, metal, tex=None, tint=None, emis=None, estr=0.5
 
 parts = []
 parts.append(make_mesh(stone, (0.86, 0.82, 0.74, 1), 0.72, 0.0,
-                       tex="t_ashlar_d.jpg", tint=(1.42, 1.34, 1.18, 1), uvs=6.0))
+                       tex="t_ashlar_d.jpg", tint=(1.56, 1.47, 1.24, 1), uvs=6.0))
 parts.append(make_mesh(gold, (1.0, 0.78, 0.28, 1), 0.20, 0.85,
                        emis=(0.62, 0.44, 0.13, 1), estr=0.75))
 parts.append(make_mesh(wood, (0.52, 0.38, 0.24, 1), 0.85, 0.0,
@@ -941,4 +963,14 @@ bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
 
 with open(os.path.splitext(OUT)[0] + ".col.json", "w") as f:
     json.dump({"boxes": COLS}, f)
-print("WROTE", OUT)
+for dd in DOORS:
+    for k in ("x", "z", "y0", "w", "h"):
+        dd[k] = round(dd[k] * QSCALE, 2)
+for ff in FLIES:
+    for k in ("x", "y", "z"):
+        ff[k] = round(ff[k] * QSCALE, 2)
+with open(os.path.splitext(OUT)[0] + ".door.json", "w") as f:
+    json.dump({"doors": DOORS}, f)
+with open(os.path.splitext(OUT)[0] + ".fx.json", "w") as f:
+    json.dump({"fireflies": FLIES}, f)
+print("WROTE", OUT, "doors", len(DOORS), "flies", len(FLIES))

@@ -85,42 +85,44 @@ if STYLE == "square":
     cyl(0.12, 0.0, 1.6, (0, 0, zs + 1.35 * 1.1 + 0.8), verts=8)
 
 elif STYLE == "round":
-    H = 22.0
-    base = box(3.4, 3.4, 2.6, (0, 0, 1.3), collide=True)
-    sh = cyl(1.5, 1.1, H, (0, 0, 2.6 + H / 2), verts=24, collide=True)
-    z1 = 2.6 + H
-    cyl(1.9, 1.9, 0.55, (0, 0, z1 + 0.27), verts=24)
-    gal = cyl(1.25, 1.25, 2.3, (0, 0, z1 + 1.7), verts=18, collide=True)
-    for i in range(8):
-        a = i * math.pi / 4
-        cut(gal, 0.5, 0.5, 1.4, (math.cos(a) * 1.25, math.sin(a) * 1.25, z1 + 1.9))
-    for i in range(10):
-        a = i * math.pi / 5
-        cyl(0.07, 0.07, 1.5, (math.cos(a) * 1.7, math.sin(a) * 1.7, z1 + 1.3), verts=6)
-    cyl(1.9, 1.9, 0.4, (0, 0, z1 + 3.0), verts=24)
-    cyl(1.0, 0.8, 2.6, (0, 0, z1 + 4.6), verts=16)
-    dome(1.05, (0, 0, z1 + 5.9), 16, 1.15)
-    cyl(0.1, 0.0, 1.5, (0, 0, z1 + 5.9 + 1.15 + 0.75), verts=8)
+    # His order: no more round shafts. This kind is now a TALL SLENDER
+    # square-tier minaret - four tiers, a window near each head, the
+    # gallery posts square, the dome only a cap.
+    zs = 0.0
+    box(4.6, 4.6, 2.2, (0, 0, 1.1), collide=True)
+    zs = 2.2
+    for (w, h) in ((3.2, 9.5), (2.7, 6.5), (2.2, 4.8), (1.8, 3.2)):
+        t = box(w, w, h, (0, 0, zs + h / 2), collide=True)
+        cut(t, 0.62, w + 1, 1.25, (0, 0, zs + h - 1.05))
+        box(w + 0.36, w + 0.36, 0.36, (0, 0, zs + h + 0.18))
+        zs += h + 0.36
+    for gx in (-1, 1):
+        for gy in (-1, 1):
+            box(0.18, 0.18, 1.9, (gx * 0.75, gy * 0.75, zs + 1.15))
+    box(2.1, 2.1, 0.4, (0, 0, zs + 2.3))
+    dome(1.0, (0, 0, zs + 2.5), 16, 1.1)
+    cyl(0.1, 0.0, 1.4, (0, 0, zs + 2.5 + 1.1 + 0.7), verts=8)
 
-else:                       # octagon with twin galleries
-    H1, H2 = 14.0, 7.0
-    base = box(3.8, 3.8, 3.0, (0, 0, 1.5), collide=True)
-    s1 = cyl(1.7, 1.35, H1, (0, 0, 3.0 + H1 / 2), verts=8, collide=True)
-    z1 = 3.0 + H1
-    cyl(2.1, 2.1, 0.5, (0, 0, z1 + 0.25), verts=8)
-    for i in range(8):
-        a = i * math.pi / 4 + math.pi / 8
-        cyl(0.07, 0.07, 1.3, (math.cos(a) * 1.85, math.sin(a) * 1.85, z1 + 0.95), verts=6)
-    cyl(2.1, 2.1, 0.32, (0, 0, z1 + 1.7), verts=8)
-    s2 = cyl(1.25, 1.0, H2, (0, 0, z1 + 1.9 + H2 / 2), verts=8, collide=True)
-    z2 = z1 + 1.9 + H2
-    cyl(1.6, 1.6, 0.4, (0, 0, z2 + 0.2), verts=8)
-    for i in range(8):
-        a = i * math.pi / 4 + math.pi / 8
-        cyl(0.06, 0.06, 1.1, (math.cos(a) * 1.42, math.sin(a) * 1.42, z2 + 0.75), verts=6)
-    cyl(1.6, 1.6, 0.3, (0, 0, z2 + 1.35), verts=8)
-    dome(0.95, (0, 0, z2 + 1.6), 14, 1.2)
-    cyl(0.09, 0.0, 1.4, (0, 0, z2 + 1.6 + 0.95 * 1.2 + 0.7), verts=8)
+else:
+    # The octagon kind is square-tiered now too - broader, TWIN galleries
+    # kept as two post rings between the tiers.
+    zs = 0.0
+    box(5.4, 5.4, 2.6, (0, 0, 1.3), collide=True)
+    zs = 2.6
+    for ti, (w, h) in enumerate(((4.0, 10.0), (3.2, 6.0))):
+        t = box(w, w, h, (0, 0, zs + h / 2), collide=True)
+        cut(t, 0.72, w + 1, 1.35, (0, 0, zs + h - 1.15))
+        box(w + 0.5, w + 0.5, 0.45, (0, 0, zs + h + 0.22))
+        zs += h + 0.45
+        for gx in (-1, 1):
+            for gy in (-1, 1):
+                box(0.2, 0.2, 1.6, (gx * (w / 2 - 0.2), gy * (w / 2 - 0.2), zs + 0.95))
+        box(w + 0.1, w + 0.1, 0.35, (0, 0, zs + 1.9))
+        zs += 2.1
+    box(2.4, 2.4, 3.6, (0, 0, zs + 1.8), collide=True)
+    zs += 3.6
+    dome(1.2, (0, 0, zs), 16, 1.15)
+    cyl(0.1, 0.0, 1.5, (0, 0, zs + 1.15 * 1.2 + 0.75), verts=8)
 
 
 # ------------------------------------------------------------- assemble

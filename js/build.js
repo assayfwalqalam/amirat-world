@@ -482,16 +482,79 @@
   /* Buildings made in Blender arrive with a collision file listing every solid
      box in them. We use those directly, so parapets lift you, stairs step true,
      and nothing has an invisible margin. */
-  var COLJSON = {}, SPOTJSON = {};
+  var COLJSON = {}, SPOTJSON = {}, DOORJSON = {}, FXJSON = {};
   function loadCollision(name) {
-    return fetch(W.bust('assets/models/' + name + '.col.json'))
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        if (!j) return;
-        COLJSON[name] = j.boxes;
-        if (j.spots) SPOTJSON[name] = j.spots;
-      })
-      .catch(function () {});
+    return Promise.all([
+      fetch(W.bust('assets/models/' + name + '.col.json'))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j) return;
+          COLJSON[name] = j.boxes;
+          if (j.spots) SPOTJSON[name] = j.spots;
+        })
+        .catch(function () {}),
+      fetch(W.bust('assets/models/' + name + '.door.json'))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.doors) DOORJSON[name] = j.doors; })
+        .catch(function () {}),
+      fetch(W.bust('assets/models/' + name + '.fx.json'))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.fireflies) FXJSON[name] = j.fireflies; })
+        .catch(function () {})
+    ]);
+  }
+
+  /* ------------------------------------------- doors and fireflies that a
+     placed MODEL brings with it: the qasr's thirty-five swinging doors, its
+     drifting lights. Exported as sidecar data by the generator. */
+  var FIREFLIES = [], flyMats = null;
+  function spawnModelDoors(name, bx, by, bz, brot, scale) {
+    var defs = DOORJSON[name];
+    if (!defs) return;
+    var c = Math.cos(brot), s2 = Math.sin(brot);
+    for (var i = 0; i < defs.length; i++) {
+      var dd = defs[i];
+      var wx = bx + (dd.x * scale) * c + (dd.z * scale) * s2;
+      var wz = bz - (dd.x * scale) * s2 + (dd.z * scale) * c;
+      var fx = dd.fx * c + dd.fz * s2;
+      var fz = -dd.fx * s2 + dd.fz * c;
+      /* the leaf runs along the wall: rot maps +x to (cos, -sin) */
+      var tx = -fz, tz = fx;
+      var rot = Math.atan2(-tz, tx);
+      var w2 = dd.w * scale / 2, hh = dd.h * scale;
+      var dl = door(wx - tx * w2, by + dd.y0 * scale, wz - tz * w2, w2, hh, rot);
+      var dr2 = door(wx + tx * w2, by + dd.y0 * scale, wz + tz * w2, w2, hh, rot + Math.PI);
+      if (dr2) dr2.dir = 1;
+      if (dl) dl.dir = -1;
+    }
+  }
+  function spawnModelFx(name, bx, by, bz, brot, scale) {
+    var defs = FXJSON[name];
+    if (!defs) return;
+    if (!flyMats) {
+      var mkm = function (hex) {
+        return new T.SpriteMaterial({
+          map: W.tex('assets/glow.png', true), color: hex, transparent: true,
+          opacity: 0.85, blending: T.AdditiveBlending, depthWrite: false
+        });
+      };
+      flyMats = [mkm(0xffd28a), mkm(0xc890ef)];
+    }
+    var c = Math.cos(brot), s2 = Math.sin(brot);
+    for (var i = 0; i < defs.length; i++) {
+      var ff = defs[i];
+      var wx = bx + (ff.x * scale) * c + (ff.z * scale) * s2;
+      var wz = bz - (ff.x * scale) * s2 + (ff.z * scale) * c;
+      var sp = new T.Sprite(flyMats[ff.c ? 1 : 0].clone());
+      var sc3 = 0.55 + hashU((i * 7919) | 0) * 0.5;
+      sp.scale.set(sc3, sc3, 1);
+      sp.position.set(wx, by + ff.y * scale, wz);
+      W.scene.add(sp);
+      FIREFLIES.push({ s: sp, x: wx, y: by + ff.y * scale, z: wz,
+                       p1: hashU((i * 131) | 0) * 6.283,
+                       p2: hashU((i * 733) | 0) * 6.283,
+                       p3: hashU((i * 1543) | 0) * 6.283 });
+    }
   }
   function placeBuilt(name, x, y, z, rot, scale) {
     var g = place(name, x, y, z, null, rot, false, 'raw', scale);
@@ -2456,9 +2519,17 @@
       lp.g.lookAt(cp);
       lp.g.material.opacity = 0.5 + 0.16 * lp.lit;
     }
+    for (var fy2 = 0; fy2 < FIREFLIES.length; fy2++) {
+      var fl2 = FIREFLIES[fy2];
+      fl2.s.position.set(
+        fl2.x + Math.sin(t * 0.31 + fl2.p1) * 1.35,
+        fl2.y + Math.sin(t * 0.22 + fl2.p2) * 0.85,
+        fl2.z + Math.cos(t * 0.27 + fl2.p3) * 1.35);
+      fl2.s.material.opacity = 0.55 + 0.35 * Math.sin(t * 1.7 + fl2.p1 * 3.0);
+    }
     for (var d2 = 0; d2 < doors.length; d2++) {
       var dr = doors[d2];
-      var target = dr.open ? -1.95 : 0;
+      var target = dr.open ? (dr.dir || -1) * 1.95 : 0;
       dr.ang += (target - dr.ang) * Math.min(1, dt * 4.6);
       if (dr.rot0 === undefined) dr.rot0 = dr.pivot.rotation.y;
       dr.pivot.rotation.y = dr.rot0 + dr.ang;
@@ -2481,6 +2552,8 @@
           made++;
           /* doors, torch brackets and props hang off the exported spots */
           dressBuilding(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc, idx * 131 + 7);
+          spawnModelDoors(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc);
+          spawnModelFx(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc);
         }
       });
       W.diag('');
