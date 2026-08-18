@@ -228,9 +228,26 @@ def arch(cx, cy, z0, w, h, depth, pool, frame=0.55, face=(0, -1), lit=True):
         part(seg_l, depth, frame, (x0 + x1) / 2, 0, (r0 + r1) / 2, pool,
              tilt=math.atan2(r0 - r1, x1 - x0))
     if lit is not None:
-        ph = h * 0.97 - frame * 0.3
-        part(w - frame * 1.3, 0.25, ph, 0, -depth * 0.5 + 0.24,
-             z0 + ph / 2 + frame * 0.15, glow if lit else stone)
+        if lit:
+            # His order: no bright panels - windows are EMPTY, screened by an
+            # Arabian lattice. Turned-wood bars fill the opening to just below
+            # the spring of the arch; the pointed head stays open dark.
+            gw = w - frame * 1.3
+            gh = jh + (h - jh) * 0.45 - frame * 0.2
+            ly = -depth * 0.5 + 0.30
+            nv = max(2, int(gw / 0.30))
+            for iv in range(1, nv):
+                lx = -gw / 2 + gw * iv / nv
+                part(0.065, 0.065, gh, lx, ly, z0 + gh / 2 + 0.05, wood)
+            nh = max(2, int(gh / 0.50))
+            for ih in range(1, nh):
+                part(gw, 0.055, 0.055, 0, ly, z0 + gh * ih / nh + 0.05, wood)
+            # the sill ties the screen into the stone
+            part(gw + frame * 0.6, 0.35, 0.18, 0, ly, z0 + 0.02, pool)
+        else:
+            ph = h * 0.97 - frame * 0.3
+            part(w - frame * 1.3, 0.25, ph, 0, -depth * 0.5 + 0.24,
+                 z0 + ph / 2 + frame * 0.15, stone)
 
 
 def wood_window(cx, cy, z0, w, h, depth, face=(0, -1)):
