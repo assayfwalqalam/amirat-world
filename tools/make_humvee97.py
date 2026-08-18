@@ -177,14 +177,14 @@ for ay in (ax_f, ax_r):
         wedge(0.17, 0.55, 0.12, (sx * (W / 2 + 0.04), ay - TYRE_R - 0.36, TYRE_R + 0.27), BODY, 0.55, axis=0)
         # the wheel: tyre, chevron tread, rim dish, twelve bolts, hub
         wx = sx * (TRACK / 2 + 0.10)
-        cyl(TYRE_R, TYRE_W, (wx, ay, TYRE_R), TYRE, rot=(0, math.pi / 2, 0), verts=28)
+        cyl(TYRE_R, TYRE_W, (wx, ay, TYRE_R), TYRE, rot=(0, math.pi / 2, 0), verts=44)
         for tb in range(28):
             a = tb / 28 * 2 * math.pi
             box(TYRE_W + 0.015, 0.055, 0.05,
                 (wx, ay + math.cos(a) * (TYRE_R - 0.008), TYRE_R + math.sin(a) * (TYRE_R - 0.008)),
                 TYRE, yaw=0)
         cyl(TYRE_R * 0.58, 0.06, (wx + sx * (TYRE_W / 2 - 0.02), ay, TYRE_R), RIM,
-            rot=(0, math.pi / 2, 0), verts=20)
+            rot=(0, math.pi / 2, 0), verts=30)
         for bb in range(12):
             a2 = bb / 12 * 2 * math.pi
             cyl(0.022, 0.05, (wx + sx * (TYRE_W / 2 + 0.005),

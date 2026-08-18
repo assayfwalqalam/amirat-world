@@ -930,8 +930,12 @@ parts.append(make_mesh(water, (0.22, 0.34, 0.48, 1), 0.12, 0.0,
                        emis=(0.16, 0.26, 0.38, 1), estr=0.35))
 # THE SAPPHIRE: deep blue-violet with a light pink breath, and the faint
 # even inner glow of an ore block - luminous, never a lamp
-parts.append(make_mesh(sapph, (0.34, 0.18, 0.52, 1), 0.34, 1.0,
-                       emis=(0.30, 0.15, 0.38, 1), estr=0.30))
+# HIS BLENDING ORDER: the candy metal sat apart from the sandy stone and
+# the night. The violet stays, but as WEATHERED stone-metal: desaturated
+# toward the night sky, matte enough to hold moonlight instead of throwing
+# it, the inner glow down to a breath. A dome that belongs to its place.
+parts.append(make_mesh(sapph, (0.27, 0.21, 0.38, 1), 0.44, 0.70,
+                       emis=(0.20, 0.15, 0.28, 1), estr=0.20))
 parts.append(make_mesh(spark, (1.0, 0.9, 0.7, 1), 0.9, 0.0,
                        emis=(1.0, 0.82, 0.52, 1), estr=4.0))
 parts.append(make_mesh(sparkv, (0.9, 0.7, 1.0, 1), 0.9, 0.0,

@@ -411,16 +411,17 @@ bsdf.inputs["Roughness"].default_value = 1.0
 house.data.materials.clear()
 house.data.materials.append(mat)
 
-# about two buildings in five wear the banded pakhsa wall
+# HIS ORDER 2026-08-18: every house wears the brick-stone. The texture is
+# one; the COLOUR still varies house to house, as before, through a tint
+# multiplied over the stone.
+tex_name = "t_ashlar_d.jpg"
 _w = (SEED * 2654435761) % 100
-# all six walls he approved: plain 24, banded 24, light 12, dark 14, darkdom 12, mix 14
-if _w < 18:   tex_name = "t_ashlar_d.jpg"   # the mosque's stone, his pick
-elif _w < 24: tex_name = "t_adobe_d.jpg"
-elif _w < 48: tex_name = "t_adobe2_d.jpg"
-elif _w < 60: tex_name = "t_adobe3_d.jpg"
-elif _w < 74: tex_name = "t_adobe4_d.jpg"
-elif _w < 86: tex_name = "t_adobe5_d.jpg"
-else:         tex_name = "t_adobe6_d.jpg"
+if _w < 20:   TINT = (1.14, 1.02, 0.86, 1)     # warm sand
+elif _w < 38: TINT = (1.24, 1.20, 1.10, 1)     # pale bone
+elif _w < 54: TINT = (1.12, 0.86, 0.70, 1)     # rosy earth
+elif _w < 70: TINT = (0.84, 0.84, 0.86, 1)     # cool grey
+elif _w < 86: TINT = (1.22, 1.06, 0.72, 1)     # gold dust
+else:         TINT = (0.66, 0.64, 0.62, 1)     # smoke-dark
 tex_path = os.path.abspath(os.path.join(ASSETS, tex_name))
 if not os.path.exists(tex_path):
     tex_path = os.path.abspath(os.path.join(ASSETS, "t_adobe_d.jpg"))
@@ -430,7 +431,14 @@ if os.path.exists(tex_path):
     tn = nt.nodes.new('ShaderNodeTexImage')
     tn.image = img_tex
     tn.location = (-700, 300)
-    nt.links.new(tn.outputs['Color'], bsdf.inputs['Base Color'])
+    # the house's own colour rides over the shared stone
+    tmix = nt.nodes.new('ShaderNodeMixRGB')
+    tmix.blend_type = 'MULTIPLY'
+    tmix.inputs['Fac'].default_value = 1.0
+    tmix.inputs['Color2'].default_value = TINT
+    tmix.location = (-480, 300)
+    nt.links.new(tn.outputs['Color'], tmix.inputs['Color1'])
+    nt.links.new(tmix.outputs['Color'], bsdf.inputs['Base Color'])
 else:
     print("no adobe texture at", tex_path)
     bsdf.inputs["Base Color"].default_value = (0.82, 0.69, 0.50, 1)

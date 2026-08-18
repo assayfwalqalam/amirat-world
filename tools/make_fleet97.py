@@ -124,12 +124,12 @@ def export(parts, name, colliders, blend, slump=None):
 
 # =========================================================== the Land Rover
 def wheel_lr(GRN, TYRE, BLACK, wx, ay, r=0.375, w=0.21, sx=1):
-    cyl(r, w, (wx, ay, r), TYRE, rot=(0, math.pi / 2, 0), verts=24)
+    cyl(r, w, (wx, ay, r), TYRE, rot=(0, math.pi / 2, 0), verts=40)
     for tb in range(22):
         a = tb / 22 * 2 * math.pi
         box(w + 0.012, 0.045, 0.04,
             (wx, ay + math.cos(a) * (r - 0.006), r + math.sin(a) * (r - 0.006)), TYRE)
-    cyl(r * 0.55, 0.05, (wx + sx * (w / 2 - 0.015), ay, r), GRN, rot=(0, math.pi / 2, 0), verts=18)
+    cyl(r * 0.55, 0.05, (wx + sx * (w / 2 - 0.015), ay, r), GRN, rot=(0, math.pi / 2, 0), verts=28)
     for bb in range(5):
         a2 = bb / 5 * 2 * math.pi
         cyl(0.02, 0.045, (wx + sx * (w / 2 + 0.005), ay + math.cos(a2) * r * 0.30,
@@ -316,11 +316,11 @@ def build_technical(burnt=False):
                 cyl(0.08, 0.13, (-(TR / 2 + 0.12), ay, 0.15), BLACK, rot=(0, math.pi / 2, 0), verts=10)
                 continue
             wx = sx * (TR / 2 + 0.12)
-            cyl(R, 0.22, (wx, ay, R), TYRE, rot=(0, math.pi / 2, 0), verts=24)
+            cyl(R, 0.22, (wx, ay, R), TYRE, rot=(0, math.pi / 2, 0), verts=40)
             for tb in range(20):
                 a = tb / 20 * 2 * math.pi
                 box(0.235, 0.04, 0.038, (wx, ay + math.cos(a) * (R - 0.006), R + math.sin(a) * (R - 0.006)), TYRE)
-            cyl(R * 0.52, 0.05, (wx + sx * 0.10, ay, R), RIM, rot=(0, math.pi / 2, 0), verts=16)
+            cyl(R * 0.52, 0.05, (wx + sx * 0.10, ay, R), RIM, rot=(0, math.pi / 2, 0), verts=26)
             cyl(0.05, 0.08, (wx + sx * 0.115, ay, R), BLACK, rot=(0, math.pi / 2, 0), verts=10)
     COL.append({"c": [0, (floor + belt) / 2, 0], "h": [W / 2, (belt - floor) / 2 + 0.08, L / 2 * 0.92]})
     COL.append({"c": [0, belt + 0.30, -0.75], "h": [W / 2 - 0.1, 0.38, 0.62]})
