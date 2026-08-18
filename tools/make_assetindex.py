@@ -27,4 +27,17 @@ for k in out:
 path = os.path.join(M, "index.json")
 with open(path, "w") as f:
     json.dump(out, f, separators=(",", ":"))
+
+# ALL the collision in ONE file. Measured on the live host: 117 separate
+# little json requests, each with the round trip of a real network, spread
+# across forty seconds. The bytes are nothing; the requests are everything.
+bundle = {}
+for name in out["col"]:
+    with open(os.path.join(M, name + ".col.json")) as f:
+        bundle[name] = json.load(f)
+bpath = os.path.join(M, "collision.json")
+with open(bpath, "w") as f:
+    json.dump(bundle, f, separators=(",", ":"))
+
 print("WROTE %s  col=%d door=%d fx=%d" % (path, len(out["col"]), len(out["door"]), len(out["fx"])))
+print("WROTE %s  %d models, %.2f MB" % (bpath, len(bundle), os.path.getsize(bpath) / 1048576.0))

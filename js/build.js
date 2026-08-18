@@ -501,18 +501,27 @@
      standing in front of the models that actually have to arrive, on a
      browser that opens six connections. That was the ten to twenty seconds
      of dark before the world appeared. */
-  var SIDE = null;
-  var sidePromise = fetch(W.bust('assets/models/index.json'))
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (j) {
-      if (!j) return null;
+  var SIDE = null, COLBUNDLE = null;
+  /* ONE request for every model's collision. Measured on the live host: 117
+     separate little json fetches, each paying a real round trip, spread over
+     forty seconds. The bytes are nothing - 0.2 MB for all of them - it is the
+     requests that cost. */
+  var sidePromise = Promise.all([
+    fetch(W.bust('assets/models/index.json'))
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+    fetch(W.bust('assets/models/collision.json'))
+      .then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+  ]).then(function (both) {
+    var j = both[0];
+    COLBUNDLE = both[1];
+    if (j) {
       SIDE = { col: {}, door: {}, fx: {} };
       ['col', 'door', 'fx'].forEach(function (k) {
         (j[k] || []).forEach(function (n) { SIDE[k][n] = 1; });
       });
-      return SIDE;
-    })
-    .catch(function () { return null; });
+    }
+    return SIDE;
+  });
 
   function has(kind, name) {
     return !SIDE || SIDE[kind][name];      /* no index: fall back to asking */
@@ -520,8 +529,9 @@
 
   function loadCollisionInner(name) {
     return Promise.all([
-      (has('col', name) ? fetch(W.bust('assets/models/' + name + '.col.json'))
-        .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null))
+      (COLBUNDLE && COLBUNDLE[name] ? Promise.resolve(COLBUNDLE[name])
+        : (has('col', name) ? fetch(W.bust('assets/models/' + name + '.col.json'))
+            .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null)))
         .then(function (j) {
           if (!j) return;
           COLJSON[name] = j.boxes;

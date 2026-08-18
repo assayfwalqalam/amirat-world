@@ -18,19 +18,30 @@
   ];
 
   function load(list, ver, done) {
-    var i = 0;
-    (function next() {
-      if (i >= list.length) { done(); return; }
+    /* They used to be fetched one after another, each waiting for the last to
+       arrive before it was even asked for. Measured on the live host that was
+       six seconds of nothing but round trips. A dynamically created script is
+       async by default; setting async=false makes the browser fetch them all
+       at once and still run them in the order they were added, which is the
+       order they depend on. */
+    var left = list.length;
+    if (!left) { done(); return; }
+    var finished = false;
+    function one() {
+      if (--left === 0 && !finished) { finished = true; done(); }
+    }
+    list.forEach(function (src) {
       var s = document.createElement('script');
-      s.src = list[i++] + '?v=' + ver;
-      s.onload = next;
+      s.src = src + '?v=' + ver;
+      s.async = false;
+      s.onload = one;
       s.onerror = function () {
         var d = document.getElementById('load');
         if (d) d.textContent = 'Could not load ' + s.src;
-        next();
+        one();
       };
       document.head.appendChild(s);
-    })();
+    });
   }
 
   function start(ver) {
