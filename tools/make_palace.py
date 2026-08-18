@@ -261,9 +261,13 @@ def wood_window(cx, cy, z0, w, h, depth, face=(0, -1)):
     fx, fy = face[0] / fl, face[1] / fl
     yaw = math.atan2(fy, fx) + math.pi / 2
     cs, sn = math.cos(yaw), math.sin(yaw)
-    lx, ly = 0, depth * 0.28
-    box(w + 1.0, 0.45, h + 0.8, (cx + lx * cs - ly * sn, cy + lx * sn + ly * cs,
-        z0 + (h + 0.8) / 2 - 0.25), wood, yaw=yaw)
+    # The surround was 45 cm thick and stood a third of the reveal proud of
+    # the wall, so from outside every window read as a wooden BOARD nailed on.
+    # It is a slim frame set INTO the reveal now: it reads as joinery in an
+    # opening, which is what it is.
+    lx, ly = 0, depth * 0.06
+    box(w + 0.55, 0.16, h + 0.5, (cx + lx * cs - ly * sn, cy + lx * sn + ly * cs,
+        z0 + (h + 0.5) / 2 - 0.16), wood, yaw=yaw)
     arch(cx, cy, z0, w, h, depth, wood, frame=0.42, face=face, lit=True)
 
 
@@ -446,6 +450,30 @@ for lyc in (-11, -4.5, 2, 8.5):
     box(0.5, 0.5, 0.9, (0, lyc, z1 + S1_H - 4.2), glow)
     box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 3.62), gold)
     box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 4.85), gold)
+# ORNAMENT ON THE HALL WALLS. Bare coursed stone from floor to cornice is
+# what made the inside read as a store room. Three courses do the work an
+# Andalusi hall does: a plinth-high dado of dark stone, a string course over
+# it, and a blind arcade of pointed arches standing on the dado all the way
+# round - the same arches as the facade, only shallow.
+DADO = 2.35 + 1.35
+for _sy in (17 - WT, -(17 - WT)):
+    box(44.6, 0.28, 1.35, (0, _sy - 0.14 * (1 if _sy > 0 else -1), 2.35 + 0.675), sapph)
+    box(44.6, 0.34, 0.22, (0, _sy - 0.17 * (1 if _sy > 0 else -1), DADO + 0.11), gold)
+for _sx in (23 - WT, -(23 - WT)):
+    box(0.28, 32.6, 1.35, (_sx - 0.14 * (1 if _sx > 0 else -1), 0, 2.35 + 0.675), sapph)
+    box(0.34, 32.6, 0.22, (_sx - 0.17 * (1 if _sx > 0 else -1), 0, DADO + 0.11), gold)
+# the blind arcade: shallow pointed arches, seven a side, standing on the dado
+for _i in range(7):
+    _x = -19.2 + 38.4 * _i / 6.0
+    for _sy2 in (1, -1):
+        arch(_x, _sy2 * (17 - WT - 0.05), DADO + 0.22, 3.6, 5.2, 0.42, stone,
+             frame=0.30, lit=None, face=(0, -_sy2))
+for _j in range(5):
+    _y = -12.8 + 25.6 * _j / 4.0
+    for _sx2 in (1, -1):
+        arch(_sx2 * (23 - WT - 0.05), _y, DADO + 0.22, 3.6, 5.2, 0.42, stone,
+             frame=0.30, lit=None, face=(-_sx2, 0))
+
 box(5.4, 26, 0.14, (0, -1, 2.42), rug)      # the hall's runner
 cornice(23, 17, z1 + S1_H, stone)
 dentils(0, 0, 23, 17, z1 + S1_H - 0.7, stone)
