@@ -496,10 +496,32 @@
      and nothing has an invisible margin. */
   var COLRAD = {};
   var COLJSON = {}, SPOTJSON = {}, DOORJSON = {}, FXJSON = {};
-  function loadCollision(name) {
+  /* Which models carry a collision, door or firefly file. Without this the
+     game asked for all three for every model - nearly six hundred 404s
+     standing in front of the models that actually have to arrive, on a
+     browser that opens six connections. That was the ten to twenty seconds
+     of dark before the world appeared. */
+  var SIDE = null;
+  var sidePromise = fetch(W.bust('assets/models/index.json'))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      if (!j) return null;
+      SIDE = { col: {}, door: {}, fx: {} };
+      ['col', 'door', 'fx'].forEach(function (k) {
+        (j[k] || []).forEach(function (n) { SIDE[k][n] = 1; });
+      });
+      return SIDE;
+    })
+    .catch(function () { return null; });
+
+  function has(kind, name) {
+    return !SIDE || SIDE[kind][name];      /* no index: fall back to asking */
+  }
+
+  function loadCollisionInner(name) {
     return Promise.all([
-      fetch(W.bust('assets/models/' + name + '.col.json'))
-        .then(function (r) { return r.ok ? r.json() : null; })
+      (has('col', name) ? fetch(W.bust('assets/models/' + name + '.col.json'))
+        .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null))
         .then(function (j) {
           if (!j) return;
           COLJSON[name] = j.boxes;
@@ -515,15 +537,20 @@
           COLRAD[name] = r;
         })
         .catch(function () {}),
-      fetch(W.bust('assets/models/' + name + '.door.json'))
-        .then(function (r) { return r.ok ? r.json() : null; })
+      (has('door', name) ? fetch(W.bust('assets/models/' + name + '.door.json'))
+        .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null))
         .then(function (j) { if (j && j.doors) DOORJSON[name] = j.doors; })
         .catch(function () {}),
-      fetch(W.bust('assets/models/' + name + '.fx.json'))
-        .then(function (r) { return r.ok ? r.json() : null; })
+      (has('fx', name) ? fetch(W.bust('assets/models/' + name + '.fx.json'))
+        .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null))
         .then(function (j) { if (j && j.fireflies) FXJSON[name] = j.fireflies; })
         .catch(function () {})
     ]);
+  }
+
+  function loadCollision(name) {
+    /* wait for the index, then ask only for what is there */
+    return sidePromise.then(function () { return loadCollisionInner(name); });
   }
 
   /* ------------------------------------------- doors and fireflies that a
@@ -730,7 +757,7 @@
 
   function loadModels(list, done) {
     loader = new T.GLTFLoader();
-    var queue = list.slice(), active = 0, left = list.length, MAX = 4;
+    var queue = list.slice(), active = 0, left = list.length, MAX = 10;
     var loadEl = document.getElementById('load');
 
     function finish() {
@@ -739,6 +766,40 @@
         done();
         try { if (W.crunch) W.crunch(); } catch (e) { if (W.diag) W.diag('crunch: ' + e.message); }
         W.MODELS_IN = true;      /* fixed-viewpoint capture waits for this */
+        if (!W.LOAD_MS) {
+          W.LOAD_MS = Math.round(performance.now());
+          if (W.diag) W.diag('world up in ' + (W.LOAD_MS / 1000).toFixed(1) + 's');
+        }
+        /* SECOND WAVE. The blossom giants stand half a kilometre south of the
+           spawn and weigh thirty megabytes. Fetching them before showing
+           anything is what kept the screen dark. They arrive after the world
+           does, and plant themselves when they land. */
+        if (!W.__wave2) {
+          W.__wave2 = true;
+          setTimeout(function () {
+            var late = ['bush_dry', 'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
+                        'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d',
+                        'rock_small',
+                        'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
+                        'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1',
+                        'plant/succulent_1', 'plant/papyrus_1', 'plant/reed_1',
+                        'plant/shrub_1', 'plant/blossom_1'];
+            ['olive', 'plane', 'cypress', 'tamarisk', 'fig', 'pine'].forEach(function (k) {
+              for (var v = 1; v <= 5; v++) {
+                var key = 'tree/' + k + '_' + v;
+                if (!MODELS[key]) late.push(key);
+              }
+            });
+            late = late.concat(W.BLOSSOM_ROW);
+            Promise.all(late.map(loadCollision)).then(function () {
+              loadModels(late, function () {
+                try { pigmentFlowers(); } catch (e) {}
+                try { buildBlossomRow(); } catch (e) { if (W.diag) W.diag('blossoms: ' + e.message); }
+                try { if (W.refreshVeg) W.refreshVeg(); } catch (e) {}
+              });
+            });
+          }, 1200);
+        }
       } else if (loadEl && loadEl.style.display !== 'none') {
         loadEl.textContent = 'Building the world… ' + Math.round((1 - left / list.length) * 100) + '%';
       }
@@ -2025,6 +2086,26 @@
     for (var i = 1; i <= 5; i++) BLOSSOM_ROW.push('tree/blossom_' + t + '_' + i);
   });
   W.BLOSSOM_ROW = BLOSSOM_ROW;
+  /* the flowers wear the land's deeper pigment: darker albedo, and they
+     light up under any lamp like everything else does. Called when the
+     flowers actually arrive, which is now the second wave. */
+  function pigmentFlowers() {
+    ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'].forEach(function (fk) {
+      var mdl = MODELS[fk];
+      if (!mdl || mdl.userData.pigmented) return;
+      mdl.userData.pigmented = true;
+      var seen2 = {};
+      mdl.traverse(function (o) {
+        if (o.isMesh && o.material && !seen2[o.material.uuid]) {
+          seen2[o.material.uuid] = 1;
+          var c = o.material.color;
+          var isLeaf = c.g > c.r && c.g > c.b;
+          c.multiplyScalar(isLeaf ? 0.72 : 0.94);
+        }
+      });
+    });
+  }
+
   function buildBlossomRow() {
     /* south of the town, well clear of the gate and the spawn: a walk to
        reach, not a wall of giants looming over the first step */
@@ -2848,42 +2929,18 @@
     buildLibrary(34, 36);
     buildHouses();
 
-    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(BLOSSOM_ROW).map(loadCollision));
+    W.FETCH_MS = Math.round(performance.now());
+    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
     loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
+      /* THE FIRST WAVE IS ONLY WHAT STANDS THE TOWN UP. Everything that grows
+         out of the ground comes in the second wave and is sown by
+         refreshVeg() when it lands - the town is what you are looking at
+         while it arrives. */
       'palm', 'lantern', 'mashaf', 'carpet',
-      'bush_dry',
-      'fl_orange', 'fl_yellow', 'fl_purple', 'fl_white',
-      'grass_a', 'grass_b', 'rock_a', 'rock_b', 'rock_c', 'rock_d', 'rock_small',
-      'tree/olive_1', 'tree/olive_2', 'tree/olive_3', 'tree/olive_4', 'tree/olive_5',
-      'tree/plane_1', 'tree/plane_2', 'tree/plane_3', 'tree/plane_4', 'tree/plane_5',
-      'tree/cypress_1', 'tree/cypress_2', 'tree/cypress_3', 'tree/cypress_4', 'tree/cypress_5',
-      'tree/tamarisk_1', 'tree/tamarisk_2', 'tree/tamarisk_3', 'tree/tamarisk_4', 'tree/tamarisk_5',
-      'tree/fig_1', 'tree/fig_2', 'tree/fig_3', 'tree/fig_4', 'tree/fig_5',
-      'tree/pine_1', 'tree/pine_2', 'tree/pine_3', 'tree/pine_4', 'tree/pine_5',
-      'plant/tuft_1', 'plant/tuft_2', 'plant/poppy_1', 'plant/lavender_1',
-      'plant/thistle_1', 'plant/aloe_1', 'plant/agave_1', 'plant/succulent_1',
-      'plant/papyrus_1', 'plant/reed_1', 'plant/shrub_1', 'plant/blossom_1',
-'bound/low'].concat(BLOSSOM_ROW)), function () {
-        /* the flowers wear the land's deeper pigment: darker albedo, and
-           they light up under any lamp like everything else does */
-        ['fl_orange', 'fl_yellow', 'fl_purple', 'fl_white'].forEach(function (fk) {
-          var mdl = MODELS[fk];
-          if (!mdl || mdl.userData.pigmented) return;
-          mdl.userData.pigmented = true;
-          var seen2 = {};
-          mdl.traverse(function (o) {
-            if (o.isMesh && o.material && !seen2[o.material.uuid]) {
-              seen2[o.material.uuid] = 1;
-              var c = o.material.color;
-              /* leaves take the land's deeper pigment; petals keep nearly
-                 all their light so the bloom still reads and still lights */
-              var isLeaf = c.g > c.r && c.g > c.b;
-              c.multiplyScalar(isLeaf ? 0.72 : 0.94);
-            }
-          });
-        });
+      'tree/olive_1', 'tree/cypress_1',
+'bound/low']), function () {
+        pigmentFlowers();
         /* things that need the models */
-        buildBlossomRow();
         buildCitadel();
         buildSculptedHouses();
         dressSquares();
