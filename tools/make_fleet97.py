@@ -191,10 +191,17 @@ def build_landrover(burnt=False):
     # near-vertical two-pane screen AT THE COWL; a wreck keeps the frame
     # and mullion but the glass is gone
     ws0 = 1.13
-    box(W - 0.18, 0.05, 0.64, (0, ws0, belt + 0.335), BLACK, tiltx=0.10)
+    # the frame is a RING, not a slab: a full black panel behind the glass
+    # made the screen read as a blank wall, which is what it did
     if not burnt:
-        box(W - 0.30, 0.025, 0.54, (0, ws0 - 0.012, belt + 0.325), GLASS, tiltx=0.10)
-    box(0.04, 0.05, 0.58, (0, ws0 - 0.02, belt + 0.335), BLACK, tiltx=0.10)
+        box(W - 0.26, 0.03, 0.58, (0, ws0 - 0.01, belt + 0.335), GLASS, tiltx=0.10)
+    for sxw in (-1, 1):
+        box(0.055, 0.05, 0.64, (sxw * (W / 2 - 0.10), ws0, belt + 0.335), BLACK, tiltx=0.10)
+    box(W - 0.18, 0.06, 0.055, (0, ws0 - 0.032, belt + 0.035), BLACK, tiltx=0.10)
+    box(W - 0.18, 0.06, 0.06, (0, ws0 + 0.030, belt + 0.635), BLACK, tiltx=0.10)
+    box(0.035, 0.05, 0.58, (0, ws0 - 0.02, belt + 0.335), BLACK, tiltx=0.10)
+    for sxw in (-1, 1):        # wipers on the screen
+        cyl(0.010, 0.34, (sxw * 0.30, ws0 - 0.05, belt + 0.09), BLACK, rot=(0, math.pi / 2, 0.30), verts=6)
     # hard doors under the screen, sliding glass in canvas above
     for sx in (-1, 1):
         box(0.04, 0.92, belt - floor - 0.04, (sx * (W / 2 + 0.005), 0.55, floor + (belt - floor) / 2), GRN)
