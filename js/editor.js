@@ -18,6 +18,9 @@
   var UNDO = [], REDO = [];
   var loader;
   var ghost = null;          /* the translucent preview under the cursor */
+  var hoverPending = null;   /* the last mouse position, dealt with per frame */
+  var hoverWork = null;      /* set when the input is bound */
+  var marquee = null;        /* the rubber band, when one is being pulled */
 
   var keys = {};
   var mouse = { x: 0, y: 0, down: false, btn: 0, dragging: false, look: false,
@@ -503,8 +506,8 @@
     rc.setFromCamera({ x: nx, y: ny }, cam);
     return rc;
   }
-  function pickObject(ev) {
-    var r = pointerRay(ev);
+  function pickObject(ev, ray) {
+    var r = ray || pointerRay(ev);
     var list = [];
     PLACED.forEach(function (p) { if (p.obj) list.push(p.obj); });
     var hits = r.intersectObjects(list, true);
@@ -519,28 +522,42 @@
   function placePoint(ev) {
     /* His order: things go where you point them - on a roof, a wall top, a
        terrace - not only on the ground. A placed model hit wins; the ground
-       is the fallback. */
-    var hit = pickObject(ev);
-    var g = groundPoint(ev);
-    if (hit && (!g || pointerRay(ev).ray.origin.distanceTo(hit.point) <
-                      pointerRay(ev).ray.origin.distanceTo(g))) {
+       is the fallback. One ray is built and reused: it was being rebuilt
+       three times for every mouse move. */
+    var ray = pointerRay(ev);
+    var hit = pickObject(ev, ray);
+    var g = groundPoint(ev, ray);
+    if (hit && (!g || ray.ray.origin.distanceTo(hit.point) <
+                      ray.ray.origin.distanceTo(g))) {
       return new T.Vector3(hit.point.x, hit.point.y, hit.point.z);
     }
     return g;
   }
-  function groundPoint(ev) {
-    /* march the ray until it drops below the heightfield · works on any slope */
-    var r = pointerRay(ev);
+  function groundPoint(ev, ray) {
+    /* Where the ray meets the land. It used to creep along in up to nine
+       hundred steps, each one asking the terrain for its height - several
+       octaves of noise and the painted map - and it ran on every mouse move.
+       Now it strides, then halves the last stride ten times, which lands on
+       the same centimetre in a fortieth of the work. */
+    var r = ray || pointerRay(ev);
     var o = r.ray.origin, d = r.ray.direction;
-    var t = 0.5, prev = o.y - W.heightAt(o.x, o.z);
-    for (var i = 0; i < 900; i++) {
+    var t = 1.0, prevT = 0, prev = o.y - W.heightAt(o.x, o.z);
+    var STEP = 3.0;
+    for (var i = 0; i < 220; i++) {
       var x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
       var diff = y - W.heightAt(x, z);
       if (diff <= 0 && prev > 0) {
-        return new T.Vector3(x, W.heightAt(x, z), z);
+        var lo = prevT, hi = t;
+        for (var k = 0; k < 10; k++) {
+          var mid = (lo + hi) / 2;
+          var mx = o.x + d.x * mid, my = o.y + d.y * mid, mz = o.z + d.z * mid;
+          if (my - W.heightAt(mx, mz) > 0) lo = mid; else hi = mid;
+        }
+        var fx = o.x + d.x * hi, fz = o.z + d.z * hi;
+        return new T.Vector3(fx, W.heightAt(fx, fz), fz);
       }
-      prev = diff;
-      t += Math.max(0.5, t * 0.03);
+      prev = diff; prevT = t;
+      t += Math.max(STEP, t * 0.08);
       if (t > 4000) break;
     }
     return null;
@@ -757,8 +774,67 @@
 
   /* ------------------------------------------------------------ camera */
   var camVel = new (function () {})();
+  /* ------------------------------------------------------- the rubber band
+     Click on open ground and pull: everything whose place on screen falls
+     inside the box is taken. It is drawn as a plain div over the canvas -
+     nothing in the 3D scene, so it costs nothing to show. */
+  function marqueeStart(ev, add) {
+    var el = document.getElementById('marq');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'marq';
+      el.style.cssText = 'position:fixed;border:1px solid #ffd479;background:rgba(255,212,121,0.13);' +
+                         'pointer-events:none;z-index:60;display:none';
+      document.body.appendChild(el);
+    }
+    marquee = { x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, add: !!add, el: el };
+    el.style.display = 'block';
+    marqueeMove(ev);
+  }
+
+  function marqueeMove(ev) {
+    if (!marquee) return;
+    marquee.x1 = ev.clientX; marquee.y1 = ev.clientY;
+    var L = Math.min(marquee.x0, marquee.x1), R = Math.max(marquee.x0, marquee.x1);
+    var T2 = Math.min(marquee.y0, marquee.y1), B = Math.max(marquee.y0, marquee.y1);
+    var st = marquee.el.style;
+    st.left = L + 'px'; st.top = T2 + 'px';
+    st.width = (R - L) + 'px'; st.height = (B - T2) + 'px';
+  }
+
+  function marqueeEnd(ev) {
+    var m = marquee;
+    marquee = null;
+    if (!m) return;
+    m.el.style.display = 'none';
+    var L = Math.min(m.x0, m.x1), R = Math.max(m.x0, m.x1);
+    var T2 = Math.min(m.y0, m.y1), B = Math.max(m.y0, m.y1);
+    if (R - L < 4 && B - T2 < 4) {          /* a click, not a pull */
+      if (!m.add) clearSel();
+      return;
+    }
+    var rect = renderer.domElement.getBoundingClientRect();
+    var v = new T.Vector3();
+    var got = [];
+    PLACED.forEach(function (p2) {
+      if (!p2.obj || p2.dead) return;
+      v.set(p2.x, p2.y, p2.z).project(W.cam);
+      if (v.z > 1) return;                  /* behind the camera */
+      var sx = rect.left + (v.x * 0.5 + 0.5) * rect.width;
+      var sy = rect.top + (-v.y * 0.5 + 0.5) * rect.height;
+      if (sx >= L && sx <= R && sy >= T2 && sy <= B) got.push(p2);
+    });
+    if (!m.add) clearSel();
+    got.forEach(function (r) { select(r, true); });
+    expandGroups();
+    remark(); refreshPanel();
+    toast(got.length ? got.length + ' picked' : 'nothing in the box');
+    W.wake();
+  }
+
   function editorStep(dt) {
     if (!document.hasFocus()) keys = {};
+    if (hoverPending && hoverWork) { var hp = hoverPending; hoverPending = null; hoverWork(hp); }
     updateGizmo();
     var c = W.camState();
     var sp = keys['ShiftLeft'] || keys['ShiftRight'] ? 78 : (keys['ControlLeft'] ? 6 : 24);
@@ -826,7 +902,7 @@
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
     cv.addEventListener('pointerdown', function (e) {
-      cv.setPointerCapture(e.pointerId);
+      try { cv.setPointerCapture(e.pointerId); } catch (err) {}
       mouse.down = true; mouse.btn = e.button;
       mouse.sx = e.clientX; mouse.sy = e.clientY; mouse.moved = 0;
       mouse.look = (e.button === 2);
@@ -851,8 +927,10 @@
             recs: SEL.map(function (r) { return { r: r, x: r.x, y: r.y, z: r.z, rot: r.rot }; })
           };
           dragPlaneY = hit.point.y;
-        } else if (!e.ctrlKey && !e.shiftKey) {
-          clearSel();
+        } else {
+          /* nothing under the pointer: pull a box over whatever you want.
+             Holding ctrl or shift adds to what is already picked. */
+          marqueeStart(e, e.ctrlKey || e.shiftKey);
         }
       }
       W.wake();
@@ -871,11 +949,27 @@
         return;
       }
       if (gizDrag) { moveGizDrag(e); return; }
+      if (marquee) { marqueeMove(e); return; }
+      hoverPending = { clientX: e.clientX, clientY: e.clientY };
+      if (mouse.down && mouse.btn === 0 && dragStart && SEL.length) {
+        dragSelection(e);
+        W.wake();
+      }
+      if (mouse.down && mouse.btn === 0 && mode === 'land' && landStroke) {
+        var nowT = performance.now();
+        if (!landStroke.last || nowT - landStroke.last > 120) {
+          landStroke.last = nowT;
+          var lg3 = groundPoint(e);
+          if (lg3) { landStamp(lg3.x, lg3.z); W.wake(); }
+        }
+      }
+    }, { passive: true });
+
+    hoverWork = function (e) {
       if (!mouse.down) {
         var hov = pickGizmo(e);
         gizHighlight(hov ? hov.part : null);
-        if (hov) { renderer.domElement.style.cursor = 'move'; }
-        else { renderer.domElement.style.cursor = ''; }
+        renderer.domElement.style.cursor = hov ? 'move' : '';
       }
       if (mode === 'place' && ghost) {
         var g = placePoint(e);
@@ -902,24 +996,13 @@
         } else ghost.visible = false;
         W.wake();
       }
-      if (mouse.down && mouse.btn === 0 && dragStart && SEL.length) {
-        dragSelection(e);
-        W.wake();
-      }
-      if (mouse.down && mouse.btn === 0 && mode === 'land' && landStroke) {
-        /* a chunk rebuild costs ~200ms: stamping every mouse move would fight
-           the hand. Eight strokes a second feels continuous and stays smooth. */
-        var nowT = performance.now();
-        if (!landStroke.last || nowT - landStroke.last > 120) {
-          landStroke.last = nowT;
-          var lg2 = groundPoint(e);
-          if (lg2) { landStamp(lg2.x, lg2.z); W.wake(); }
-        }
-      }
-    });
+    };
 
     cv.addEventListener('pointerup', function (e) {
-      cv.releasePointerCapture(e.pointerId);
+      /* a pointerup whose down never captured - a stylus, a synthetic event,
+         a button released outside - throws here and kills the rest of the
+         handler, so nothing gets placed and no drag ever commits */
+      try { cv.releasePointerCapture(e.pointerId); } catch (err) {}
       var wasDrag = mouse.moved > 6;
       mouse.down = false; mouse.look = false;
       if (landStroke) { landStroke = null; landSave(); }
@@ -932,6 +1015,7 @@
         var gs = groundPoint(e);
         if (gs) scatterAt(gs);
       }
+      if (marquee) { marqueeEnd(e); return; }
       if (dragStart && wasDrag) commitDrag();
       dragStart = null;
     });
@@ -1000,15 +1084,49 @@
     nudgeRot(d);
   }
 
+  /* The centre a given list turns about. NOT called selCentre: there is
+     already one of those for the gizmo, and a second declaration of the same
+     name silently replaces it for the whole file. */
+  function centreOf(recs) {
+    var cx = 0, cz = 0;
+    for (var i = 0; i < recs.length; i++) { cx += recs[i].x; cz += recs[i].z; }
+    return { x: cx / recs.length, z: cz / recs.length };
+  }
+
   function nudgeRot(d) {
     if (!SEL.length) { toast('select something first'); return; }
-    var recs = SEL.slice(), before = recs.map(function (r) { return r.rot; });
-    recs.forEach(function (r) { r.rot += d; applyRec(r); });
-    var after = recs.map(function (r) { return r.rot; });
-    push({ undo: function () { recs.forEach(function (r, i) { r.rot = before[i]; applyRec(r); }); remark(); },
-           redo: function () { recs.forEach(function (r, i) { r.rot = after[i]; applyRec(r); }); remark(); } });
+    var recs = SEL.slice();
+    /* MORE THAN ONE THING TURNS AS ONE THING. Turning each piece on its own
+       spot leaves the arrangement in place and spins every part inside it,
+       which is not turning a group at all - it is turning each of its members.
+       Every piece keeps its place in the whole: its position swings round the
+       middle of the selection and it faces the same new way. */
+    var c = centreOf(recs);
+    var before = recs.map(function (r) { return { rot: r.rot, x: r.x, z: r.z }; });
+    function apply(delta) {
+      recs.forEach(function (r, i) {
+        r.rot = before[i].rot + delta;
+        if (recs.length > 1) {
+          var dx = before[i].x - c.x, dz = before[i].z - c.z;
+          r.x = c.x + dx * Math.cos(delta) - dz * Math.sin(delta);
+          r.z = c.z + dx * Math.sin(delta) + dz * Math.cos(delta);
+        }
+        applyRec(r);
+      });
+    }
+    apply(d);
+    var after = recs.map(function (r) { return { rot: r.rot, x: r.x, z: r.z }; });
+    function restore(list) {
+      recs.forEach(function (r, i) {
+        r.rot = list[i].rot; r.x = list[i].x; r.z = list[i].z; applyRec(r);
+      });
+      remark();
+    }
+    push({ undo: function () { restore(before); }, redo: function () { restore(after); } });
     remark(); refreshPanel();
-    toast('turned to ' + Math.round(((recs[0].rot * 180 / Math.PI) % 360 + 360) % 360) + '°');
+    toast(recs.length > 1
+      ? recs.length + ' turned together to ' + Math.round(((recs[0].rot * 180 / Math.PI) % 360 + 360) % 360) + '°'
+      : 'turned to ' + Math.round(((recs[0].rot * 180 / Math.PI) % 360 + 360) % 360) + '°');
   }
   function nudgeScale(k) {
     if (!SEL.length) return;
@@ -1167,11 +1285,17 @@
 
     ['px', 'py', 'pz', 'ry', 'sc'].forEach(function (id) {
       $(id).onchange = function () {
-        if (SEL.length !== 1) return;
+        /* the facing field works on a whole selection; the rest need one */
+        if (!SEL.length || (SEL.length !== 1 && id !== 'ry')) return;
         var r = SEL[0], v = parseFloat(this.value);
         if (isNaN(v)) return;
         if (id === 'px') r.x = v; else if (id === 'py') r.y = v; else if (id === 'pz') r.z = v;
-        else if (id === 'ry') r.rot = v * Math.PI / 180; else r.sc = Math.max(0.05, v);
+        else if (id === 'ry') {
+          /* typing a facing with several things selected turns the whole
+             selection by the difference, so the arrangement is kept */
+          if (SEL.length > 1) { nudgeRot(v * Math.PI / 180 - r.rot); return; }
+          r.rot = v * Math.PI / 180;
+        } else r.sc = Math.max(0.05, v);
         applyRec(r); remark();
       };
     });
