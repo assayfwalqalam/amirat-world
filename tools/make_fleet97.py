@@ -355,15 +355,19 @@ def build_technical(burnt=False):
     box(W - 0.16, 1.95, 0.05, (0, -1.40, belt + 0.02), BLACK)
     # the DShK on a pintle tripod in the bed
     if not burnt:
-        cyl(0.05, 0.75, (0, -1.35, belt + 0.42), GUN, verts=10)
+        # THE GUN SITS ON THE BED, not on a mast above it. The tripod feet
+        # stand on the floor at belt+0.05 and the bore ends up about chest
+        # height over it, which is where a man behind it would hold it.
+        BF = belt + 0.05                       # the bed floor
+        cyl(0.05, 0.30, (0, -1.35, BF + 0.15), GUN, verts=10)          # the pintle
         for a3 in range(3):
             aa = a3 / 3 * 2 * math.pi + 0.5
-            cyl(0.03, 0.62, (0 + math.cos(aa) * 0.22, -1.35 + math.sin(aa) * 0.22, belt + 0.28), GUN,
-                rot=(0.6 * math.cos(aa + 1.57), 0.6 * math.sin(aa + 1.57), 0), verts=8)
-        cyl(0.045, 1.15, (0, -0.78, belt + 0.86), GUN, rot=(math.pi / 2 - 0.12, 0, 0), verts=12)
-        cyl(0.065, 0.42, (0, -1.18, belt + 0.80), GUN, rot=(math.pi / 2 - 0.12, 0, 0), verts=12)
-        box(0.22, 0.30, 0.16, (0, -1.32, belt + 0.74), GUN)
-        cyl(0.085, 0.16, (0.15, -1.32, belt + 0.76), GUN, rot=(0, math.pi / 2, 0), verts=12)
+            cyl(0.028, 0.40, (math.cos(aa) * 0.16, -1.35 + math.sin(aa) * 0.16, BF + 0.14), GUN,
+                rot=(0.55 * math.sin(aa), 0, -0.55 * math.cos(aa)), verts=8)
+        cyl(0.042, 1.05, (0, -0.86, BF + 0.42), GUN, rot=(math.pi / 2 - 0.10, 0, 0), verts=12)
+        cyl(0.060, 0.38, (0, -1.22, BF + 0.38), GUN, rot=(math.pi / 2 - 0.10, 0, 0), verts=12)
+        box(0.20, 0.28, 0.15, (0, -1.34, BF + 0.34), GUN)
+        cyl(0.080, 0.15, (0.14, -1.34, BF + 0.36), GUN, rot=(0, math.pi / 2, 0), verts=12)
     # wheels: simple steel rims; the wreck sits on a bare rear hub
     for ay in (ax_f, ax_r):
         for sx in (-1, 1):
