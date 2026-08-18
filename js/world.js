@@ -1059,6 +1059,7 @@
       }
     });
   }
+  W.stepOnce = function (dt) { step(dt || 0.033); };
   W.vegVisible = vegVisible;
 
   /* rebuild just the chunks a land brush touched - repainting the whole
@@ -1390,6 +1391,8 @@
 
   var _vegTick = 0;
 
+  /* exposed so a probe can drive the simulation by hand: the pane has no
+     animation frames when it is hidden, so without this nothing can be tested */
   function step(dt) {
     if ((_vegTick++ & 3) === 0) { try { vegVisible(pos); } catch (e) {} }
     if (W.EDITOR) {
