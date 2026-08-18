@@ -295,7 +295,7 @@ def build_landrover(burnt=False):
             finish(GRN, "green", (0.208, 0.24, 0.166, 1), 0.72, 0.15, tex="t_paintolive.jpg", uv=1.5),
             finish(CANVAS, "canvas", (0.34, 0.33, 0.26, 1), 0.95, 0.0, tex="t_canvas.jpg", uv=1.1),
             finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08, tex="t_gunsteel.jpg", uv=0.5),
-            finish(GLASS, "glass", (0.24, 0.29, 0.36, 1), 0.06, 0.0, emis=(0.05, 0.07, 0.10, 1)),
+            finish(GLASS, "glass", (0.36, 0.43, 0.52, 1), 0.05, 0.0, emis=(0.10, 0.14, 0.19, 1)),
             finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
             finish(LAMP, "lamp", (0.75, 0.78, 0.80, 1), 0.25, 0.4),
             finish(AMBER, "amber", (0.85, 0.48, 0.10, 1), 0.35, 0.2, emis=(0.5, 0.25, 0.04, 1)),
@@ -395,7 +395,7 @@ def build_technical(burnt=False):
         parts = [
             finish(PAINT, "paint", (0.55, 0.52, 0.47, 1), 0.55, 0.25, tex="t_paintsand.jpg", uv=1.6),
             finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.85, 0.08, tex="t_gunsteel.jpg", uv=0.5),
-            finish(GLASS, "glass", (0.24, 0.29, 0.36, 1), 0.06, 0.0, emis=(0.05, 0.07, 0.10, 1)),
+            finish(GLASS, "glass", (0.36, 0.43, 0.52, 1), 0.05, 0.0, emis=(0.10, 0.14, 0.19, 1)),
             finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
             finish(RIM, "rim", (0.30, 0.30, 0.30, 1), 0.5, 0.5),
             finish(LAMP, "lamp", (0.75, 0.78, 0.80, 1), 0.25, 0.4),
