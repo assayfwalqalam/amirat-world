@@ -1477,7 +1477,10 @@
     if (W.bloom) W.bloom.enabled = QSTEP < 1;
     if (W.moonLight) W.moonLight.castShadow = (QSTEP < 2) && TIER === 2;
     /* the grass around you always stands; only the distance comes in */
-    W.vegDrawR = [1e9, 1e9, 460, 340, 250][QSTEP];
+    /* the plants were drawn to the edge of the loaded world at full quality,
+       which is thousands of instanced draws for grass a quarter of a mile off
+       that the night swallows anyway */
+    W.vegDrawR = [300, 260, 220, 180, 140][QSTEP];
     try { vegVisible(W.getPos()); } catch (e) {}
     if (hbEl) hbEl.title = 'quality step ' + QSTEP;
   }

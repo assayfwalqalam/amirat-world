@@ -647,6 +647,11 @@ WOODY = {"barrel", "barrels", "crates", "cart", "bench", "stall", "table",
          "firewood", "ladder", "pergola", "torchpost"}
 CLAYY = {"pot", "jars", "waterjug", "oillamp", "bowl", "plantpot", "bread"}
 CLOTHY = {"awning", "carpet", "cushions", "sacks"}
+# every surface wears something: a flat colour is what made these read as toys
+STONEY = {"stones", "well", "brazier"}
+FIBRE = {"basket", "ropecoil"}
+PAPERY = {"scrolls", "books", "inkset"}
+IRONY = {"torch"}
 
 tex_file = None
 gain = 2.4
@@ -656,6 +661,14 @@ elif KIND in CLAYY:
     tex_file = "t_clay_d.jpg"
 elif KIND in CLOTHY:
     tex_file = "t_cloth_d.jpg"
+elif KIND in STONEY:
+    tex_file = "g_rock_d.jpg"
+elif KIND in FIBRE:
+    tex_file = "t_canvas.jpg"
+elif KIND in PAPERY:
+    tex_file = "t_parch.jpg"
+elif KIND in IRONY:
+    tex_file = "t_gunsteel.jpg"
 
 if tex_file is not None:
     path = os.path.abspath(os.path.join(ASSETS, tex_file))

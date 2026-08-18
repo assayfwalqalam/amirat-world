@@ -172,3 +172,16 @@ for _ in range(900):                              # aggregate showing through
 im = blotches(im, 20, 110, 9, 73)
 im = streaks(im, 16, 118, 74)
 save(im, "t_concrete.jpg")
+
+# ---- parchment: the leaves of a book, cream with a fibre grain
+im = base((196, 182, 150), 4, 81)
+random.seed(82)
+d = ImageDraw.Draw(im)
+for _ in range(700):
+    x, y = random.randint(0, SIZE), random.randint(0, SIZE)
+    L = random.uniform(4, 26)
+    a = random.uniform(-0.25, 0.25)
+    v = random.randint(176, 206)
+    d.line([x, y, x + math.cos(a) * L, y + math.sin(a) * L], fill=(v, v - 6, v - 22), width=1)
+im = blotches(im, 16, 120, 10, 83)
+save(im, "t_parch.jpg")
