@@ -482,6 +482,7 @@
   /* Buildings made in Blender arrive with a collision file listing every solid
      box in them. We use those directly, so parapets lift you, stairs step true,
      and nothing has an invisible margin. */
+  var COLRAD = {};
   var COLJSON = {}, SPOTJSON = {}, DOORJSON = {}, FXJSON = {};
   function loadCollision(name) {
     return Promise.all([
@@ -491,6 +492,15 @@
           if (!j) return;
           COLJSON[name] = j.boxes;
           if (j.spots) SPOTJSON[name] = j.spots;
+          /* how much ground this model needs, measured off its own boxes,
+             so houses of different shapes are spaced by what they are */
+          var r = 0;
+          for (var q = 0; q < j.boxes.length; q++) {
+            var bb = j.boxes[q];
+            r = Math.max(r, Math.hypot(Math.abs(bb.c[0]) + bb.h[0],
+                                       Math.abs(bb.c[2]) + bb.h[2]));
+          }
+          COLRAD[name] = r;
         })
         .catch(function () {}),
       fetch(W.bust('assets/models/' + name + '.door.json'))
@@ -1225,7 +1235,10 @@
     growStreets(S);
 
     var placed = [];
-    var RAD = 8.4 * HOUSE_SCALE * 0.62;    /* how much ground one house needs */
+    var RAD = 8.4 * HOUSE_SCALE * 0.62;    /* fallback, if a model has no boxes */
+    function radOf(key) {
+      return (COLRAD[key] ? COLRAD[key] * 0.62 : 8.4 * 0.62) * HOUSE_SCALE;
+    }
 
     function keepOut(x, z) {
       if (Math.hypot(x + 40, z + 34) < 36) return true;   /* the mosque */
@@ -1246,26 +1259,31 @@
         if (keepOut(x, z)) continue;
 
         var near = distToWays(x, z);
-        /* it must stand clear of the roadway, but close enough to be served */
-        if (near.d < RAD * 0.72) continue;
+        /* it must stand clear of the roadway, but close enough to be served
+           (a cheap first cut; the model's own footprint is checked below) */
+        if (near.d < RAD * 0.45) continue;
         if (near.d > 26) continue;
+
+        var key = BUILT[idx % BUILT.length];
+        if (!MODELS[key]) { idx++; continue; }
+        var myR = radOf(key);
+        if (near.d < myR * 0.72) continue;
 
         var ok = true;
         for (var i = 0; i < placed.length; i++) {
           var pl = placed[i];
-          var need = (hashU(sd ^ (i * 7919)) > 0.80) ? RAD * 1.42 : RAD * 1.86;
+          /* every pair is judged by both footprints, so a long range keeps
+             its neighbours further off than a narrow tower does */
+          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.80 ? 0.71 : 0.93);
           if (Math.hypot(x - pl[0], z - pl[1]) < need) { ok = false; break; }
         }
         if (!ok) continue;
-
-        var key = BUILT[idx % BUILT.length];
         idx++;
-        if (!MODELS[key]) continue;
         /* turn to face whatever way runs nearest, but never squarely */
         var facing = Math.atan2(near.at.px - x, near.at.pz - z) + (hashU(sd ^ 0xabc) - 0.5) * 0.5;
         var g = placeBuilt(key, x, Y, z, facing, HOUSE_SCALE);
         if (!g) continue;
-        placed.push([x, z]);
+        placed.push([x, z, myR]);
         made++;
         dressBuilding(key, x, Y, z, facing, HOUSE_SCALE, idx * 31 + 7);
 
