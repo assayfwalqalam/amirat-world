@@ -44,7 +44,14 @@ def rec(loc, hx, hy, hz):
                       "h": [round(hx, 3), round(hz, 3), round(hy, 3)]})
 
 
-def solid(sx, sy, sz, loc, collide=True, keep=True):
+# Three surfaces, not one. The walls are laid stone or mud brick; a roof
+# terrace is smoothed plaster and must not wear the wall's courses, or it
+# reads as brick paving from above; and the beams are timber.
+MUD = []
+WOOD = []
+
+
+def solid(sx, sy, sz, loc, collide=True, keep=True, grp=None):
     bpy.ops.mesh.primitive_cube_add(size=2, location=loc)
     ob = bpy.context.active_object
     ob.scale = (sx / 2, sy / 2, sz / 2)
@@ -53,16 +60,24 @@ def solid(sx, sy, sz, loc, collide=True, keep=True):
         rec(loc, sx / 2, sy / 2, sz / 2)
     if keep:
         parts.append(ob)
+        if grp == 'mud':
+            MUD.append(ob)
+        elif grp == 'wood':
+            WOOD.append(ob)
     return ob
 
 
-def cyl(r, depth, loc, rot=(0, 0, 0), verts=12, keep=True):
+def cyl(r, depth, loc, rot=(0, 0, 0), verts=12, keep=True, grp=None):
     bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=depth, location=loc, vertices=verts)
     ob = bpy.context.active_object
     ob.rotation_euler = rot
     bpy.ops.object.transform_apply(rotation=True)
     if keep:
         parts.append(ob)
+        if grp == 'mud':
+            MUD.append(ob)
+        elif grp == 'wood':
+            WOOD.append(ob)
     return ob
 
 
@@ -212,7 +227,7 @@ def beams(cx, cy, w, d, z, n=None):
     n = n or max(3, int(w / 1.5))
     for i in range(n):
         px = cx - w / 2 + (i + 0.5) * (w / n)
-        cyl(0.062, 1.0, (px, cy - d / 2 + 0.1, z), rot=(math.pi / 2, 0, 0), verts=6)
+        cyl(0.062, 1.0, (px, cy - d / 2 + 0.1, z), rot=(math.pi / 2, 0, 0), verts=6, grp='wood')
 
 
 def ext_stair(x0, y0, w, run_d, z0, z1, along='y'):
@@ -453,9 +468,9 @@ def floor_slab(cx, cy, w, d, z, thick=0.4, proud=False):
     a string course: the line between storeys is then a deliberate band rather
     than an accident of two surfaces meeting."""
     if proud:
-        solid(w + 0.16, d + 0.16, thick, (cx, cy, z + thick / 2))
+        solid(w + 0.16, d + 0.16, thick, (cx, cy, z + thick / 2), grp='mud')
     else:
-        solid(w, d, thick, (cx, cy, z + thick / 2))
+        solid(w, d, thick, (cx, cy, z + thick / 2), grp='mud')
 
 
 def bulkhead(cx, cy, z):
@@ -469,7 +484,7 @@ def bulkhead(cx, cy, z):
     for sgn in (-1, 1):
         solid(0.3, T, bh, (cx + sgn * (bw / 2 - 0.15), fy, z + bh / 2))
     solid(bw, T, 0.35, (cx, fy, z + bh - 0.175))
-    cap = solid(bw + 0.5, bd + 0.5, 0.3, (cx, cy, z + bh + 0.15))
+    cap = solid(bw + 0.5, bd + 0.5, 0.3, (cx, cy, z + bh + 0.15), grp='mud')
     erode(cap, 1, 0.015, 0.025)
 
 
@@ -803,19 +818,43 @@ BUILDERS.get(FAMILY, build_house)()
 # ------------------------------------------------------------- assemble
 for o in parts:
     bevel(o, 0.02)
-bpy.ops.object.select_all(action='DESELECT')
-for o in parts:
-    o.select_set(True)
-bpy.context.view_layer.objects.active = parts[0]
-bpy.ops.object.join()
-ob = bpy.context.active_object
-ob.name = FAMILY
-weld(ob, 0.0004)
+def join_group(objs, name, uvsize):
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    g = bpy.context.active_object
+    g.name = name
+    weld(g, 0.0004)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.cube_project(cube_size=uvsize)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return g
 
-bpy.ops.object.mode_set(mode='EDIT')
-bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.uv.cube_project(cube_size=2.6)
-bpy.ops.object.mode_set(mode='OBJECT')
+
+mudset = set(MUD)
+woodset = set(WOOD)
+stone_parts = [o for o in parts if o not in mudset and o not in woodset]
+ob = join_group(stone_parts, FAMILY, 2.6)
+mud_ob = join_group(MUD, "roofs", 3.6) if MUD else None
+wood_ob = join_group(WOOD, "timber", 0.75) if WOOD else None
+
+def plain_mat(name, tex_file, rough=1.0):
+    m2 = bpy.data.materials.new(name)
+    m2.use_nodes = True
+    b2 = m2.node_tree.nodes["Principled BSDF"]
+    b2.inputs["Roughness"].default_value = rough
+    pth = os.path.abspath(os.path.join(ASSETS, tex_file))
+    if os.path.exists(pth):
+        im2 = bpy.data.images.load(pth)
+        t2 = m2.node_tree.nodes.new('ShaderNodeTexImage')
+        t2.image = im2
+        m2.node_tree.links.new(t2.outputs['Color'], b2.inputs['Base Color'])
+        im2.pack()
+    return m2
+
 
 mat = bpy.data.materials.new("adobe")
 mat.use_nodes = True
@@ -863,6 +902,25 @@ if os.path.exists(nor_path) and tn is not None:
 
 if tn is not None:
     tn.image.pack()
+
+# the roof terraces and the beams get their own surfaces, then everything is
+# one object again
+if mud_ob is not None:
+    mud_ob.data.materials.clear()
+    mud_ob.data.materials.append(plain_mat("bldmud", "t_adobe_d.jpg"))
+if wood_ob is not None:
+    wood_ob.data.materials.clear()
+    wood_ob.data.materials.append(plain_mat("bldwood", "t_beam_d.jpg", 0.86))
+extra = [x for x in (mud_ob, wood_ob) if x is not None]
+if extra:
+    bpy.ops.object.select_all(action='DESELECT')
+    ob.select_set(True)
+    for x in extra:
+        x.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.join()
+    ob = bpy.context.active_object
+    ob.name = FAMILY
 
 me = ob.data
 me.calc_loop_triangles()

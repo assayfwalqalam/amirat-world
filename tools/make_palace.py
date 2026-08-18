@@ -816,9 +816,15 @@ def riwaq_run(x0, y0, x1, y1, face):
         px = x0 + ux * (ln * (i + 0.5) / n)
         py = y0 + uy * (ln * (i + 0.5) / n)
         arch(px, py, 2.5, ln / n - 0.8, 7.2, 0.7, stone, frame=0.38, lit=None, face=face)
-    bx3, by3 = (x0 + x1) / 2 - fx0 * RW_D / 2, (y0 + y1) / 2 - fy0 * RW_D / 2
-    sx3 = abs(dx) + (RW_D if fx0 else 1.6)
-    sy3 = abs(dy) + (RW_D if fy0 else 1.6)
+    # The roof of the colonnade runs INTO the curtain behind it. It used to
+    # stop at its own depth and left a hairline of daylight along the joint;
+    # a roof that only kisses a wall always will. It is carried 0.9m further
+    # back, where the wall swallows it.
+    ext = 0.9
+    bx3 = (x0 + x1) / 2 - fx0 * (RW_D + ext) / 2
+    by3 = (y0 + y1) / 2 - fy0 * (RW_D + ext) / 2
+    sx3 = abs(dx) + ((RW_D + ext) if fx0 else 1.6)
+    sy3 = abs(dy) + ((RW_D + ext) if fy0 else 1.6)
     box(max(sx3, RW_D), max(sy3, RW_D), 0.8, (bx3, by3, 2.5 + 7.4), stone)
     box(max(sx3, RW_D) + 0.6, max(sy3, RW_D) + 0.6, 0.9, (bx3, by3, 2.5 + 8.15), stone)
 
