@@ -1097,12 +1097,17 @@
   var waterMat = null, waterFlow = null;
   function initWater() {
     var wn = tex('assets/water_n.jpg', false, true);
-    var g = new THREE.PlaneGeometry(7000, 7000, 1, 1);
+    /* Seven kilometres of transparent plane was drawn every frame, and from
+       under it - or from anything standing at or below sea level - it filled
+       the screen with a pale slab and a disc where its far edge met the sky.
+       It is smaller, one-sided, and it stops being drawn when you are well
+       above it, which on a plain six metres over the sea is most of the time. */
+    var g = new THREE.PlaneGeometry(2600, 2600, 1, 1);
     g.rotateX(-Math.PI / 2);
     var m = new THREE.MeshStandardMaterial({
       color: 0x16203c, roughness: 0.14, metalness: 0.55,
       normalMap: wn, normalScale: new THREE.Vector2(0.55, 0.55),
-      transparent: true, opacity: 0.93
+      transparent: true, opacity: 0.93, side: THREE.FrontSide
     });
     m.onBeforeCompile = function (sh) {
       sh.uniforms.uFlow = { value: 0 };
@@ -1369,7 +1374,10 @@
       cam.position.copy(pos);
       cam.rotation.set(0, 0, 0);
       cam.rotateY(yaw); cam.rotateX(pitch);
-      if (water) { water.position.x = pos.x; water.position.z = pos.z; }
+      if (water) {
+        water.position.x = pos.x; water.position.z = pos.z;
+        water.visible = (pos.y - WATER_Y) < 90 && pos.y > WATER_Y - 0.5;
+      }
       if (W.moonLight) {
         W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
         W.moonTarget.updateMatrixWorld();
@@ -1420,7 +1428,10 @@
     cam.position.copy(pos);
     cam.rotation.set(0, 0, 0);
     cam.rotateY(yaw); cam.rotateX(pitch);
-    if (water) { water.position.x = pos.x; water.position.z = pos.z; }
+    if (water) {
+      water.position.x = pos.x; water.position.z = pos.z;
+      water.visible = (pos.y - WATER_Y) < 90 && pos.y > WATER_Y - 0.5;
+    }
     if (W.moonLight) {
       W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
       W.moonTarget.updateMatrixWorld();

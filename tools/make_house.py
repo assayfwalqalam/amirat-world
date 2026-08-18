@@ -152,7 +152,7 @@ H2 = random.uniform(2.9, 3.6)
 H3 = random.uniform(2.5, 3.1)
 T = 0.45                                   # wall thickness
 BAT = 0.036                                # how far a wall leans in per metre
-OV = 0.24                                  # how far a roof slab overhangs
+OV = 0.13                                  # how far a roof slab overhangs
 has_upper = random.random() < (0.34 if KIND == "range" else 1.0 if KIND == "tower" else 0.78)
 has_third = KIND == "tower" and random.random() < 0.45
 uw = W * random.uniform(0.62 if KIND != "tower" else 0.86, 0.86 if KIND != "tower" else 1.0)
@@ -220,6 +220,13 @@ def window_deep(target, cx, cy, cz, w, h, axis, sign, face, through):
 
 def storey(cx, cy, w, d, z0, h, front_door, n_win):
     """Four wall slabs, so the inside is a real room you can walk into."""
+    # the ceiling: a plastered slab across the room at the wall head. Without
+    # it you stand inside and look up at the underside of the roof and out
+    # through the gap where the roof oversails the wall.
+    # FULL width on purpose: its edges bury themselves inside the wall slabs,
+    # so there is no line where ceiling meets wall for the night to show
+    # through. Sized to the room it leaves a gap at every batter.
+    mud.append(solid(w, d, 0.18, (cx, cy, z0 + h - 0.11), False))
     back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
     left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2))
     right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2))
@@ -318,9 +325,12 @@ def roof_slab(cx, cy, w, d, z, th=0.34, over=OV):
     """A roof that reaches past the wall it sits on, with a proud lip.
     Roofs go on the mud list: a terrace is smoothed plaster, and wearing the
     wall's block courses it read as a brick pavement from above."""
-    out = [solid(w + over * 2, d + over * 2, th, (cx, cy, z + th / 2))]
-    out.append(solid(w + over * 2 + 0.10, d + over * 2 + 0.10, 0.11,
-                     (cx, cy, z + th - 0.055), False))
+    # the slab SINKS into the wall head. Set exactly on top of it, the two
+    # surfaces meet in a hairline and the night shows through the joint -
+    # which is the light he could see along the top of every wall.
+    out = [solid(w + over * 2, d + over * 2, th + 0.10, (cx, cy, z + th / 2 - 0.05))]
+    out.append(solid(w + over * 2 + 0.05, d + over * 2 + 0.05, 0.07,
+                     (cx, cy, z + th - 0.035), False))
     for o in out:
         erode(o, levels=1, fine=0.018, broad=0.03)
     mud.extend(out)
@@ -508,27 +518,47 @@ SX = stair_side * (W / 2 + 0.68)
 # stays per-step so the climb is true.
 y0 = -D / 2 + 0.9
 flight_len = steps * run
-body = solid(1.35, flight_len, top_z + 0.42,
-             (SX, y0 + (flight_len - run) / 2, (top_z + 0.42) / 2), False)
 ang = math.atan2(rise, run)
-cutter = solid(3.0, flight_len * 2.2, 8.0,
-               (SX, y0 + (flight_len - run) / 2, 0), False)
-cutter.rotation_euler[0] = ang
-bpy.context.view_layer.objects.active = cutter
-bpy.ops.object.transform_apply(rotation=True)
 ymid = y0 + (flight_len - run) / 2
-cutter.location = (SX, ymid,
-                   rise * ((ymid - y0) / run + 1.0) + 4.0 / math.cos(ang) + 0.02)
-cut(body, cutter)
+
+
+def slope_cut(ob, extra=0.0):
+    """Take the diagonal off a solid mass so its top follows the flight.
+    One cut on one block: the stair and its wall are each a single piece of
+    masonry, never a comb of separate blocks."""
+    cutter = solid(3.4, flight_len * 2.2, 8.0, (SX, ymid, 0), False)
+    cutter.rotation_euler[0] = ang
+    bpy.context.view_layer.objects.active = cutter
+    bpy.ops.object.transform_apply(rotation=True)
+    cutter.location = (SX, ymid,
+                       rise * ((ymid - y0) / run + 1.0) + 4.0 / math.cos(ang) + 0.02 + extra)
+    cut(ob, cutter)
+
+
+# the flight itself: one mass, cut to the slope, and SOLID - collision per
+# step so the climb is true, plus the body under it so there is no hollow
+STW = 1.35
+body = solid(STW, flight_len, top_z + 0.42,
+             (SX, ymid, (top_z + 0.42) / 2), False)
+slope_cut(body)
 shell.append(body)
 for i in range(steps):
     h = rise * (i + 1)
-    shell.append(solid(1.35, run * 1.03, 0.14, (SX, y0 + i * run, h - 0.07), False))
+    shell.append(solid(STW, run * 1.03, 0.14, (SX, y0 + i * run, h - 0.07), False))
     COLLIDERS.append({"c": [round(SX, 3), round(h / 2, 3), round(-(y0 + i * run), 3)],
-                      "h": [0.675, round(h / 2, 3), round(run / 2, 3)]})
-# the cheek wall that carries the flight, closing its open side
-timber.append(solid(0.22, steps * run, 0.55,
-                    (SX + stair_side * 0.72, -D / 2 + 0.9 + (steps - 1) * run / 2, 0.3), False))
+                      "h": [round(STW / 2, 3), round(h / 2, 3), round(run / 2, 3)]})
+
+# HIS RULING: the SIDE and the BACK are walled, and the wall follows the
+# height of each step. Nothing else is closed in - the flight is open to the
+# air on the way up and open at the top.
+side_x = SX + stair_side * (STW / 2 + 0.16)
+cheek = solid(0.32, flight_len, top_z + 1.35, (side_x, ymid, (top_z + 1.35) / 2))
+slope_cut(cheek, 0.92)                     # its top rides a step above the treads
+erode(cheek, levels=1, fine=0.02, broad=0.03)
+shell.append(cheek)
+# the back wall, at the head of the flight, no taller than the roof it meets
+back_h = top_z + 0.42
+shell.append(solid(STW + 0.64, 0.32, back_h, (SX, y0 + flight_len - 0.16, back_h / 2)))
 
 # the little room at the head of the stair, where it comes out on the roof
 if random.random() < 0.5:
@@ -543,8 +573,9 @@ if random.random() < 0.5:
     shell += roof_slab(bx, by, bw, bd, top_z + 0.34 + bh, 0.2, 0.14)
 
 # --------------------------------------------------------------- timber
-# a plank door standing in the doorway, and its heavy lintel
-timber.append(solid(dw - 0.08, 0.1, dh - 0.55, (dx, -D / 2 + T / 2 - 0.02, (dh - 0.55) / 2), False))
+# The doorway is left EMPTY. The game hangs the real door here, on its hinge,
+# and a plank in the model as well meant every house had two doors - one in
+# the opening and one standing across it, which is what he was looking at.
 timber.append(solid(dw + 0.52, 0.22, 0.15, (dx, -D / 2 + 0.14, dh + 0.14), False))
 timber.append(solid(dw + 0.4, 0.34, 0.10, (dx, -D / 2 + 0.12, 0.05), False))     # the threshold
 

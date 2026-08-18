@@ -79,5 +79,46 @@ for name in names:
     else:
         print("%-6s enterable, floor rises %.2fm" % (name, last_floor))
 
-print("checked %d, %d blocked" % (len(names), bad))
-sys.exit(1 if bad else 0)
+# --- every wall must actually stop you: walk out from the middle of the room
+# in each direction and something solid has to be in the way before the open
+# air. Probing at a guessed distance tests nothing; this walks until it hits.
+wallbad = 0
+for name in names:
+    j = json.load(open(os.path.join(M, name + ".col.json")))
+    boxes = j["boxes"]
+    room = next((s for s in j.get("spots", []) if s.get("k") == "room"), None)
+    door = next((s for s in j.get("spots", []) if s.get("k") == "door"), None)
+    if not room:
+        continue
+    rx, rz = room["c"][0], room["c"][2]
+    holes = []
+    # the doorway is a hole on purpose: find which way it faces and let that
+    # side keep its gap. Probing it as a fault is how a door reads as a hole.
+    dsign = 0
+    if door:
+        dsign = 1 if door["c"][2] > rz else -1
+    for (dx, dz, lab) in ((1, 0, "right"), (-1, 0, "left"), (0, 1, "+z"), (0, -1, "-z")):
+        hits = 0
+        need = 4
+        if dz == dsign and dsign != 0:
+            need = 2                     # the door's own wall: piers only
+        for t in (-0.6, -0.3, 0.0, 0.3, 0.6):
+            ox = rx + dz * t * 3.0
+            oz = rz + dx * t * 3.0
+            blocked = False
+            for step in range(4, 90):          # 0.4 m out to 9 m
+                x = ox + dx * step * 0.1
+                z = oz + dz * step * 0.1
+                if any(inside(b, x, 1.2, z) for b in boxes):
+                    blocked = True
+                    break
+            if blocked:
+                hits += 1
+        if hits < need:
+            holes.append("%s %d/5" % (lab, hits))
+    if holes:
+        wallbad += 1
+        print("%-6s WALL NOT SOLID: %s" % (name, ", ".join(holes)))
+
+print("checked %d, %d blocked, %d with a soft wall" % (len(names), bad, wallbad))
+sys.exit(1 if (bad or wallbad) else 0)
