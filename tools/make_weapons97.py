@@ -209,11 +209,16 @@ def build_rpg():
     # PGO-7 optic on the left
     box(0.030, 0.075, 0.045, (-0.042, 0.52, 0.035), DARK)
     cyl(0.020, 0.05, (-0.042, 0.565, 0.035), DARK, rot=(math.pi / 2, 0, 0), verts=10)
-    # front: tube widens, then the PG-7 round: cone nose + bulb + boom
-    cyl(0.020, 0.14, (0, 0.88, 0), STEEL, rot=(math.pi / 2, 0, 0), verts=14)
-    cyl(0.032, 0.10, (0, 0.99, 0), DARK, rot=(math.pi / 2, 0, 0), verts=14, r2=0.046)
-    cyl(0.046, 0.09, (0, 1.085, 0), DARK, rot=(math.pi / 2, 0, 0), verts=14, r2=0.030)
-    cyl(0.030, 0.07, (0, 1.16, 0), DARK, rot=(math.pi / 2, 0, 0), verts=12, r2=0.004)
+    # front: the tube runs on, and the PG-7 round is LOADED INTO IT - boom
+    # inside the muzzle, then the bulb, then the nose cone. It used to hang in
+    # the air a hand's width in front of the launcher.
+    cyl(0.021, 0.26, (0, 0.86, 0), STEEL, rot=(math.pi / 2, 0, 0), verts=14)
+    cyl(0.019, 0.16, (0, 1.03, 0), DARK, rot=(math.pi / 2, 0, 0), verts=12)     # the boom
+    # CONE ENDS: with rot=(pi/2,0,0) the cone's radius1 end faces FORWARD, so
+    # the nose must be built point-first or it flares out like a trumpet
+    cyl(0.047, 0.06, (0, 1.13, 0), DARK, rot=(math.pi / 2, 0, 0), verts=14, r2=0.026)
+    cyl(0.047, 0.10, (0, 1.21, 0), DARK, rot=(math.pi / 2, 0, 0), verts=14)     # the bulb
+    cyl(0.008, 0.13, (0, 1.32, 0), DARK, rot=(math.pi / 2, 0, 0), verts=14, r2=0.047)
     # iron sight post
     box(0.006, 0.006, 0.04, (0, 0.70, 0.038), STEEL)
     parts = [
