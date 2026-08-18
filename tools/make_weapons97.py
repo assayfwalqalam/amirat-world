@@ -231,36 +231,71 @@ def build_rpg():
 
 # ========================================================== the 82mm mortar
 def build_mortar():
+    """An 82 mm mortar, built from its footprint up.
+
+    The old one was assembled by guessing each part's rotation and position
+    separately, so it came apart: the tube leaned off its plate, the legs ran
+    through the ground and the muzzle ring hung in the sky. Everything here is
+    placed by pointing one part AT another - strut(a, b) works out the turn
+    from the two ends - so nothing can drift apart.
+    """
     fresh()
     STEEL, DARK = [], []
-    ang = math.radians(76)
-    L = 1.22
-    tx = math.cos(ang)
-    # tube leaning back on its baseplate
-    top = (0, -L * 0.5 * tx, L * 0.5 * math.sin(ang) + 0.06)
-    cyl(0.041, L, (0, -L * 0.5 * tx, L * 0.5 * math.sin(ang) + 0.08), STEEL,
-        rot=(ang - math.pi / 2, 0, 0), verts=16)
-    cyl(0.052, 0.05, (0, -L * tx + 0.02, L * math.sin(ang) + 0.06), STEEL,
-        rot=(ang - math.pi / 2, 0, 0), verts=16)          # muzzle ring
-    # round baseplate with webs
-    cyl(0.24, 0.045, (0, 0.06, 0.03), DARK, verts=20)
+
+    def strut(a, b, r, into, verts=8):
+        dx, dy, dz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+        L = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if L < 1e-6:
+            return
+        ux, uy, uz = dx / L, dy / L, dz / L
+        rx = -math.asin(max(-1.0, min(1.0, uy)))
+        ry = math.atan2(ux, uz)
+        cyl(r, L, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2),
+            into, rot=(rx, ry, 0), verts=verts)
+
+    # the baseplate, flat on the ground, with its webs
+    cyl(0.26, 0.05, (0, 0.10, 0.025), DARK, verts=22)
     for i in range(6):
-        a = i / 6 * 2 * math.pi
-        box(0.03, 0.20, 0.02, (math.cos(a) * 0.1, 0.06 + math.sin(a) * 0.1, 0.055), DARK, rz=a)
-    # bipod: two legs + elevation screw + traverse
+        a = i / 6.0 * 2 * math.pi
+        box(0.035, 0.22, 0.022, (math.cos(a) * 0.11, 0.10 + math.sin(a) * 0.11, 0.06),
+            DARK, rz=a)
+    cyl(0.075, 0.06, (0, 0.10, 0.075), STEEL, verts=14)      # the socket
+
+    # THE TUBE: bottom in that socket, leaning back over the plate
+    lean = math.radians(18)                                   # off vertical
+    L = 1.22
+    base = (0, 0.10, 0.09)
+    top = (0, base[1] - math.sin(lean) * L, base[2] + math.cos(lean) * L)
+    strut(base, top, 0.042, STEEL, verts=16)
+    strut((top[0], top[1] + math.sin(lean) * 0.05, top[2] - math.cos(lean) * 0.05),
+          (top[0], top[1] - math.sin(lean) * 0.03, top[2] + math.cos(lean) * 0.03),
+          0.053, STEEL, verts=16)                             # muzzle ring
+
+    # the yoke where the bipod meets the tube, two thirds up
+    yt = 0.62
+    yoke = (0, base[1] - math.sin(lean) * L * yt, base[2] + math.cos(lean) * L * yt)
+    box(0.13, 0.06, 0.06, (yoke[0], yoke[1] - 0.03, yoke[2]), DARK)
+
+    # THE BIPOD: each leg runs from its own foot on the ground UP to the yoke
     for sx in (-1, 1):
-        cyl(0.012, 0.62, (sx * 0.20, -0.42, 0.32), STEEL, rot=(0.45, sx * 0.35, 0), verts=8)
-        box(0.05, 0.05, 0.02, (sx * 0.30, -0.55, 0.02), DARK)
-    cyl(0.016, 0.30, (0, -0.42, 0.52), STEEL, rot=(0.35, 0, 0), verts=8)
-    box(0.10, 0.05, 0.05, (0, -0.36, 0.62), DARK)
+        foot = (sx * 0.34, -0.46, 0.0)
+        strut(foot, (yoke[0] + sx * 0.06, yoke[1] - 0.04, yoke[2] - 0.02), 0.013, STEEL)
+        box(0.09, 0.10, 0.025, (foot[0], foot[1], 0.012), DARK)     # the shoe
+    # the cross brace between the legs, and the elevating screw up to the yoke
+    strut((-0.30, -0.42, 0.16), (0.30, -0.42, 0.16), 0.009, STEEL)
+    strut((0, -0.40, 0.10), (yoke[0], yoke[1] - 0.05, yoke[2] - 0.10), 0.017, STEEL)
+    box(0.05, 0.05, 0.07, (0, -0.38, 0.14), DARK)                   # the hand wheel
+    cyl(0.055, 0.014, (0, -0.38, 0.19), STEEL, rot=(math.pi / 2, 0, 0), verts=12)
+
     parts = [
-        finish(STEEL, "steel", (0.10, 0.11, 0.10, 1), 0.5, 0.7),
-        finish(DARK, "dark", (0.06, 0.065, 0.06, 1), 0.7, 0.4),
+        finish(STEEL, "steel", (0.075, 0.077, 0.08, 1), 0.45, 0.8,
+               tex="t_gunsteel.jpg", uv=0.2),
+        finish(DARK, "dark", (0.05, 0.052, 0.055, 1), 0.62, 0.45,
+               tex="t_gunsteel.jpg", uv=0.16),
     ]
     export(parts, "mortar", "mortar97.blend")
 
 
-# ================================================================ the DShK
 def build_dshk():
     fresh()
     STEEL, DARK = [], []

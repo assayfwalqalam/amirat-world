@@ -189,11 +189,25 @@ elif KIND == "watchtower_metal":
     box(hw * 2 + 0.3, hw * 2 + 0.3, 0.08, (0, 0, H2), steel, collide=True)
     # the cabin: sheet walls with a window slot, a flat roof
     for sy in (-1, 1):
-        box(hw * 2, 0.05, 1.1, (0, sy * hw, H2 + 0.75), steel)
+        box(hw * 2, 0.05, 0.62, (0, sy * hw, H2 + 0.51), steel)   # below the slit
     box(0.05, hw * 2, 1.1, (-hw, 0, H2 + 0.75), steel)
     box(0.05, hw * 2, 0.5, (hw, 0, H2 + 1.05), steel)      # front half-wall (open firing slot)
     box(hw * 2 + 0.2, hw * 2 + 0.2, 0.08, (0, 0, H2 + 1.35), steel)   # roof
     rec((0, 0, H2 + 0.75), hw, hw, 1.1)
+    # A guard tower with no way up is a box on stilts. A ladder runs up the
+    # back leg line to a hatch in the deck, and the two closed sides get an
+    # observation slit so it reads as somewhere a man watches from.
+    for sy in (-1, 1):
+        box(0.05, 1.55, 0.34, (-hw + 0.001, 0, H2 + 1.05), steel) if sy < 0 else None
+    for sx2 in (-1, 1):
+        cyl(0.035, H2 + 0.2, (sx2 * 0.24, -hw - 0.20, (H2 + 0.2) / 2), steel, verts=6)
+    nrung = int((H2 + 0.2) / 0.32)
+    for i in range(nrung):
+        box(0.52, 0.05, 0.04, (0, -hw - 0.20, 0.24 + i * 0.32), steel)
+    # the slit: a band cut out of each long side by building the wall in two
+    # pieces instead of one, which is cheaper than a boolean and never fails
+    for sy in (-1, 1):
+        box(hw * 2, 0.05, 0.34, (0, sy * hw, H2 + 1.16), steel)
 
 elif KIND == "twall":
     # A concrete T-wall (blast wall): a tall slab on a wide foot, the grey

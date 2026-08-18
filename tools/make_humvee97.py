@@ -340,7 +340,7 @@ def finish(objs, name, base, rough, metal, emis=None, tex=None, uv=1.0):
 
 parts = [
     finish(BODY, "body", (0.352, 0.337, 0.271, 1), 0.74, 0.12, tex="t_paintsand.jpg", uv=1.7),     # sand-olive paint
-    finish(GLASS, "glass", (0.06, 0.08, 0.10, 1), 0.10, 0.55),
+    finish(GLASS, "glass", (0.24, 0.29, 0.36, 1), 0.06, 0.0, emis=(0.05, 0.07, 0.10, 1)),
     finish(BLACK, "black", (0.045, 0.045, 0.048, 1), 0.82, 0.10, tex="t_gunsteel.jpg", uv=0.5),
     finish(TYRE, "tyre", (0.052, 0.052, 0.055, 1), 0.96, 0.0, tex="t_rubber.jpg", uv=0.35),
     finish(RIM, "rim", (0.16, 0.155, 0.14, 1), 0.55, 0.5, tex="t_gunsteel.jpg", uv=0.3),
