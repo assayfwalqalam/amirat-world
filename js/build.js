@@ -948,6 +948,16 @@
     var c = Math.cos(brot), s2 = Math.sin(brot);
     for (var i = 0; i < spots.length; i++) {
       var sp = spots[i];
+      if (sp.k === 'climb') {
+        /* the model brought a ladder with it: put it where the model stands */
+        var lx = (sp.c[0] * scale) * c + (sp.c[2] * scale) * s2;
+        var lz = -(sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
+        var y0 = by + (sp.c[1] - sp.h[1]) * scale;
+        var y1 = by + (sp.c[1] + sp.h[1]) * scale;
+        if (W.addLadder) W.addLadder(bx + lx, y0, y1, bz + lz,
+                                     Math.max(sp.h[0], sp.h[2]) * scale + 0.45);
+        continue;
+      }
       if (sp.k === 'door') {
         /* a leaf on its hinge, turned to the face it was exported on */
         var hx = (sp.c[0] * scale) * c + (sp.c[2] * scale) * s2;

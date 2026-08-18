@@ -1192,6 +1192,29 @@
 
   /* ------------------------------------------------------------- player */
   var PR = 0.42, PH = 1.72, STEP = 0.74, GRAV = -23.5, JUMP = 8.4;
+
+  /* -------------------------------------------------------------- ladders
+     A ladder is not a stair: its rungs are thirty centimetres apart and dead
+     vertical, so walking cannot take you up one. Anything that registers a
+     climb volume here can be scaled - stand in it and walk forward, or hold
+     Space, and you go up it; let go and gravity has you again. The tower's
+     ladder and every ladder on a house use the same thing. */
+  var LADDERS = [];
+  W.addLadder = function (x, y0, y1, z, r) {
+    var L = { x: x, y0: y0, y1: y1, z: z, r: r || 0.75 };
+    LADDERS.push(L);
+    return L;
+  };
+  W.clearLadders = function () { LADDERS.length = 0; };
+  W.onLadder = function (p) {
+    for (var i = 0; i < LADDERS.length; i++) {
+      var L = LADDERS[i];
+      if (p.y < L.y0 - 1.0 || p.y > L.y1 + 1.4) continue;
+      var dx = p.x - L.x, dz = p.z - L.z;
+      if (dx * dx + dz * dz < L.r * L.r) return L;
+    }
+    return null;
+  };
   var pos = new THREE.Vector3(), vel = new THREE.Vector3();
   var yaw = 0, pitch = -0.04, fly = false, grounded = false;
   var keys = {}, moveVec = { x: 0, y: 0 }, movePid = null, moveOrigin = null, looks = {};
@@ -1414,8 +1437,21 @@
       var acc = grounded ? 13 : 5;
       vel.x += (wish.x - vel.x) * Math.min(1, acc * dt);
       vel.z += (wish.z - vel.z) * Math.min(1, acc * dt);
-      if (keys['Space']) tryJump();
-      vel.y += GRAV * dt;
+      var lad = W.onLadder(pos);
+      if (lad) {
+        /* on the ladder: forward or Space takes you up, back or Shift down,
+           and there is no falling while you hold on */
+        var up = 0;
+        if (keys['KeyW'] || keys['ArrowUp'] || keys['Space']) up += 1;
+        if (keys['KeyS'] || keys['ArrowDown'] || keys['ShiftLeft']) up -= 1;
+        vel.y = up * 3.2;
+        if (up === 0) vel.y = 0;
+        vel.x *= 0.25; vel.z *= 0.25;
+        if (pos.y > lad.y1 + 1.2 && up > 0) { vel.y = 0; }
+      } else {
+        if (keys['Space']) tryJump();
+        vel.y += GRAV * dt;
+      }
       pos.x += vel.x * dt; pos.z += vel.z * dt;
       resolve(pos);
       pos.y += vel.y * dt;

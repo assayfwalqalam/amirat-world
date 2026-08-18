@@ -156,19 +156,24 @@ elif KIND == "watchtower_wood":
 
 elif KIND == "watchtower_metal":
     # A steel scaffold guard tower: four uprights, X-bracing every level, a
-    # mesh platform and a sheet-metal cabin on top.
+    # deck with a hatch, a ladder you can actually climb, and a cabin that
+    # SITS ON the deck.
     def link(p0, p1, r, into):
-        """A cylinder strut between two points, correctly aimed."""
-        mx, my, mz = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2
+        """A strut between two points. Built at the ORIGIN, turned there, and
+        only then moved - a part that is rotated after it has been placed
+        swings about the world origin, which is what threw every brace out
+        past the legs like spikes."""
         dx, dy, dz = p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]
         ln = math.sqrt(dx * dx + dy * dy + dz * dz) or 0.001
-        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=ln, location=(mx, my, mz), vertices=6)
+        bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=ln, location=(0, 0, 0), vertices=6)
         ob = bpy.context.active_object
-        # aim the cylinder's local +Z along (dx,dy,dz)
         ob.rotation_euler = (0, math.acos(max(-1, min(1, dz / ln))), math.atan2(dy, dx) + math.pi / 2)
         bpy.ops.object.transform_apply(rotation=True)
+        ob.location = ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2)
+        bpy.ops.object.transform_apply(location=True)
         into.append(ob)
         return ob
+
     H2 = 6.0
     hw = 1.1
     for sx in (-1, 1):
@@ -182,32 +187,53 @@ elif KIND == "watchtower_metal":
         for e in range(4):
             (ax, ay) = corners[e]
             (bx, by) = corners[(e + 1) % 4]
-            link((ax, ay, z0), (bx, by, z1), 0.02, steel)   # the X
+            if e == 0:
+                continue                 # the front bay is left clear for the ladder
+            link((ax, ay, z0), (bx, by, z1), 0.02, steel)
             link((ax, ay, z1), (bx, by, z0), 0.02, steel)
-            link((ax, ay, z1), (bx, by, z1), 0.02, steel)   # the horizontal tie
-    # the platform deck
-    box(hw * 2 + 0.3, hw * 2 + 0.3, 0.08, (0, 0, H2), steel, collide=True)
-    # the cabin: sheet walls with a window slot, a flat roof
-    for sy in (-1, 1):
-        box(hw * 2, 0.05, 0.62, (0, sy * hw, H2 + 0.51), steel)   # below the slit
-    box(0.05, hw * 2, 1.1, (-hw, 0, H2 + 0.75), steel)
-    box(0.05, hw * 2, 0.5, (hw, 0, H2 + 1.05), steel)      # front half-wall (open firing slot)
-    box(hw * 2 + 0.2, hw * 2 + 0.2, 0.08, (0, 0, H2 + 1.35), steel)   # roof
-    rec((0, 0, H2 + 0.75), hw, hw, 1.1)
-    # A guard tower with no way up is a box on stilts. A ladder runs up the
-    # back leg line to a hatch in the deck, and the two closed sides get an
-    # observation slit so it reads as somewhere a man watches from.
-    for sy in (-1, 1):
-        box(0.05, 1.55, 0.34, (-hw + 0.001, 0, H2 + 1.05), steel) if sy < 0 else None
+            link((ax, ay, z1), (bx, by, z1), 0.02, steel)
+
+    # THE DECK, with a hatch at the ladder head. Four boards round a gap, so
+    # you come up through it instead of into the underside of a slab.
+    DK = hw + 0.15
+    HX, HZ = 0.42, 0.46                  # half the hatch
+    hy = -DK + HZ + 0.10                 # the hatch sits over the front bay
+    box(DK * 2, DK - (hy + HZ), 0.08, (0, (hy + HZ + DK) / 2, H2), steel, collide=True)
+    box(DK * 2, (hy - HZ) + DK, 0.08, (0, (-DK + hy - HZ) / 2, H2), steel, collide=True)
+    for sx in (-1, 1):
+        box(DK - HX, HZ * 2, 0.08, (sx * (HX + DK) / 2, hy, H2), steel, collide=True)
+
+    # THE LADDER: two rails and rungs, each rung a solid you can stand on, and
+    # a climb volume so it is scaled the way a ladder is, not walked up.
+    LY = -DK - 0.22
     for sx2 in (-1, 1):
-        cyl(0.035, H2 + 0.2, (sx2 * 0.24, -hw - 0.20, (H2 + 0.2) / 2), steel, verts=6)
-    nrung = int((H2 + 0.2) / 0.32)
+        cyl(0.035, H2 + 0.5, (sx2 * 0.26, LY, (H2 + 0.5) / 2), steel, verts=6)
+    nrung = int((H2 + 0.3) / 0.30)
     for i in range(nrung):
-        box(0.52, 0.05, 0.04, (0, -hw - 0.20, 0.24 + i * 0.32), steel)
-    # the slit: a band cut out of each long side by building the wall in two
-    # pieces instead of one, which is cheaper than a boolean and never fails
+        z = 0.26 + i * 0.30
+        box(0.56, 0.05, 0.045, (0, LY, z), steel)
+        rec((0, LY, z), 0.28, 0.03, 0.03)
+    # hoops round the upper half, as every real one has
+    for i in range(6):
+        z = H2 * 0.45 + i * 0.55
+        box(0.62, 0.04, 0.04, (0, LY - 0.28, z), steel)
+        for sx3 in (-1, 1):
+            box(0.04, 0.56, 0.04, (sx3 * 0.31, LY - 0.14, z), steel)
+    CLIMB = {"c": [0, (H2 + 0.4) / 2, -LY], "h": [0.42, (H2 + 0.4) / 2, 0.55]}
+
+    # THE CABIN, standing ON the deck
+    CZ = H2 + 0.04
     for sy in (-1, 1):
-        box(hw * 2, 0.05, 0.34, (0, sy * hw, H2 + 1.16), steel)
+        box(hw * 2, 0.05, 0.62, (0, sy * hw, CZ + 0.31), steel)          # below the slit
+        box(hw * 2, 0.05, 0.34, (0, sy * hw, CZ + 1.13), steel)          # above it
+    box(0.05, hw * 2, 0.62, (-hw, 0, CZ + 0.31), steel)
+    box(0.05, hw * 2, 0.34, (-hw, 0, CZ + 1.13), steel)
+    box(0.05, hw * 2, 0.5, (hw, 0, CZ + 0.55), steel)                    # firing slot side
+    box(hw * 2 + 0.2, hw * 2 + 0.2, 0.08, (0, 0, CZ + 1.34), steel)      # roof
+    for sx4 in (-1, 1):                                                  # corner posts
+        for sy4 in (-1, 1):
+            cyl(0.04, 1.34, (sx4 * hw, sy4 * hw, CZ + 0.67), steel, verts=6)
+    rec((0, 0, CZ + 0.7), hw, hw, 0.05)                                  # the cabin floor edge
 
 elif KIND == "twall":
     # A concrete T-wall (blast wall): a tall slab on a wide foot, the grey
@@ -366,6 +392,11 @@ bpy.ops.object.select_all(action='DESELECT')
 ob.select_set(True)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True,
                           export_apply=True, export_yup=True)
+SPOTS = []
+try:
+    SPOTS.append(dict(CLIMB, k="climb"))
+except NameError:
+    pass
 with open(os.path.splitext(OUT)[0] + ".col.json", "w") as f:
-    json.dump({"boxes": COLLIDERS}, f)
+    json.dump({"boxes": COLLIDERS, "spots": SPOTS}, f)
 print("WROTE", OUT)

@@ -393,6 +393,11 @@ def ladder(x, y_wall, z_top, sgn, lean=0.28):
         zz = (i + 0.6) / (n + 0.4) * z_top
         yy = y_wall + sgn * (off * (1 - zz / z_top) + 0.05)
         timber.append(solid(0.40, 0.07, 0.055, (x, yy, zz), False))
+    # the volume the game reads to let you climb it, in game axes
+    ymid2 = y_wall + sgn * (off / 2 + 0.05)
+    SPOTS.append({"c": [round(x, 2), round(z_top / 2, 2), round(-ymid2, 2)],
+                  "h": [0.36, round(z_top / 2, 2), round(off / 2 + 0.42, 2)],
+                  "k": "climb"})
 
 
 # ---------------------------------------------------- the ground storey
