@@ -14,7 +14,7 @@ import bpy, json, math, os, random, sys
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = argv[0] if argv else "qasr.glb"
 ASSETS = argv[1] if len(argv) > 1 else "assets"
-GOLDSMALL = len(argv) > 2 and argv[2] == "goldmix"
+GOLDSMALL = not (len(argv) > 2 and argv[2] == "allsapph")   # his yes, 2026-08-18
 random.seed(9)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -233,6 +233,20 @@ def arch(cx, cy, z0, w, h, depth, pool, frame=0.55, face=(0, -1), lit=True):
              z0 + ph / 2 + frame * 0.15, glow if lit else stone)
 
 
+def wood_window(cx, cy, z0, w, h, depth, face=(0, -1)):
+    """His order: the wooden treatment from the oriels on every window of
+    the second storey, outside and in. A timber surround proud of the wall,
+    the pointed arch framed in wood, the light behind."""
+    fl = math.hypot(face[0], face[1]) or 1.0
+    fx, fy = face[0] / fl, face[1] / fl
+    yaw = math.atan2(fy, fx) + math.pi / 2
+    cs, sn = math.cos(yaw), math.sin(yaw)
+    lx, ly = 0, depth * 0.28
+    box(w + 1.0, 0.45, h + 0.8, (cx + lx * cs - ly * sn, cy + lx * sn + ly * cs,
+        z0 + (h + 0.8) / 2 - 0.25), wood, yaw=yaw)
+    arch(cx, cy, z0, w, h, depth, wood, frame=0.42, face=face, lit=True)
+
+
 def arch_row(x0, x1, y, z0, n, w, h, depth, pool, lit=True, face=(0, -1)):
     for i in range(n):
         cx = x0 + (x1 - x0) * (i + 0.5) / n
@@ -346,11 +360,14 @@ z7 = z6 + S6_H
 box(48, 36, 2.0, (0, 0, 1.0), stone)
 box(46, 34, 0.6, (0, 0, 2.05), stone)
 WT = 1.7
-box(46, WT, S1_H - 2.3, (0, 17 - WT / 2, 2.3 + (S1_H - 2.3) / 2), stone)
+for sxw in (-1, 1):
+    box(20.4, WT, S1_H - 2.3, (sxw * (2.8 + 10.2), 17 - WT / 2, 2.3 + (S1_H - 2.3) / 2), stone)
+    col(sxw * 13.0, 17 - WT / 2, S1_H / 2, 10.2, WT / 2, S1_H / 2)
+box(5.6, WT, S1_H - 2.3 - 9.2, (0, 17 - WT / 2, 2.3 + 9.2 + (S1_H - 2.3 - 9.2) / 2), stone)
+arch(0, 17.4, 2.3, 5.4, 8.8, 0.9, stone, frame=0.55, lit=None, face=(0, 1))
 for sxw in (-1, 1):
     box(WT, 34, S1_H - 2.3, (sxw * (23 - WT / 2), 0, 2.3 + (S1_H - 2.3) / 2), stone)
     col(sxw * (23 - WT / 2), 0, S1_H / 2, WT / 2, 17, S1_H / 2)
-col(0, 17 - WT / 2, S1_H / 2, 23, WT / 2, S1_H / 2)
 for sxw in (-1, 1):
     box(20.4, WT, S1_H - 2.3, (sxw * (2.8 + 10.2), -17 + WT / 2, 2.3 + (S1_H - 2.3) / 2), stone)
     col(sxw * 13.0, -17 + WT / 2, S1_H / 2, 10.2, WT / 2, S1_H / 2)
@@ -380,6 +397,13 @@ arch(0, -20.9, 0.6, 9.0, 14.5, 2.8, stone, frame=1.5, lit=None)
 for i, (mw, mh) in enumerate(((7.6, 13.4), (6.4, 12.4), (5.2, 11.4))):
     arch(0, -21.6 + 0.5 * i, 0.6, mw, mh, 0.6, stone, frame=0.58, lit=None)
 arch(0, -19.9, 0.6, 5.6, 9.2, 0.7, stone, frame=0.5, lit=None)
+# the grand stair: the hall floor stood 2.35 m above the approach with
+# nothing to climb - eight solid treads from the ground to the gate
+for i_st in range(8):
+    st_h = 2.35 - i_st * 0.29
+    st_y = -19.9 - 0.62 * (i_st + 1)
+    box(9.4, 0.66, st_h, (0, st_y, st_h / 2), stone)
+    col(0, st_y, st_h / 2, 4.7, 0.33, st_h / 2)
 arch_row(-21, -9, -17.2, 1.6, 3, 2.6, 6.5, 1.0, stone, lit=True)
 arch_row(9, 21, -17.2, 1.6, 3, 2.6, 6.5, 1.0, stone, lit=True)
 for sx in (-1, 1):
@@ -390,12 +414,14 @@ arch_row(-14, 14, 17.25, 1.6, 5, 2.6, 6.5, 1.0, stone, lit=True, face=(0, 1))
 
 # S2 - THE ARCADE
 box(42, 30, S2_H, (0, 0, z2 + S2_H / 2), stone)
-arch_row(-19, 19, -15.35, z2 + 0.8, 7, 3.4, 6.2, 1.2, stone, lit=True)
-arch_row(-19, 19, 15.35, z2 + 0.8, 7, 3.4, 6.2, 1.2, stone, lit=True, face=(0, 1))
+for i in range(7):
+    cxw = -19 + 38 * (i + 0.5) / 7
+    wood_window(cxw, -15.35, z2 + 0.8, 3.4, 6.2, 1.2)
+    wood_window(cxw, 15.35, z2 + 0.8, 3.4, 6.2, 1.2, face=(0, 1))
 for sx in (-1, 1):
     for i in range(5):
         cy2 = -12 + 24 * (i + 0.5) / 5
-        arch(sx * 21.35, cy2, z2 + 0.8, 3.2, 6.0, 1.2, stone, lit=True, face=(sx, 0))
+        wood_window(sx * 21.35, cy2, z2 + 0.8, 3.2, 6.0, 1.2, face=(sx, 0))
 cornice(21, 15, z2 + S2_H, stone)
 dentils(0, 0, 21, 15, z2 + S2_H - 0.7, stone)
 col(0, 0, z2 + S2_H / 2, 21, 15, S2_H / 2)
@@ -520,7 +546,7 @@ def module(cx, cy, face, gate=False):
     for i in range(5):
         aa = -12 + 24 * (i + 0.5) / 5
         axp, ayp = P(aa, w_hy - 1 + 0.35)
-        arch(axp, ayp, W1 + 0.8, 2.4, 4.6, 1.0, stone, lit=True, face=face)
+        wood_window(axp, ayp, W1 + 0.8, 2.4, 4.6, 1.0, face=face)
     for i in range(4):
         aa = -10 + 20 * (i + 0.5) / 4
         axp, ayp = P(aa, w_hy - 2 + 0.35)
@@ -534,7 +560,7 @@ def module(cx, cy, face, gate=False):
     for i in range(3):
         aa = -8 + 16 * (i + 0.5) / 3
         axp, ayp = P(aa, -(w_hy - 1 + 0.35))
-        arch(axp, ayp, W1 + 0.9, 2.2, 4.4, 1.0, stone, lit=True, face=inward)
+        wood_window(axp, ayp, W1 + 0.9, 2.2, 4.4, 1.0, face=inward)
     for i in range(5):
         aa = -10 + 20 * (i + 0.5) / 5
         axp, ayp = P(aa, -(w_hy - 2 + 0.30))
