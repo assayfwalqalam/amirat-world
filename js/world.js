@@ -1027,20 +1027,36 @@
      than thinned: a half-empty meadow looks broken, a meadow that ends in the
      dark does not. Driven by the quality watch, not by a guess about the
      hardware. */
+  /* Every instanced plant has frustumCulled off - it has to, because the
+     shared geometry's bounds describe one blade, not the field the instances
+     cover, and three.js would cull the lot. So the culling is done here, per
+     chunk, against the real camera frustum: half the vegetation stands behind
+     the player at any moment and used to be drawn anyway. Measured: the
+     plants were twenty of a thirty-nine millisecond frame. */
+  var _vFrust = new THREE.Frustum();
+  var _vMat = new THREE.Matrix4();
+  var _vSphere = new THREE.Sphere();
+
   function vegVisible(p) {
     var R = W.vegDrawR || 1e9;
-    if (R > 1e8) {
-      chunks.forEach(function (rec) {
-        if (rec.veg) for (var i = 0; i < rec.veg.length; i++) rec.veg[i].visible = true;
-      });
-      return;
-    }
     var R2 = R * R;
+    cam.updateMatrixWorld();
+    _vMat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    _vFrust.setFromProjectionMatrix(_vMat);
+    var rad = CH * 0.72 + 10;
     chunks.forEach(function (rec) {
       if (!rec.veg) return;
-      var cx = rec.ci * CH + CH / 2 - p.x, cz = rec.cj * CH + CH / 2 - p.z;
-      var on = (cx * cx + cz * cz) < R2;
-      for (var i = 0; i < rec.veg.length; i++) rec.veg[i].visible = on;
+      var wx = rec.ci * CH + CH / 2, wz = rec.cj * CH + CH / 2;
+      var cx = wx - p.x, cz = wz - p.z;
+      var on = (R > 1e8) || (cx * cx + cz * cz) < R2;
+      if (on) {
+        _vSphere.center.set(wx, 6, wz);
+        _vSphere.radius = rad;
+        on = _vFrust.intersectsSphere(_vSphere);
+      }
+      for (var i = 0; i < rec.veg.length; i++) {
+        if (rec.veg[i].visible !== on) rec.veg[i].visible = on;
+      }
     });
   }
   W.vegVisible = vegVisible;
@@ -1344,7 +1360,10 @@
   };
   W.keyHeld = function (code) { return !!keys[code]; };
 
+  var _vegTick = 0;
+
   function step(dt) {
+    if ((_vegTick++ & 3) === 0) { try { vegVisible(pos); } catch (e) {} }
     if (W.EDITOR) {
       if (W.editorStep) W.editorStep(dt);
       cam.position.copy(pos);

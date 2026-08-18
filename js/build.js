@@ -302,10 +302,20 @@
       var f = fires[i];
       if (f.d2 > 68000) { f.g.visible = false; continue; }
       f.g.visible = true;
+      /* how much of the fire is worth drawing at this distance: all of it
+         close to, one tongue of flame from across the town. A light must
+         still be seen from far - his rule - so the flame never goes out,
+         only its layers do. */
+      var lod = f.d2 < 2600 ? 2 : (f.d2 < 17000 ? 1 : 0);
 
       /* each layer runs the sheet at its own speed, so the flame never loops
          visibly and the core dances faster than the body */
       for (var L = 0; L < f.layers.length; L++) {
+        if (L > 0) {
+          var want = (lod === 2) || (lod === 1 && L === 1);
+          if (f.layers[L].mesh.visible !== want) f.layers[L].mesh.visible = want;
+          if (!want) continue;
+        }
         var ly = f.layers[L];
         var fr = Math.floor((t * ly.sp + ly.off) % FRAMES);
         ly.tex.offset.y = 1 - (fr + 1) / FRAMES;
@@ -317,8 +327,10 @@
       f.pool.material.opacity = 0.24 + 0.18 * f.lit;
       f.pool.scale.setScalar(0.94 + 0.1 * f.lit);
 
+      if (f.pool && f.pool.visible !== (lod > 0)) f.pool.visible = (lod > 0);
+
       /* embers drift up, fade, and start again */
-      if (f.d2 < 9000) {
+      if (f.d2 < 4000) {
         f.embers.visible = true;
         for (var e = 0; e < f.eState.length; e++) {
           var st = f.eState[e];
@@ -618,6 +630,104 @@
   W.place = place;
 
   /* models arrive a few at a time, and a failure is retried before giving up */
+  /* ---------------- one texture per picture, one material per look -------
+     Every model packs its own copy of the wall photograph, so the same few
+     pictures arrived 594 times over and cost 452 MB of texture memory -
+     more than an integrated GPU will hold, so the driver swaps them in and
+     out and the frame time climbs from 26 ms to nearly a second. That is the
+     lag. Each picture is hashed as its file arrives, only the first copy is
+     kept, and then materials describing the same look share one object -
+     which also lets the weld put them all in one batch. */
+  var TEXBANK = {}, MATBANK = {}, SHARED = { tex: 0, mat: 0 };
+
+  function hashBytes(u8, from, len) {
+    var h = 0x811c9dc5, step = Math.max(1, Math.floor(len / 4096));
+    for (var i = 0; i < len; i += step) {
+      h ^= u8[from + i];
+      h = (h * 0x01000193) >>> 0;
+    }
+    return len + '_' + (h >>> 0).toString(16);
+  }
+
+  function imageHashes(buf) {
+    try {
+      var dv = new DataView(buf);
+      if (dv.getUint32(0, true) !== 0x46546c67) return null;
+      var jsonLen = dv.getUint32(12, true);
+      var json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen)));
+      var p = 20 + jsonLen, binOff = -1;
+      while (p < buf.byteLength) {
+        var clen = dv.getUint32(p, true), ctype = dv.getUint32(p + 4, true);
+        if (ctype === 0x004e4942) { binOff = p + 8; break; }
+        p += 8 + clen + ((4 - clen % 4) % 4);
+      }
+      if (binOff < 0 || !json.images) return null;
+      var u8 = new Uint8Array(buf), out = [];
+      for (var i = 0; i < json.images.length; i++) {
+        var im = json.images[i];
+        if (im.bufferView === undefined) { out.push(null); continue; }
+        var bv = json.bufferViews[im.bufferView];
+        out.push(hashBytes(u8, binOff + (bv.byteOffset || 0), bv.byteLength));
+      }
+      return { hashes: out, json: json };
+    } catch (e) { return null; }
+  }
+
+  var TEX_SLOTS = ['map', 'normalMap', 'roughnessMap', 'emissiveMap', 'aoMap', 'alphaMap'];
+
+  function shareTextures(gltf, info) {
+    if (!info || !gltf.parser || !gltf.parser.associations) return;
+    var assoc = gltf.parser.associations, json = info.json, seen = {};
+    gltf.scene.traverse(function (o) {
+      if (!o.isMesh || !o.material) return;
+      var mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (var k = 0; k < mats.length; k++) {
+        var m = mats[k];
+        if (!m || seen[m.uuid]) continue;
+        seen[m.uuid] = 1;
+        for (var j = 0; j < TEX_SLOTS.length; j++) {
+          var slot = TEX_SLOTS[j], t = m[slot];
+          if (!t) continue;
+          var a = assoc.get(t);
+          if (!a || a.textures === undefined) continue;
+          var src = json.textures[a.textures].source;
+          var h = info.hashes[src];
+          if (!h) continue;
+          h = slot + ':' + h;
+          if (TEXBANK[h] && TEXBANK[h] !== t) {
+            t.dispose();
+            m[slot] = TEXBANK[h];
+            SHARED.tex++;
+          } else if (!TEXBANK[h]) {
+            TEXBANK[h] = t;
+          }
+        }
+      }
+    });
+  }
+
+  function shareMaterials(gltf) {
+    gltf.scene.traverse(function (o) {
+      if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+      var m = o.material;
+      var key = [m.type, m.name, m.color ? m.color.getHexString() : '-',
+                 m.roughness, m.metalness,
+                 m.map ? m.map.uuid : '-', m.normalMap ? m.normalMap.uuid : '-',
+                 m.roughnessMap ? m.roughnessMap.uuid : '-',
+                 m.emissive ? m.emissive.getHexString() : '-', m.emissiveIntensity,
+                 m.transparent ? 1 : 0, m.alphaTest, m.vertexColors ? 1 : 0, m.side,
+                 m.flatShading ? 1 : 0].join('|');
+      if (MATBANK[key] && MATBANK[key] !== m) {
+        o.material = MATBANK[key];
+        m.dispose();
+        SHARED.mat++;
+      } else if (!MATBANK[key]) {
+        MATBANK[key] = m;
+      }
+    });
+  }
+  W.shareCounts = function () { return SHARED; };
+
   function loadModels(list, done) {
     loader = new T.GLTFLoader();
     var queue = list.slice(), active = 0, left = list.length, MAX = 4;
@@ -637,7 +747,17 @@
 
     function fetchOne(name, tries) {
       active++;
-      loader.load(W.bust('assets/models/' + name + '.glb'), function (g) {
+      var onFail = function () {
+        active--;
+        if (tries < 2) { setTimeout(function () { fetchOne(name, tries + 1); }, 500 + tries * 900); }
+        else { W.diag('model missing: ' + name); finish(); }
+      };
+      fetch(W.bust('assets/models/' + name + '.glb')).then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.arrayBuffer();
+      }).then(function (buf) {
+        var info = imageHashes(buf);
+        loader.parse(buf, '', function (g) {
         active--;
         g.scene.traverse(function (o) {
           if (o.isMesh) {
@@ -690,13 +810,12 @@
             if (o.isMesh && o.material && o.material.color) o.material.color.multiplyScalar(1.0).lerp(new T.Color(0xd8b98d), 0.34);
           });
         }
+        shareTextures(g, info);
+        shareMaterials(g);
         MODELS[name] = g.scene;
         finish();
-      }, undefined, function () {
-        active--;
-        if (tries < 2) { setTimeout(function () { fetchOne(name, tries + 1); }, 500 + tries * 900); }
-        else { W.diag('model missing: ' + name); finish(); }
-      });
+        }, onFail);
+      }).catch(onFail);
     }
 
     function pump() {
@@ -2445,7 +2564,15 @@
       /* billboards, glows and anything additive live by being re-aimed or
          faded every frame; welded they freeze into dark slabs in the sky */
       if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
-      var key = m.uuid;
+      /* Weld by material AND by where it stands. One batch for the whole
+         town is one draw call, but it is never off screen, so all eight and
+         a half million triangles are pushed every frame wherever you look.
+         Cut into cells, the half of the town behind you is culled. */
+      o.updateWorldMatrix(true, false);
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      var wc = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld);
+      var CELL = 110;
+      var key = m.uuid + '|' + Math.floor(wc.x / CELL) + '_' + Math.floor(wc.z / CELL);
       if (!groups.has(key)) groups.set(key, { mat: m, list: [] });
       groups.get(key).list.push(o);
       victims.push(o);
@@ -2562,6 +2689,16 @@
         var so = SMALL[sI];
         var sdx = so.position.x - cp.x, sdz = so.position.z - cp.z;
         so.visible = (sdx * sdx + sdz * sdz) < so.userData.far;
+      }
+      /* The doors cannot be welded - they swing - so each leaf, rib, band and
+         knob is its own draw call, and a town of them was twelve hundred of
+         them at once. A closed doorway forty metres off is a dark line: the
+         leaf is hidden past that and the doorway reads the same. */
+      for (var dI = 0; dI < doors.length; dI++) {
+        var dr = doors[dI];
+        var ddx = dr.x - cp.x, ddz = dr.z - cp.z;
+        var near = (ddx * ddx + ddz * ddz) < 2000;
+        if (dr.pivot && dr.pivot.visible !== near) dr.pivot.visible = near;
       }
     }
     for (var l = 0; l < lamps.length; l++) {
