@@ -1,18 +1,19 @@
 ﻿blender.exe : TBBmalloc: skip allocation functions replacement in ucrtbase.dll: unknown prologue for function _msize
-At line:1 char:458
-+ ... e-Command { & "C:\Users\sandk\Tools\blender-4.2.1-windows-x64\blender ...
+At line:1 char:463
++ ... _rooms.py"; & "C:\Users\sandk\Tools\blender-4.2.1-windows-x64\blender ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (TBBmalloc: skip...function _msize:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-04:31:20 | INFO: Starting glTF 2.0 export
-04:31:20 | INFO: Extracting primitive: stone
-04:31:21 | INFO: Primitives created: 9
-04:31:21 | INFO: Finished glTF 2.0 export in 0.8882546424865723 s
-RESULT qasr verts=234586 tris=411482
-INFO Draco mesh compression is available, use library at C:\Users\sandk\Tools\blender-4.2.1-windows-x64\4.2\python\lib\site-packages\extern_draco.dll
-
-WROTE C:\Users\sandk\amirat-world\assets\models\palace\qasr.glb
 Blender 4.2.1 LTS (hash 396f546c9d82 built 2024-08-19 11:29:52)
+Traceback (most recent call last):
+  File "C:\Users\sandk\amirat-world\tools\make_palace.py", line 730, in <module>
+    module(sxm * (38 + 30 * i), 0, (0, -1), gate=(i == 0))
+  File "C:\Users\sandk\amirat-world\tools\make_palace.py", line 577, in module
+    door_leaves(dx_, dy_, fl_z, 4.4, 4.6, face=inward, ajar=0.78)
+                                     ^^^
+UnboundLocalError: cannot access local variable 'inward' where it is not associated with a value
+
+Error: script failed, file: 'tools\make_palace.py', exiting.
 
 Blender quit

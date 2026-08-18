@@ -247,6 +247,33 @@ def wood_window(cx, cy, z0, w, h, depth, face=(0, -1)):
     arch(cx, cy, z0, w, h, depth, wood, frame=0.42, face=face, lit=True)
 
 
+def door_leaves(cx, cy, z0, w, h, face=(0, -1), ajar=0.55, inset=0.16):
+    """A handsome double door: planked leaves with three gold straps and a
+    stud grid, hung at the jambs, standing ajar. Static for now - the swing
+    comes with the game-side hook."""
+    fl = math.hypot(face[0], face[1]) or 1.0
+    fx, fy = face[0] / fl, face[1] / fl
+    yaw = math.atan2(fy, fx) + math.pi / 2
+    cs, sn = math.cos(yaw), math.sin(yaw)
+    w = w - inset * 2
+    lw = w / 2 - 0.05
+    lh = h - 0.25
+    for side in (-1, 1):
+        hx0, hy0 = cx + (side * w / 2) * cs, cy + (side * w / 2) * sn
+        swing = yaw + side * ajar
+        c2, s2 = math.cos(swing), math.sin(swing)
+        mx = hx0 + (-side * lw / 2) * c2
+        my = hy0 + (-side * lw / 2) * s2
+        box(lw, 0.13, lh, (mx, my, z0 + lh / 2), wood, yaw=swing)
+        for st in (0.18, 0.5, 0.82):
+            box(lw - 0.16, 0.05, 0.16, (mx + 0.10 * (-s2), my + 0.10 * c2,
+                z0 + lh * st), gold, yaw=swing)
+        for gx in (-0.3, 0.3):
+            for gz in (0.32, 0.62):
+                box(0.09, 0.07, 0.09, (mx + gx * lw * 0.5 * c2 + 0.10 * (-s2),
+                    my + gx * lw * 0.5 * s2 + 0.10 * c2, z0 + lh * gz), gold, yaw=swing)
+
+
 def arch_row(x0, x1, y, z0, n, w, h, depth, pool, lit=True, face=(0, -1)):
     for i in range(n):
         cx = x0 + (x1 - x0) * (i + 0.5) / n
@@ -308,6 +335,7 @@ def minaret(cx, cy, htot):
         col(cx + math.cos(a) * r * 1.5, cy + math.sin(a) * r * 1.5, 1.1,
             seg_w / 2 + 0.1, seg_w / 2 + 0.1, 1.1)
     arch(cx, cy - r * 1.5 - 0.3, 0.0, 2.2, 3.6, 0.8, stone, frame=0.4, lit=None)
+    door_leaves(cx, cy - r * 1.5 - 0.15, 0.0, 1.8, 2.9, face=(0, -1), ajar=0.85)
     shaft_h = lz - 2.2
     for k in range(NW):
         a = (k + 0.5) / NW * 2 * math.pi - math.pi / 2
@@ -365,6 +393,7 @@ for sxw in (-1, 1):
     col(sxw * 13.0, 17 - WT / 2, S1_H / 2, 10.2, WT / 2, S1_H / 2)
 box(5.6, WT, S1_H - 2.3 - 9.2, (0, 17 - WT / 2, 2.3 + 9.2 + (S1_H - 2.3 - 9.2) / 2), stone)
 arch(0, 17.4, 2.3, 5.4, 8.8, 0.9, stone, frame=0.55, lit=None, face=(0, 1))
+door_leaves(0, 17.6, 2.35, 4.8, 6.4, face=(0, 1), ajar=0.66)
 for sxw in (-1, 1):
     box(WT, 34, S1_H - 2.3, (sxw * (23 - WT / 2), 0, 2.3 + (S1_H - 2.3) / 2), stone)
     col(sxw * (23 - WT / 2), 0, S1_H / 2, WT / 2, 17, S1_H / 2)
@@ -397,6 +426,7 @@ arch(0, -20.9, 0.6, 9.0, 14.5, 2.8, stone, frame=1.5, lit=None)
 for i, (mw, mh) in enumerate(((7.6, 13.4), (6.4, 12.4), (5.2, 11.4))):
     arch(0, -21.6 + 0.5 * i, 0.6, mw, mh, 0.6, stone, frame=0.58, lit=None)
 arch(0, -19.9, 0.6, 5.6, 9.2, 0.7, stone, frame=0.5, lit=None)
+door_leaves(0, -19.6, 2.35, 5.0, 6.8, face=(0, -1), ajar=0.72)
 # the grand stair: the hall floor stood 2.35 m above the approach with
 # nothing to climb - eight solid treads from the ground to the gate
 for i_st in range(8):
@@ -507,6 +537,7 @@ def module(cx, cy, face, gate=False):
     order: the inner walls must have flavour too."""
     ox, oy = face
     ax, ay = -oy, ox
+    inward = (-ox, -oy)
     w_hx, w_hy = 15.0, 13.0
     W1, W2, W3 = 8.5, 7.0, 6.0
 
@@ -516,23 +547,97 @@ def module(cx, cy, face, gate=False):
     def sized(a_len, o_len):
         return (abs(a_len * ax) + abs(o_len * ox), abs(a_len * ay) + abs(o_len * oy))
 
-    for (hw, hd, zz, hh) in ((w_hx, w_hy, 0, W1), (w_hx - 1, w_hy - 1, W1, W2),
-                             (w_hx - 2, w_hy - 2, W1 + W2, W3)):
-        sx_, sy_ = sized(hw * 2, hd * 2)
-        box(sx_, sy_, hh, (cx, cy, zz + hh / 2), stone)
-        string_course(cx, cy, sx_ / 2, sy_ / 2, zz + hh - 0.1, stone)
+    # THE GROUND STOREY IS HOLLOW: a room behind a court door - or, for a
+    # gate module, a passage straight through the curtain into the court.
+    # Storeys above stay solid and ride on the room's ceiling.
+    WT2 = 2.0
+    fl_z = 2.1                                  # room floor top, one shallow step below the paving
+    ceil_z = W1 - 0.9                           # room ceiling underside
     sx_, sy_ = sized(w_hx * 2 + 1.4, w_hy * 2 + 1.4)
-    box(sx_, sy_, 1.6, (cx, cy, 0.8), stone)
-    col(cx, cy, (W1 + W2 + W3) / 2, sized(w_hx * 2, w_hy * 2)[0] / 2,
-        sized(w_hx * 2, w_hy * 2)[1] / 2, (W1 + W2 + W3) / 2)
+    box(sx_, sy_, 1.6, (cx, cy, 0.8), stone)                       # plinth
+    fx_, fy_ = sized(w_hx * 2, w_hy * 2)
+    box(fx_, fy_, 0.5, (cx, cy, 1.55 + 0.25), stone)               # room floor
+    box(fx_, fy_, 0.9, (cx, cy, ceil_z + 0.45), stone)             # ceiling
+    # side walls (the two along-walls)
+    for sa in (-1, 1):
+        wx_, wy_ = P(sa * (w_hx - WT2 / 2), 0)
+        ssx, ssy = sized(WT2, w_hy * 2)
+        box(ssx, ssy, ceil_z - fl_z, (wx_, wy_, fl_z + (ceil_z - fl_z) / 2), stone)
+        col(wx_, wy_, (fl_z + ceil_z) / 2, ssx / 2, ssy / 2, (ceil_z - fl_z) / 2)
+    if gate:
+        # a PASSAGE: outward wall and court wall both open, straight through
+        for oo in (w_hy - WT2 / 2, -(w_hy - WT2 / 2)):
+            for sa in (-1, 1):
+                wx_, wy_ = P(sa * (w_hx / 2 + 1.35), oo)
+                ssx, ssy = sized(w_hx - 2.7, WT2)
+                box(ssx, ssy, ceil_z - fl_z, (wx_, wy_, fl_z + (ceil_z - fl_z) / 2), stone)
+                col(wx_, wy_, (fl_z + ceil_z) / 2, ssx / 2, ssy / 2, (ceil_z - fl_z) / 2)
+            lx_, ly_ = P(0, oo)
+            lsx, lsy = sized(5.4, WT2)
+            box(lsx, lsy, ceil_z - fl_z - 4.9, (lx_, ly_, fl_z + 4.9 + (ceil_z - fl_z - 4.9) / 2), stone)
+        dx_, dy_ = P(0, -(w_hy - 0.7))
+        door_leaves(dx_, dy_, fl_z, 4.4, 4.6, face=inward, ajar=0.78)
+    else:
+        # a ROOM: outward wall solid, court wall opens through a door
+        wx_, wy_ = P(0, w_hy - WT2 / 2)
+        ssx, ssy = sized(w_hx * 2, WT2)
+        box(ssx, ssy, ceil_z - fl_z, (wx_, wy_, fl_z + (ceil_z - fl_z) / 2), stone)
+        col(wx_, wy_, (fl_z + ceil_z) / 2, ssx / 2, ssy / 2, (ceil_z - fl_z) / 2)
+        for sa in (-1, 1):
+            wx_, wy_ = P(sa * (w_hx / 2 + 1.6), -(w_hy - WT2 / 2))
+            ssx, ssy = sized(w_hx - 3.2, WT2)
+            box(ssx, ssy, ceil_z - fl_z, (wx_, wy_, fl_z + (ceil_z - fl_z) / 2), stone)
+            col(wx_, wy_, (fl_z + ceil_z) / 2, ssx / 2, ssy / 2, (ceil_z - fl_z) / 2)
+        lx_, ly_ = P(0, -(w_hy - WT2 / 2))
+        lsx, lsy = sized(6.4, WT2)
+        box(lsx, lsy, ceil_z - fl_z - 4.4, (lx_, ly_, fl_z + 4.4 + (ceil_z - fl_z - 4.4) / 2), stone)
+        adx, ady = P(0, -(w_hy + 0.28))
+        arch(adx, ady, fl_z, 3.2, 4.6, 0.9, stone, frame=0.45, lit=None, face=inward)
+        dlx, dly = P(0, -(w_hy - 0.75))
+        door_leaves(dlx, dly, fl_z, 2.9, 4.0, face=inward, ajar=0.62)
+        # the room dressed: a runner, two hanging lanterns, lit niches
+        rx_, ry_ = P(0, 0)
+        rsx, rsy = sized(3.2, w_hy * 1.2)
+        box(rsx, rsy, 0.1, (rx_, ry_, fl_z + 0.3), wood)
+        for ll in (-4.5, 4.5):
+            llx, lly = P(ll, 0)
+            cyl(0.07, 1.6, (llx, lly, ceil_z - 1.6), gold, verts=8)
+            box(0.44, 0.44, 0.8, (llx, lly, ceil_z - 2.75), glow)
+            box(0.56, 0.56, 0.1, (llx, lly, ceil_z - 2.24), gold)
+            box(0.56, 0.56, 0.1, (llx, lly, ceil_z - 3.3), gold)
+        for nn in (-8, 0, 8):
+            nx_, ny_ = P(nn, w_hy - WT2 - 0.02)
+            arch(nx_, ny_, fl_z + 0.9, 1.7, 3.3, 0.6, stone, frame=0.3,
+                 lit=(nn == 0), face=inward)
+    # the upper storeys ride on the ceiling, solid as before
+    for (hw, hd, zz, hh) in ((w_hx, w_hy, W1, 0), (w_hx - 1, w_hy - 1, W1, W2),
+                             (w_hx - 2, w_hy - 2, W1 + W2, W3)):
+        if hh <= 0:
+            continue
+        ssx, ssy = sized(hw * 2, hd * 2)
+        box(ssx, ssy, hh, (cx, cy, zz + hh / 2), stone)
+        string_course(cx, cy, ssx / 2, ssy / 2, zz + hh - 0.1, stone)
+    # the ground storey's outer shell above the openings, so the outside
+    # face still reads as one wall (a band between ceiling and first floor)
+    bsx, bsy = sized(w_hx * 2, w_hy * 2)
+    box(bsx, bsy, W1 - ceil_z - 0.9, (cx, cy, ceil_z + 0.9 + (W1 - ceil_z - 0.9) / 2), stone)
+    string_course(cx, cy, bsx / 2, bsy / 2, W1 - 0.1, stone)
+    col(cx, cy, (W1 + W2 + W3 + fl_z) / 2 + 2, bsx / 2, bsy / 2, (W1 + W2 + W3 - fl_z) / 2 - 2)
 
     inward = (-ox, -oy)
     if gate:
-        gx, gy = P(0, w_hy + 0.6)
-        sx_, sy_ = sized(7.5, 3.4)
-        box(sx_, sy_, 10.5, (gx, gy, 5.25), stone)
+        # the gate tower is a PORTAL, not a plug: two flanks and a brow,
+        # the passage running clean between them
+        for gfs in (-1, 1):
+            fgx, fgy = P(gfs * 3.48, w_hy + 0.6)
+            fsx, fsy = sized(1.55, 3.4)
+            box(fsx, fsy, 10.5, (fgx, fgy, 5.25), stone)
+            col(fgx, fgy, 5.25, fsx / 2, fsy / 2, 5.25)
+        bgx, bgy = P(0, w_hy + 0.6)
+        bsx, bsy = sized(8.5, 3.4)
+        box(bsx, bsy, 10.5 - 6.2, (bgx, bgy, 6.2 + (10.5 - 6.2) / 2), stone)
         agx, agy = P(0, w_hy + 2.45)
-        arch(agx, agy, 0.5, 4.6, 8.2, 2.2, stone, frame=0.65, lit=True, face=face)
+        arch(agx, agy, 0.5, 4.6, 8.2, 2.2, stone, frame=0.65, lit=None, face=face)
         for sa in (-1, 1):
             for i in range(2):
                 aa = sa * (6 + i * 4.2)
@@ -580,7 +685,30 @@ def module(cx, cy, face, gate=False):
 def corner_tower(cx, cy):
     H = 30.0
     cyl(10.2, 2.0, (cx, cy, 1.0), stone, verts=8, smooth=False)
-    cyl(9.0, H, (cx, cy, 2.0 + H / 2), stone, verts=8, smooth=False)
+    # the ground five metres are a ROOM: eight wall segments with a door
+    # gap toward the court diagonal, a floor, and the shaft solid above
+    droom_h = 5.2
+    da = math.atan2(62 - cy, 0 - cx)              # the door faces the court
+    for k in range(8):
+        a8 = (k + 0.5) / 8 * 2 * math.pi
+        if abs(((a8 - da + math.pi) % (2 * math.pi)) - math.pi) < 0.42:
+            continue
+        seg_w = 2 * math.pi * 8.4 / 8 * 1.18
+    # walls sit at r 8.4, 1.2 thick; the cylinder above closes the drum
+        box(seg_w, 1.2, droom_h, (cx + math.cos(a8) * 8.4, cy + math.sin(a8) * 8.4, 2.0 + droom_h / 2),
+            stone, yaw=a8 + math.pi / 2)
+        col(cx + math.cos(a8) * 8.4, cy + math.sin(a8) * 8.4, 2.0 + droom_h / 2,
+            seg_w / 2 + 0.1, seg_w / 2 + 0.1, droom_h / 2)
+    box(16, 16, 0.5, (cx, cy, 2.05), stone)
+    arch(cx + math.cos(da) * 9.0, cy + math.sin(da) * 9.0, 2.0, 2.6, 4.2, 1.0,
+         stone, frame=0.45, lit=None, face=(math.cos(da), math.sin(da)))
+    door_leaves(cx + math.cos(da) * 8.6, cy + math.sin(da) * 8.6, 2.0, 2.3, 3.6,
+                face=(math.cos(da), math.sin(da)), ajar=0.7)
+    for ll in (-3.5, 3.5):
+        cyl(0.07, 1.4, (cx + ll, cy, 2.0 + droom_h - 1.4), gold, verts=8)
+        box(0.44, 0.44, 0.75, (cx + ll, cy, 2.0 + droom_h - 2.5), glow)
+        box(0.56, 0.56, 0.1, (cx + ll, cy, 2.0 + droom_h - 2.02), gold)
+    cyl(9.0, H - droom_h, (cx, cy, 2.0 + droom_h + (H - droom_h) / 2), stone, verts=8, smooth=False)
     for i in range(8):
         a8 = (i + 0.5) / 8 * 2 * math.pi
         fx8, fy8 = math.cos(a8), math.sin(a8)
@@ -591,7 +719,7 @@ def corner_tower(cx, cy):
     cyl(9.9, 1.2, (cx, cy, 2.0 + H + 0.4), stone, verts=8, smooth=False)
     parapet(cx, cy, 7.4, 7.4, 2.0 + H + 1.0, stone, hh=1.1)
     dome(cx, cy, 2.0 + H + 1.0, 6.0, 11.0, ribs=14, seg=40)
-    col(cx, cy, 1.0 + H / 2, 9.4, 9.4, H / 2 + 1)
+    col(cx, cy, (2.0 + droom_h + H) / 2 + 1, 9.4, 9.4, (H - droom_h) / 2 + 1)
 
 
 def connector(x0, y0, x1, y1, h=7.5):
