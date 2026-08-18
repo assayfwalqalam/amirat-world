@@ -1040,13 +1040,19 @@
   /* rebuild just the chunks a land brush touched - repainting the whole
      country per stroke would freeze the hand */
   W.touchTerrain = function (x, z, r) {
+    /* collect first: re-inserting into a Map while forEach walks it makes
+       the walk revisit the new entry, and the rebuild chases its own tail */
+    var jobs = [];
     chunks.forEach(function (rec, key) {
       var x0 = rec.ci * CH, z0 = rec.cj * CH;
       if (x + r < x0 || x - r > x0 + CH || z + r < z0 || z - r > z0 + CH) return;
-      var seg = rec.seg;
-      disposeChunk(rec);
-      chunks.delete(key);
-      chunks.set(key, makeChunk(rec.ci, rec.cj, seg));
+      jobs.push({ key: key, rec: rec });
+    });
+    jobs.forEach(function (j) {
+      var seg = j.rec.seg, ci = j.rec.ci, cj = j.rec.cj;
+      disposeChunk(j.rec);
+      chunks.delete(j.key);
+      chunks.set(j.key, makeChunk(ci, cj, seg));
     });
   };
 

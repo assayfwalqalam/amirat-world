@@ -907,8 +907,14 @@
         W.wake();
       }
       if (mouse.down && mouse.btn === 0 && mode === 'land' && landStroke) {
-        var lg2 = groundPoint(e);
-        if (lg2) { landStamp(lg2.x, lg2.z); W.wake(); }
+        /* a chunk rebuild costs ~200ms: stamping every mouse move would fight
+           the hand. Eight strokes a second feels continuous and stays smooth. */
+        var nowT = performance.now();
+        if (!landStroke.last || nowT - landStroke.last > 120) {
+          landStroke.last = nowT;
+          var lg2 = groundPoint(e);
+          if (lg2) { landStamp(lg2.x, lg2.z); W.wake(); }
+        }
       }
     });
 
