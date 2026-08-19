@@ -239,7 +239,10 @@
         blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: op }));
   }
 
-  function fire(x, y, z, scale, power) {
+  /* groundY: where the light pool lies. A brazier on a minaret gallery is
+     fifty metres above the ground, and without this its pool of firelight was
+     painted on the earth far below. */
+  function fire(x, y, z, scale, power, groundY) {
     scale = scale || 1;
     power = power === undefined ? 1 : power;
     var g = new T.Group();
@@ -269,7 +272,7 @@
       new T.MeshBasicMaterial({ map: poolTex, color: 0xff9a48, transparent: true,
         blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.34 }));
     pool.rotation.x = -Math.PI / 2;
-    pool.position.y = -y + W.heightAt(x, z) + 0.06;
+    pool.position.y = -y + (groundY === undefined ? W.heightAt(x, z) : groundY) + 0.06;
     g.add(pool);
 
     /* embers, rising and dying */
@@ -553,7 +556,7 @@
         .catch(function () {}),
       (has('fx', name) ? fetch(W.bust('assets/models/' + name + '.fx.json'))
         .then(function (r) { return r.ok ? r.json() : null; }) : Promise.resolve(null))
-        .then(function (j) { if (j && j.fireflies) FXJSON[name] = j.fireflies; })
+        .then(function (j) { if (j) FXJSON[name] = j; })
         .catch(function () {})
     ]);
   }
@@ -587,8 +590,34 @@
       if (dl) dl.dir = -1;
     }
   }
+  /* Whatever a placed model asks the engine to light or to grow: its fires
+     (the minaret braziers, the garden torches) and its garden (real trees,
+     flowers and grass - a welded palace cannot carry a tree). */
+  function spawnModelExtras(name, bx, by, bz, brot, scale) {
+    var j = FXJSON[name];
+    if (!j) return;
+    var c = Math.cos(brot), s2 = Math.sin(brot);
+    (j.fires || []).forEach(function (ff) {
+      var wx = bx + (ff.x * scale) * c + (ff.z * scale) * s2;
+      var wz = bz - (ff.x * scale) * s2 + (ff.z * scale) * c;
+      fire(wx, by + ff.y * scale, wz, (ff.s || 1) * scale, ff.p || 1,
+           by + (ff.g === undefined ? 0 : ff.g) * scale);
+    });
+    (j.garden || []).forEach(function (gg, gi) {
+      var wx = bx + (gg.x * scale) * c + (gg.z * scale) * s2;
+      var wz = bz - (gg.x * scale) * s2 + (gg.z * scale) * c;
+      var g = placeBuilt(gg.k, wx, by + gg.y * scale, wz, (gg.r || 0) + brot,
+                         (gg.s || 1) * scale);
+      /* a tree is worth drawing from across the court; a tuft of grass is not */
+      if (g) {
+        g.userData.far = /tree\//.test(gg.k) ? 40000 : 4900;
+        SMALL.push(g);
+      }
+    });
+  }
+
   function spawnModelFx(name, bx, by, bz, brot, scale) {
-    var defs = FXJSON[name];
+    var defs = FXJSON[name] && FXJSON[name].fireflies;
     if (!defs) return;
     if (!flyMats) {
       var mkm = function (hex) {
@@ -2901,8 +2930,21 @@
   function buildLayout(list) {
     var keys = [];
     list.forEach(function (o) { if (keys.indexOf(o.k) < 0) keys.push(o.k); });
-    Promise.all(keys.map(loadCollision));
-    loadModels(keys, function () {
+    /* The side files come FIRST now, because a model may bring a garden with
+       it: the qasr's trees, flowers, grass and torches are models of their
+       own, named in its .fx.json, and nothing can be planted until they have
+       been fetched. */
+    Promise.all(keys.map(loadCollision)).then(function () {
+      var extra = [];
+      keys.forEach(function (k) {
+        var j = FXJSON[k];
+        (j && j.garden || []).forEach(function (gg) {
+          if (keys.indexOf(gg.k) < 0 && extra.indexOf(gg.k) < 0) extra.push(gg.k);
+        });
+      });
+      return Promise.all(extra.map(loadCollision)).then(function () { return extra; });
+    }).then(function (extra) {
+    loadModels(keys.concat(extra), function () {
       var made = 0;
       list.forEach(function (o, idx) {
         var sc = o.s === undefined ? 1 : o.s;
@@ -2912,11 +2954,13 @@
           dressBuilding(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc, idx * 131 + 7);
           spawnModelDoors(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc);
           spawnModelFx(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc);
+          spawnModelExtras(o.k, o.p[0], o.p[1], o.p[2], o.r || 0, sc);
         }
       });
       W.diag('');
       W.LAYOUT_COUNT = made;
       if (!made) W.diag('the layout is empty');
+    });
     });
     /* stand the player outside whatever was built */
     var minZ = 0;
