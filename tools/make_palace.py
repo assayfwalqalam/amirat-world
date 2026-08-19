@@ -24,12 +24,24 @@ COLS = []
 DOORS = []
 FLIES = []
 FIRES = []      # braziers the engine lights: {x,y,z,s,p,g}
+PLAN = []       # the layout map: every room and region, for naming
 GARDEN = []     # what the engine plants in the court: {k,x,y,z,r,s}
+LAMPS = []      # every lantern and sconce, so the engine puts real light in it
+COVER = []      # the beds, as rectangles: the engine sows the cards itself
 
 # One level for the whole compound: the hall floor, the court paving and every
 # room floor are THIS number. They used to differ by 15-20 cm, which is a step
 # down in every doorway and a dark line at every floor edge.
 CY = 2.35
+
+
+def region(code, kind, shape, cx, cy, a, b, note="", rot=0.0):
+    """One named place on the plan. The map is drawn from THIS, not from a
+    drawing made by hand, so it can never drift away from the palace."""
+    PLAN.append({"code": code, "kind": kind, "shape": shape,
+                 "x": round(cx, 2), "y": round(cy, 2),
+                 "a": round(a, 2), "b": round(b, 2),
+                 "rot": round(rot, 3), "note": note})
 
 
 def col(cx, cy, cz, hx, hy, hz):
@@ -69,6 +81,7 @@ rug = Pool("rug")
 cloth = Pool("cloth")      # the curtains
 tile = Pool("tile")        # the zellij dado
 flor = Pool("flor")        # the carved floral bands
+pane = Pool("pane")        # the amber panes of the lanterns
 folia = Pool("folia")      # the leaves of the garlands
 bloom = Pool("bloom")      # their flowers
 glow = Pool("glow")
@@ -244,19 +257,19 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
         return (cx + a * cs - o * sn, cy + a * sn + o * cs, z)
 
     TT = 0.50                       # where along the drop the holder grips
-    NT, NU, TH = 12, 7, 0.035
+    NT, NU, TH = 9, 5, 0.035
     for sd in sides:
         def edges(t):
             """the panel's two edges as they run down: bunched, pinched, flared"""
             if t <= TT:
                 f = t / TT
                 f = f * f * (3 - 2 * f)
-                a0 = 0.05 + (w / 2 - 0.10) * f
+                a0 = 0.20 + (w / 2 - 0.25) * f
                 a1 = (w / 2 + 0.55) + 0.20 * f
             else:
                 f = (t - TT) / (1 - TT)
                 f = f * f * (3 - 2 * f)
-                a0 = (w / 2 - 0.05) - 0.82 * f
+                a0 = (w / 2 - 0.25) - 0.62 * f
                 a1 = (w / 2 + 0.75) + 0.34 * f
             return sd * a0, sd * a1
 
@@ -272,7 +285,11 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
             for iu in range(NU + 1):
                 u = iu / float(NU)
                 a = a0 + (a1 - a0) * u
-                o = 0.16 + amp(t) * math.sin(u * math.pi * 3.0)
+                # the two panels hang at slightly different depths, as two
+                # curtains on one rod do - level with each other they meet in
+                # the middle and fight for every pixel
+                o = 0.16 + (0.05 if sd > 0 else 0.0) + \
+                    amp(t) * math.sin(u * math.pi * 3.0)
                 row.append((a, o, z_top - h * t))
             grid.append(row)
         b0 = len(cloth.v)
@@ -348,7 +365,7 @@ def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5):
     vx = ny * uz - nz * uy
     vy = nz * ux - nx * uz
     vz = nx * uy - ny * ux
-    for (pool, rr, n) in (((petal or bloom), r, npet), ((eye or gold), r * 0.30, npet)):
+    for (pool, rr, n) in (((petal or bloom), r, npet), ((eye or gold), r * 0.30, 3)):
         b0 = len(pool.v)
         pool.v.append((cx + nx * 0.012, cy + ny * 0.012, cz + nz * 0.012))
         for k in range(n):
@@ -363,11 +380,12 @@ def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5):
             i0 = b0 + 1 + k * 3
             pool.tri(b0, i0, i0 + 1)
             pool.tri(b0, i0 + 1, i0 + 2)
-            pool.tri(b0, i0 + 1, i0)
-            pool.tri(b0, i0 + 2, i0 + 1)
+            if pool is not gold:          # the eye lies on the petals: one side
+                pool.tri(b0, i0 + 1, i0)
+                pool.tri(b0, i0 + 2, i0 + 1)
 
 
-def garland(p0, p1, sag, nrm=(0, 0, 1), seed=0, n=14):
+def garland(p0, p1, sag, nrm=(0, 0, 1), seed=0, n=11):
     """A rope of leaves and flowers slung between two points and hanging in a
     half circle - his 'floral rope-like thing that stretches along it all the
     way, and goes in half circles'. It is what turns a bare arcade into a
@@ -397,8 +415,14 @@ def garland(p0, p1, sag, nrm=(0, 0, 1), seed=0, n=14):
                   dv[1] * math.cos(a) + sv[1] * math.sin(a) * 0.7,
                   -abs(math.sin(a)) * 0.55)
             leaf3(mx, my, mz, ld, sv, rnd.uniform(0.44, 0.68), rnd.uniform(0.16, 0.26))
-        if i % 2 == 1:
-            blossom3(mx, my, mz - 0.13, nrm, rnd.uniform(0.21, 0.31))
+        # HIS ORDER: more flowers in the hanging rope. One at every link,
+        # and a second turned aside on most of them.
+        blossom3(mx, my, mz - 0.13, nrm, rnd.uniform(0.20, 0.30))
+        if i % 3 != 2:
+            blossom3(mx + sv[0] * 0.20, my + sv[1] * 0.20, mz - 0.05,
+                     (nrm[0] * 0.7 + sv[0] * 0.7, nrm[1] * 0.7 + sv[1] * 0.7, 0.25),
+                     rnd.uniform(0.15, 0.24))
+
 
 
 def swag_row(x0, y0, x1, y1, z, n, sag, nrm=(0, 0, 1), seed=0):
@@ -410,19 +434,65 @@ def swag_row(x0, y0, x1, y1, z, n, sag, nrm=(0, 0, 1), seed=0):
                 sag, nrm=nrm, seed=seed * 131 + i)
 
 
-def plant(k, x, y, z, rot=None, sc=1.0):
+def plant(k, x, y, z, rot=None, sc=1.0, col=None):
     """Something the ENGINE grows in the garden. The palace is one welded mesh
     and a tree is not: trees, flowers and grass are real models, so they are
     recorded here by name and place and the game plants them."""
-    GARDEN.append({"k": k, "x": round(x, 2), "z": round(-y, 2), "y": round(z, 2),
-                   "r": round(rot if rot is not None else random.uniform(0, 6.283), 3),
-                   "s": round(sc, 3)})
+    e = {"k": k, "x": round(x, 2), "z": round(-y, 2), "y": round(z, 2),
+         "r": round(rot if rot is not None else random.uniform(0, 6.283), 3),
+         "s": round(sc, 3)}
+    if col:
+        e["c"] = col
+    GARDEN.append(e)
 
 
 def torchpost(x, y, z):
     plant("p_torchpost", x, y, z)
     FIRES.append({"x": round(x, 2), "z": round(-y, 2), "y": round(z + 2.62, 2),
                   "s": 0.50, "p": 1.45, "g": round(z, 2)})
+
+
+def lamp_at(cx, cy, cz, power=0.55, reach=8.0):
+    LAMPS.append({"x": round(cx, 2), "z": round(-cy, 2), "y": round(cz, 2),
+                  "p": power, "r": reach})
+
+
+def lantern(cx, cy, z_top, drop=2.2, r=0.36, chain=True, power=0.55, reach=8.0):
+    """A REAL lantern. The old one was a white box: an emissive block at
+    strength three clips to white and stops being firelight altogether. This
+    is a gold frame with amber panes and a candle burning inside it, and it
+    tells the engine to put a real light where the flame is."""
+    zc = z_top - drop
+    if chain:
+        cyl(0.045, drop - r * 1.5, (cx, cy, z_top - (drop - r * 1.5) / 2), gold, verts=6)
+        cyl(0.10, 0.10, (cx, cy, z_top - 0.05), gold, verts=8)
+    box(r * 2.45, r * 2.45, 0.10, (cx, cy, zc + r * 1.25), gold)      # the cap
+    box(r * 2.15, r * 2.15, 0.10, (cx, cy, zc - r * 1.25), gold)      # the base
+    for (dx, dy) in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        box(0.075, 0.075, r * 2.5, (cx + dx * r, cy + dy * r, zc), gold)
+    for (dx, dy, sx2, sy2) in ((0, -1, r * 1.9, 0.05), (0, 1, r * 1.9, 0.05),
+                               (-1, 0, 0.05, r * 1.9), (1, 0, 0.05, r * 1.9)):
+        box(sx2, sy2, r * 2.2, (cx + dx * r, cy + dy * r, zc), pane)
+    cyl(0.085, r * 0.95, (cx, cy, zc - r * 0.62), pane, verts=8)       # the wax
+    cyl(0.052, 0.30, (cx, cy, zc + r * 0.02), glow, verts=6, r_top=0.006)
+    sphere(0.085, (cx, cy, zc + r * 1.45), gold, seg=8, rings=6)
+    lamp_at(cx, cy, zc, power, reach)
+
+
+def sconce(cx, cy, cz, face, power=0.5, reach=7.0):
+    """A light fixed to a wall or a pillar - an iron arm, a bowl, a flame in
+    it. His rule: the light in a room comes FROM something you can see."""
+    fl = math.hypot(face[0], face[1]) or 1.0
+    fx, fy = face[0] / fl, face[1] / fl
+    yaw = math.atan2(fy, fx)
+    box(0.30, 0.16, 0.62, (cx, cy, cz), gold, yaw=yaw)                # back plate
+    box(0.52, 0.09, 0.09, (cx + fx * 0.30, cy + fy * 0.30, cz + 0.10), gold,
+        yaw=yaw, tilt=-0.42)
+    ox, oy = cx + fx * 0.56, cy + fy * 0.56
+    cyl(0.13, 0.20, (ox, oy, cz + 0.30), gold, verts=10, r_top=0.24)  # the bowl
+    cyl(0.20, 0.06, (ox, oy, cz + 0.42), glow, verts=10)              # the coals
+    cyl(0.135, 0.56, (ox, oy, cz + 0.72), glow, verts=6, r_top=0.008)
+    lamp_at(ox, oy, cz + 0.52, power, reach)
 
 
 def rose_boss(cx, cy, cz, nrm, r):
@@ -662,7 +732,10 @@ def string_course(cx, cy, hx, hy, z, pool):
     box(hx * 2 + 0.7, hy * 2 + 0.7, 0.4, (cx, cy, z), pool)
 
 
-def minaret(cx, cy, htot):
+def minaret(cx, cy, htot, code=""):
+    if code:
+        region(code, "minaret", "circle", cx, cy, 3.1 * 1.75 * 2, 3.1 * 1.75 * 2,
+               "spiral stair round an open well to a walking gallery and a brazier")
     """Hollow shaft, door, spiral stair round a newel, railed lantern stage
     with a burning lantern, sapphire cap."""
     r = 3.1
@@ -732,9 +805,7 @@ def minaret(cx, cy, htot):
         lz2 = 5.0 + (lz - 9.0) * i / float(nlamp)
         lx2 = cx + math.cos(a) * (r - 0.44)
         ly2 = cy + math.sin(a) * (r - 0.44)
-        box(0.46, 0.46, 0.62, (lx2, ly2, lz2), glow)
-        box(0.62, 0.62, 0.10, (lx2, ly2, lz2 + 0.38), gold)
-        box(0.62, 0.62, 0.10, (lx2, ly2, lz2 - 0.38), gold)
+        sconce(lx2, ly2, lz2, (-math.cos(a), -math.sin(a)), power=0.5, reach=7.5)
 
     # ------------------------------------------------------------ THE GALLERY
     # A place to stand: a ring wide enough to walk round, a parapet you cannot
@@ -840,10 +911,14 @@ for sxc in (-1, 1):
         cyl(1.35, 0.7, (sxc * 8.5, cyc, S1_H - 1.35), stone, verts=14)
         col(sxc * 8.5, cyc, S1_H / 2, 1.1, 1.1, S1_H / 2)
 for lyc in (-11, -4.5, 2, 8.5):
-    cyl(0.09, 2.6, (0, lyc, z1 + S1_H - 2.6), gold, verts=8)
-    box(0.5, 0.5, 0.9, (0, lyc, z1 + S1_H - 4.2), glow)
-    box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 3.62), gold)
-    box(0.62, 0.62, 0.12, (0, lyc, z1 + S1_H - 4.85), gold)
+    lantern(0, lyc, z1 + S1_H - 1.5, drop=3.4, r=0.30, power=0.95, reach=15.0)
+# SCONCES ON THE PILLARS. A hall lit from nowhere is what made the inside read
+# as a photograph of stone; every light in here now hangs on something.
+for sxc in (-1, 1):
+    for cyc in (-10.5, -3.5, 3.5, 10.5):
+        for fsx in (-1, 1):
+            sconce(sxc * 8.5 + fsx * 1.02, cyc, CY + 2.35, (fsx, 0),
+                   power=0.55, reach=11.0)
 # ORNAMENT ON THE HALL WALLS. Bare coursed stone from floor to cornice is
 # what made the inside read as a store room. Three courses do the work an
 # Andalusi hall does: a plinth-high dado of dark stone, a string course over
@@ -897,6 +972,17 @@ for _sx3 in (1, -1):
 for _sxg in (-1, 1):
     swag_row(_sxg * 8.5, -10.5, _sxg * 8.5, 10.5, z1 + S1_H - 1.55, 3, 0.72,
              nrm=(-_sxg, 0, 0), seed=51 + _sxg)
+
+# CLOTH AT EVERY WINDOW, not at one door. The hall's ground storey has
+# nineteen openings in its outer walls; each one gets its curtain, hung inside.
+for _wx in (-19, -15, -11, 11, 15, 19):
+    curtain(_wx, -(17 - WT) + 0.10, CY + 5.40, 2.6, 5.40, face=(0, -1))
+    curtain(_wx * 0.72, (17 - WT) - 0.10, CY + 5.40, 2.6, 5.40, face=(0, 1))
+for _sxw2 in (-1, 1):
+    for _i2 in range(4):
+        _cy2 = -12 + 24 * (_i2 + 0.5) / 4
+        curtain(_sxw2 * ((23 - WT) - 0.10), _cy2, CY + 5.40, 2.6, 5.40,
+                face=(_sxw2, 0))
 
 # THE CARPETS: a runner down the middle and one in each side aisle
 carpet(0, -1, CY, 7.0, 26)
@@ -1025,8 +1111,22 @@ for sx in (-1, 1):
         dome(sx * 8.5, sy * 8.5, z7 - 1.2, 2.6, 4.8, ribs=10,
              shell=gold if GOLDSMALL else None)
 
+region("H", "hall", "rect", 0, 0, (23 - WT) * 2, (17 - WT) * 2,
+       "the great hall: eight columns, tiled dado, blind arcade, garlands, "
+       "three ranks of carpet")
+region("P", "porch", "rect", 0, -19.0, 15.0, 6.0,
+       "the iwan landing, inside the great portal")
+region("X", "stair", "rect", 0, -24.5, 10.6, 7.0,
+       "ten shallow treads from the ground to the hall floor")
+for _lv, (_nm, _z, _h) in enumerate((("L2", z2, S2_H), ("L3", z3, S3_H),
+                                     ("L4", z4, S4_H), ("L5", z5, S5_H),
+                                     ("L6", z6, S6_H), ("L7", z7, 21.0))):
+    region(_nm, "level", "none", 0, 0, 0, 0,
+           "storey %d of the centre block, floor at %.1f m" % (_lv + 2, _z * QSCALE))
+
+
 # ============================================================ THE COMPOUND
-def module(cx, cy, face, gate=False):
+def module(cx, cy, face, gate=False, code=""):
     """One curtain block. The outward face carries the arcades as before;
     the COURT face now carries its own lit arches, niches and dentils - his
     order: the inner walls must have flavour too."""
@@ -1106,10 +1206,22 @@ def module(cx, cy, face, gate=False):
         curtain(cux, cuy, fl_z + 5.0, 3.0, 5.0, face=inward)
         for ll in (-4.5, 4.5):
             llx, lly = P(ll, 0)
-            cyl(0.07, 1.6, (llx, lly, ceil_z - 1.6), gold, verts=8)
-            box(0.44, 0.44, 0.8, (llx, lly, ceil_z - 2.75), glow)
-            box(0.56, 0.56, 0.1, (llx, lly, ceil_z - 2.24), gold)
-            box(0.56, 0.56, 0.1, (llx, lly, ceil_z - 3.3), gold)
+            lantern(llx, lly, ceil_z - 0.1, drop=2.1, r=0.26,
+                    power=0.62, reach=9.5)
+        # and sconces on the side walls, two a side, so the room is lit by
+        # things that are in it
+        for sa3 in (-1, 1):
+            for oo3 in (-5.5, 5.5):
+                scx, scy = P(sa3 * (w_hx - WT2 - 0.20), oo3)
+                sconce(scx, scy, fl_z + 2.30, (-sa3 * ax, -sa3 * ay),
+                       power=0.5, reach=8.0)
+        # and two flanking the door, so the way in is lit from inside
+        for sa4 in (-1, 1):
+            sdx, sdy = P(sa4 * 3.6, -(w_hy - WT2 - 0.18))
+            sconce(sdx, sdy, fl_z + 2.30, inward, power=0.5, reach=8.0)
+        # a second curtain, at the middle niche of the far wall
+        nqx, nqy = P(0, w_hy - WT2 - 0.14)
+        curtain(nqx, nqy, fl_z + 5.05, 1.9, 4.2, face=(ox, oy))
         # THE ROOM'S OWN COURSES: the same tiled dado, gold string and carved
         # floral band the great hall wears, on its three solid walls. A room
         # with a carpet and bare walls above it reads as a store with a rug in
@@ -1205,6 +1317,11 @@ def module(cx, cy, face, gate=False):
     gxb, gyb = P(11.6, -(w_hy + 0.80))
     swag_row(gxa, gya, gxb, gyb, CY + 4.95, 4, 0.98,
              nrm=(inward[0], inward[1], 0), seed=int(abs(cx) * 3 + abs(cy)) + 5)
+    if code:
+        rsx, rsy = sized((w_hx - WT2) * 2, (w_hy - WT2) * 2)
+        region(code, "gate" if gate else "room", "rect", cx, cy, rsx, rsy,
+               "a passage through the curtain" if gate else
+               "one room: carpet, curtain at the door, two lamps, three niches")
     dsx, dsy = sized(w_hx - 0.5, w_hy - 0.5)
     dentils(cx, cy, dsx, dsy, W1 - 0.55, stone)
 
@@ -1217,8 +1334,11 @@ def module(cx, cy, face, gate=False):
                seg=14, rings=9, zscale=1.35)
 
 
-def corner_tower(cx, cy):
+def corner_tower(cx, cy, code=""):
     H = 30.0
+    if code:
+        region(code, "tower", "circle", cx, cy, 7.8 * 2, 7.8 * 2,
+               "round room at the foot, eight sides, one door to the court")
     cyl(10.2, 2.0, (cx, cy, 1.0), stone, verts=8, smooth=False)
     # the ground five metres are a ROOM: eight wall segments with a door
     # gap toward the court diagonal, a floor, and the shaft solid above
@@ -1255,9 +1375,12 @@ def corner_tower(cx, cy):
     curtain(cx + math.cos(da) * 7.7, cy + math.sin(da) * 7.7, CY + 4.6, 2.4, 4.6,
             face=(math.cos(da), math.sin(da)))
     for ll in (-3.5, 3.5):
-        cyl(0.07, 1.4, (cx + ll, cy, 2.0 + droom_h - 1.4), gold, verts=8)
-        box(0.44, 0.44, 0.75, (cx + ll, cy, 2.0 + droom_h - 2.5), glow)
-        box(0.56, 0.56, 0.1, (cx + ll, cy, 2.0 + droom_h - 2.02), gold)
+        lantern(cx + ll, cy, 2.0 + droom_h - 0.1, drop=1.9, r=0.26,
+                power=0.6, reach=9.0)
+    for k9 in range(4):
+        a9 = da + math.pi / 2 + k9 * math.pi / 2.4
+        sconce(cx + math.cos(a9) * 7.5, cy + math.sin(a9) * 7.5, CY + 2.30,
+               (-math.cos(a9), -math.sin(a9)), power=0.5, reach=8.0)
     cyl(9.0, H - droom_h, (cx, cy, 2.0 + droom_h + (H - droom_h) / 2), stone, verts=8, smooth=False)
     for i in range(8):
         a8 = (i + 0.5) / 8 * 2 * math.pi
@@ -1284,24 +1407,35 @@ def connector(x0, y0, x1, y1, h=7.5):
     col(mx, my, h * 0.5, abs(dx) / 2 + 0.8, abs(dy) / 2 + 0.8, h * 0.5)
 
 
+_n = [0]
+
+
+def _code(pre):
+    _n[0] += 1
+    return "%s%d" % (pre, _n[0])
+
+
 for sxm in (-1, 1):
     for i in range(3):
-        module(sxm * (38 + 30 * i), 0, (0, -1), gate=(i == 0))
+        module(sxm * (38 + 30 * i), 0, (0, -1), gate=(i == 0),
+               code=("S%s%d" % ("W" if sxm < 0 else "E", i + 1)))
 for i in range(5):
     for sxm in (-1, 1):
-        module(sxm * 100, 12 + 30 * i, (sxm, 0))
+        module(sxm * 100, 12 + 30 * i, (sxm, 0),
+               code=("%s%d" % ("W" if sxm < 0 else "E", i + 1)))
 for i in range(7):
-    module(-90 + 30 * i, 120, (0, 1), gate=(i == 3))
+    module(-90 + 30 * i, 120, (0, 1), gate=(i == 3), code="N%d" % (i + 1))
 
 for sxm in (-1, 1):
-    corner_tower(sxm * 109, -19)
-    corner_tower(sxm * 109, 129)
+    corner_tower(sxm * 109, -19, code=("TSW" if sxm < 0 else "TSE"))
+    corner_tower(sxm * 109, 129, code=("TNW" if sxm < 0 else "TNE"))
 
 for sxm in (-1, 1):
-    minaret(sxm * 23, -24, 58.0)
-    minaret(sxm * 120, 75, 52.0)
+    sd = "W" if sxm < 0 else "E"
+    minaret(sxm * 23, -24, 58.0, code="MS" + sd)
+    minaret(sxm * 120, 75, 52.0, code="M" + sd)
     connector(sxm * 113, 75, sxm * 118, 75)
-    minaret(sxm * 23, 140, 52.0)
+    minaret(sxm * 23, 140, 52.0, code="MN" + sd)
     connector(sxm * 23, 133, sxm * 23, 138)
 
 # ============================================================ THE COURT
@@ -1365,6 +1499,11 @@ riwaq_run(-81, 24.5, 81, 24.5, (0, 1))
 riwaq_run(-81, 99.5, 81, 99.5, (0, -1))
 riwaq_run(-80.5, 25, -80.5, 99, (1, 0))
 riwaq_run(80.5, 25, 80.5, 99, (-1, 0))
+region("C", "court", "rect", 0, 60, 178, 100, "the paved court")
+region("RS", "riwaq", "rect", 0, 27.2, 162, RW_D, "the south colonnade")
+region("RN", "riwaq", "rect", 0, 96.8, 162, RW_D, "the north colonnade")
+region("RW", "riwaq", "rect", -77.8, 62, RW_D, 74, "the west colonnade")
+region("RE", "riwaq", "rect", 77.8, 62, RW_D, 74, "the east colonnade")
 
 # THE GARDEN. His order: lush - blossom trees and ordinary trees, torches set
 # beautifully, many flowers on the ground and thick grass. The beds are the
@@ -1385,21 +1524,28 @@ SPIRE_S = (0.55, 0.78)
 BUSH = ["plant/shrub_1", "plant/shrub_2", "plant/sapling_1", "plant/sapling_2"]
 FLOWER = ["plant/poppy_1", "plant/poppy_2", "plant/blossom_1", "plant/blossom_2",
           "plant/lavender_1", "plant/lavender_2"]
+FLCOL = ["purple", "white", "yellow", "orange"]
 GRASS = ["plant/tuft_1", "plant/tuft_2", "plant/fern_1", "plant/fern_2"]
 # FOUR QUARTERS ROUND THE WATER - the chahar bagh. Six thin beds left the
 # court reading as a paved yard with hedges in it; four deep quarters with
 # clear walks between them read as a garden with a court in the middle of it.
 BEDS = [(sxg * 42, 62 + syg * 20, 52.0, 30.0) for sxg in (-1, 1) for syg in (-1, 1)]
 BED_TOP = CY + 0.83
+for _bi, (_bx, _by, _bw, _bd) in enumerate(BEDS):
+    region("Q%d" % (_bi + 1), "garden", "rect", _bx, _by, _bw, _bd,
+           "a quarter of the garden: blossom, cypress, olive and fig, "
+           "thick grass, flowers, a torch at each corner")
 for (bx2, by2, bw, bd) in BEDS:
     box(bw, bd, 1.0, (bx2, by2, CY + 0.25), stone)              # the kerb
     # THE SOIL STANDS PROUD OF ITS KERB. Level with it, the two top faces are
     # the same plane and the stone wins half of every pixel - which is why the
     # flowerbed read as pavement with plants standing on it.
-    box(bw - 2.5, bd - 2.5, 0.98, (bx2, by2, CY + 0.34), earth)
+    box(bw - 1.2, bd - 1.2, 0.98, (bx2, by2, CY + 0.34), earth)
     col(bx2, by2, (CY + 0.83) / 2, bw / 2, bd / 2, (CY + 0.83) / 2)
     rr = random.Random(int(bx2 * 131 + by2 * 17) + 991)
-    hx2, hy2 = bw / 2 - 2.6, bd / 2 - 2.6
+    # KEEP OFF THE STONE. Anything sown near the rim leans out over the kerb
+    # and reads as a flower growing out of the paving.
+    hx2, hy2 = bw / 2 - 4.2, bd / 2 - 4.2
 
     def spot(m=0.0):
         return (bx2 + rr.uniform(-hx2 + m, hx2 - m), by2 + rr.uniform(-hy2 + m, hy2 - m))
@@ -1421,14 +1567,22 @@ for (bx2, by2, bw, bd) in BEDS:
     for _ in range(int(bw * bd / 55)):         # bushes
         gx3, gy3 = spot(0.6)
         plant(rr.choice(BUSH), gx3, gy3, BED_TOP, sc=rr.uniform(1.0, 1.7))
-    for _ in range(int(bw * bd / 12)):         # many flowers on the ground
+    # TEN TIMES THE FLOWERS, his order - twice over. Two things make it
+    # possible. First, they are CARDS, not models: a poppy model is 2,780
+    # triangles and fifty thousand of those is a hundred and forty million.
+    # Second, the bed is written down as a RECTANGLE and the engine sows it
+    # itself from a seed - writing fifty thousand positions into the sidecar
+    # made it a four megabyte download for a garden.
+    COVER.append({"x": round(bx2, 2), "z": round(-by2, 2), "y": round(BED_TOP, 2),
+                  "w": round(hx2 * 2, 2), "d": round(hy2 * 2, 2),
+                  "fl": int(bw * bd * 2.8), "gr": int(bw * bd * 3.6),
+                  "seed": int(abs(bx2) * 131 + abs(by2) * 7) + 17})
+    for _ in range(int(bw * bd / 26)):         # a few real plants among them
         gx3, gy3 = spot()
-        plant(rr.choice(FLOWER), gx3, gy3, BED_TOP, sc=rr.uniform(1.2, 2.2))
-    for _ in range(int(bw * bd / 6)):          # thick grass - his word was thick
-        gx3, gy3 = spot()
-        plant(rr.choice(GRASS), gx3, gy3, BED_TOP, sc=rr.uniform(1.4, 2.8))
+        plant(rr.choice(FLOWER), gx3, gy3, BED_TOP, sc=rr.uniform(1.1, 1.9))
 
 # THE FOUNTAIN: water INSIDE its rims, calm, faintly lit
+region("F", "water", "circle", 0, 62, 14.0, 14.0, "the fountain, two basins")
 cyl(7.0, 1.4, (0, 62, CY + 0.7), stone, verts=8, smooth=False)
 cyl(6.0, 1.3, (0, 62, CY + 0.75), water, verts=24)
 cyl(1.1, 2.6, (0, 62, CY + 1.8), stone, verts=10)
@@ -1542,8 +1696,13 @@ parts.append(make_mesh(flor, (1, 1, 1, 1), 0.62, 0.0,
 parts.append(make_mesh(folia, (0.19, 0.33, 0.17, 1), 0.88, 0.0))
 parts.append(make_mesh(bloom, (0.90, 0.46, 0.60, 1), 0.82, 0.0,
                        emis=(0.36, 0.13, 0.21, 1), estr=0.30))
-parts.append(make_mesh(glow, (1.0, 0.76, 0.38, 1), 0.9, 0.0,
-                       emis=(1.0, 0.62, 0.22, 1), estr=3.0))
+# CANDLELIGHT, not a white block. An emissive at strength three clips every
+# channel and comes out white, which is what made every lantern a paper lamp.
+parts.append(make_mesh(glow, (1.0, 0.58, 0.22, 1), 0.9, 0.0,
+                       emis=(1.0, 0.40, 0.09, 1), estr=0.80))
+# the amber panes of the lanterns: lit from within, warm, never white
+parts.append(make_mesh(pane, (0.72, 0.40, 0.16, 1), 0.42, 0.0,
+                       emis=(0.98, 0.36, 0.08, 1), estr=0.34))
 # THE SOIL OF THE BEDS. Flat brown paint read as cardboard under the plants -
 # a garden bed is grass and turned earth, and it wants a surface.
 parts.append(make_mesh(earth, (0.38, 0.30, 0.21, 1), 1.0, 0.0,
@@ -1562,6 +1721,13 @@ parts.append(make_mesh(spark, (1.0, 0.9, 0.7, 1), 0.9, 0.0,
                        emis=(1.0, 0.82, 0.52, 1), estr=4.0))
 parts.append(make_mesh(sparkv, (0.9, 0.7, 1.0, 1), 0.9, 0.0,
                        emis=(0.78, 0.48, 0.95, 1), estr=4.0))
+# what each surface costs, so a heavy round can be traced to its pool
+for _pl in (stone, gold, wood, rug, cloth, tile, flor, folia, bloom, pane,
+            glow, earth, water, sapph, spark, sparkv):
+    if _pl.v:
+        _t = sum(len(f) - 2 for f in _pl.f)
+        print("POOL %-7s %7d verts %7d tris" % (_pl.name, len(_pl.v), _t))
+
 parts = [p for p in parts if p]
 
 bpy.ops.object.select_all(action='DESELECT')
@@ -1601,9 +1767,23 @@ for ff in FIRES:
 for gg in GARDEN:
     for k in ("x", "y", "z"):
         gg[k] = round(gg[k] * QSCALE, 2)
+for ll in LAMPS:
+    for k in ("x", "y", "z"):
+        ll[k] = round(ll[k] * QSCALE, 2)
+for cv in COVER:
+    for k in ("x", "y", "z", "w", "d"):
+        cv[k] = round(cv[k] * QSCALE, 2)
 with open(os.path.splitext(OUT)[0] + ".door.json", "w") as f:
     json.dump({"doors": DOORS}, f)
+for _r in PLAN:
+    for _k in ("x", "y", "a", "b"):
+        _r[_k] = round(_r[_k] * QSCALE, 2)
+with open(os.path.splitext(OUT)[0] + ".plan.json", "w") as f:
+    json.dump({"scale": QSCALE, "regions": PLAN}, f, indent=1)
 with open(os.path.splitext(OUT)[0] + ".fx.json", "w") as f:
-    json.dump({"fireflies": FLIES, "fires": FIRES, "garden": GARDEN}, f)
+    json.dump({"fireflies": FLIES, "fires": FIRES, "garden": GARDEN,
+               "lamps": LAMPS, "cover": COVER}, f)
 print("WROTE", OUT, "doors", len(DOORS), "flies", len(FLIES),
-      "fires", len(FIRES), "planted", len(GARDEN))
+      "fires", len(FIRES), "planted", len(GARDEN), "lamps", len(LAMPS),
+      "beds", len(COVER),
+      "sown", sum(c["fl"] + c["gr"] for c in COVER), "regions", len(PLAN))
