@@ -111,7 +111,12 @@
          which is both truer and the end of the flare. */
       var dNear = Math.sqrt(src.d2);
       var soft = 0.30 + 0.70 * W.sstep(0.7, 3.1, dNear);
-      L.intensity = Math.min(2.7, src.base * src.lit * sl.fade * range * soft);
+      /* AND A CEILING, because they add. Four sources inside nine metres is
+         not unusual in a market, and at 2.7 apiece the wall beside them
+         measured 209 of 255 - a night scene lit like an afternoon. Their sum
+         is what the eye judges, so each one has to be quieter than it would
+         be alone. */
+      L.intensity = Math.min(1.9, src.base * src.lit * sl.fade * range * soft);
     }
   }
 
@@ -2054,10 +2059,17 @@
           /* These were spaced for a souk of two hundred shops. The clearance
              test now refuses any pitch standing inside a wall, so there are a
              hundred and fifty and the market had gone dark between them. */
-          if (made % 5 === 2) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
-          if (made % 6 === 2) {
-            torchPost(cx + nx * sd * (w.half + 0.5), W.heightAt(cx, cz),
-                      cz + nz * sd * (w.half + 0.5));
+          if (made % 7 === 2) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
+          if (made % 8 === 3) {
+            /* and ASK FIRST. A torch post was being driven into the ground
+               wherever the count came round, so one stood straight up through
+               the middle of a trestle table. Everything else in the souk goes
+               through clearGround; this did not. */
+            var tpx = cx + nx * sd * (w.half + 0.5);
+            var tpz = cz + nz * sd * (w.half + 0.5);
+            if (clearGround(tpx, tpz, 1.0)) {
+              torchPost(tpx, W.heightAt(tpx, tpz), tpz);
+            }
           }
         }
       }
