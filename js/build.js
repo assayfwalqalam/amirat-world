@@ -1199,6 +1199,10 @@
      every wall, because those were half the list. What actually lines the wall
      of a room somebody lives in is the water jar, the baskets, the pots, the
      bedding rolled up, the books - and one chest. */
+  /* what a household leaves against the outside of its own wall */
+  var HOUSE_LEAN = ['p_firewood', 'p_basket', 'p_jars', 'p_waterjug', 'p_crates',
+                    'p_sacks', 'p_ropecoil', 'p_stones', 'p_barrel', 'p_broom',
+                    'p_bench', 'p_plantpot'];
   var ROOM_WALL = ['p_waterjug', 'p_jars', 'p_basket', 'p_basket', 'p_pot',
                    'p_cushions', 'p_books', 'p_scrolls', 'p_stool', 'p_broom',
                    'p_chest', 'p_sacks'];
@@ -1212,7 +1216,7 @@
      and ZERO carpets. The few things that did appear in rooms only appeared
      because they were also on the roof or street lists. */
   var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET, PROPS_ROOM,
-                                    ROOM_WALL, ROOM_MID,
+                                    ROOM_WALL, ROOM_MID, HOUSE_LEAN,
                                     ['p_brazier', 'p_well', 'p_torch', 'p_torchpost',
                                      'p_bread'])
     .filter(function (k, i, a) { return a.indexOf(k) === i; });
@@ -2096,6 +2100,22 @@
                  Y,
                  z + fz * (8.2 + hashU(sd2 ^ 3) * 2.4) - fx * (hashU(sd2 ^ 7) - 0.5) * 7,
                  hashU(sd2 ^ 9) * 6.283, 1);
+        }
+        /* AND THINGS AGAINST THE HOUSE ITSELF. The citadel wall already had
+           its stone and firewood stacked along it, but the houses had nothing
+           at their feet, so every street read as buildings standing on a
+           parade ground. A lane in a town like this is half blocked by what
+           people have left against their own walls: the firewood, the water
+           jar by the door, a stack of baskets, a broken crate nobody has moved
+           in a year. Each one asks whether the spot is free first. */
+        for (var L2 = 0; L2 < 5; L2++) {
+          var ls = (idx * 51203 + L2 * 92821) | 0;
+          if (hashU(ls) < 0.55) continue;
+          var la = hashU(ls ^ 0x3f) * 6.283;
+          var lr = myR * (0.92 + hashU(ls ^ 0x5c) * 0.20);
+          var lxp = x + Math.cos(la) * lr, lzp = z + Math.sin(la) * lr;
+          if (!clearGround(lxp, lzp, 0.75)) continue;
+          propOn(HOUSE_LEAN, ls, lxp, Y, lzp, la + Math.PI / 2, 1);
         }
       }
     }
