@@ -81,6 +81,30 @@ def lathe(profile, segments=26, thickness=0.015):
 parts = []
 
 
+# ONE PROP, MORE THAN ONE SURFACE.
+# Everything here wore a single material, which is fine for a barrel and wrong
+# for anything built out of two materials - a well is a mud-brick shaft with a
+# dressed stone coping on it and a wooden windlass over that. A part tagged
+# with slot() keeps its own material through the join (Blender merges the
+# slot lists and preserves each face's index), and each slot is given its own
+# photograph at the end. Anything not tagged falls to the default slot, so the
+# other thirty-six props are untouched.
+SLOTS = []          # slot names, in the order they were first used
+
+
+def slot(ob, name):
+    """put this part on a named surface"""
+    key = "slot_" + name
+    m = bpy.data.materials.get(key)
+    if m is None:
+        m = bpy.data.materials.new(key)
+        m.use_nodes = True
+        SLOTS.append(name)
+    ob.data.materials.clear()
+    ob.data.materials.append(m)
+    return ob
+
+
 def rec(loc, hx, hy, hz):
     COLLIDERS.append({"c": [round(loc[0], 3), round(loc[2], 3), round(-loc[1], 3)],
                       "h": [round(hx, 3), round(hz, 3), round(hy, 3)]})
@@ -276,19 +300,54 @@ elif KIND == "cart":
         cyl(0.05, 0.04, 1.5, (-1.5, sx * 0.3, 0.72), rot=(0, math.pi / 2, 0), verts=8)
 
 elif KIND == "well":
+    # THE SHAFT IS MUD BRICK AND THE COPING IS STONE. That is how a well in a
+    # town like this is built: the drum is laid in the same brick as the
+    # houses around it, and the top course - the part hands and ropes and
+    # buckets wear against - is dressed stone, sitting slightly proud of it.
+    # A BLOCK IN A ROUND WALL LIES ALONG THE WALL, NOT ACROSS IT. Every block
+    # here was turned by -a, which points its long side neither radially nor
+    # tangentially, so sixteen of them stood out from the drum like the teeth
+    # of a cog. The long side has to run round the circle - that is a + 90
+    # degrees - and its length has to be the CHORD the block spans, or the
+    # ring is a ring of gaps.
     R = 1.15
-    for i in range(16):
-        a = i * math.pi * 2 / 16
-        b = box(0.42, 0.3, 1.0, (math.cos(a) * R, math.sin(a) * R, 0.5), -a, collide=True)
-        jitter(b, 0.015)
-    torus(R, 0.13, (0, 0, 1.02), seg=20)
+    N_SHAFT, N_COPE = 16, 12
+
+    def chord(radius, n):
+        return 2.0 * radius * math.sin(math.pi / n) * 1.04   # 4% to close it
+
+    for i in range(N_SHAFT):
+        a = i * math.pi * 2 / N_SHAFT
+        b = box(chord(R, N_SHAFT), 0.30, 0.86,
+                (math.cos(a) * R, math.sin(a) * R, 0.43),
+                a + math.pi / 2, collide=True)
+        jitter(b, 0.018)
+        slot(b, "brick")
+    # a plinth course at the foot, so the drum does not meet the ground square
+    for i in range(N_SHAFT):
+        a = i * math.pi * 2 / N_SHAFT
+        b = box(chord(R + 0.05, N_SHAFT), 0.40, 0.17,
+                (math.cos(a) * (R + 0.05), math.sin(a) * (R + 0.05), 0.085),
+                a + math.pi / 2)
+        slot(b, "stone")
+    # the coping: cut blocks laid round the top, standing proud of the brick,
+    # each a little out of true the way a hand-cut course is
+    for i in range(N_COPE):
+        a = i * math.pi * 2 / N_COPE
+        b = box(chord(R + 0.04, N_COPE), 0.46, 0.20,
+                (math.cos(a) * (R + 0.04), math.sin(a) * (R + 0.04), 0.96),
+                a + math.pi / 2, collide=True)
+        jitter(b, 0.010)
+        slot(b, "stone")
+    slot(torus(R + 0.14, 0.075, (0, 0, 0.99), seg=24), "stone")
+    # the frame over it, in wood
     for sx in (-1, 1):
-        cyl(0.08, 0.07, 2.4, (sx * (R + 0.1), 0, 1.2), verts=8, collide=True)
-    cyl(0.06, 0.06, 2.6, (0, 0, 2.4), rot=(0, math.pi / 2, 0), verts=8)
-    cyl(0.09, 0.09, 1.9, (0, 0, 2.4), rot=(0, math.pi / 2, 0), verts=10)
-    box(0.05, 0.05, 0.9, (0, 0, 1.95))
-    bk = cyl(0.2, 0.17, 0.28, (0, 0, 1.36), verts=12)
-    torus(0.2, 0.02, (0, 0, 1.48), seg=12)
+        cyl(0.09, 0.075, 2.3, (sx * (R + 0.12), 0, 1.15), verts=10, collide=True)
+    cyl(0.055, 0.055, 2.7, (0, 0, 2.34), rot=(0, math.pi / 2, 0), verts=8)
+    cyl(0.10, 0.10, 1.9, (0, 0, 2.34), rot=(0, math.pi / 2, 0), verts=12)
+    box(0.05, 0.05, 0.95, (0, 0, 1.86))
+    bk = cyl(0.21, 0.18, 0.30, (0, 0, 1.28), verts=14)
+    torus(0.21, 0.022, (0, 0, 1.41), seg=14)
 
 elif KIND == "stall":
     # a market stall: bench, awning, and goods stacked on it
@@ -742,14 +801,52 @@ TINT = {
     "ladder": (0.30, 0.21, 0.12), "pergola": (0.27, 0.19, 0.11),
 }.get(KIND, (0.45, 0.36, 0.26))
 
+SLOT_TEX = {
+    "brick": "t_mudbrick_d.jpg",
+    "stone": "t_sandstone_d.jpg",
+}
+
 mat = bpy.data.materials.new(KIND)
 mat.use_nodes = True
 nt = mat.node_tree
 bsdf = nt.nodes["Principled BSDF"]
 bsdf.inputs["Base Color"].default_value = (TINT[0], TINT[1], TINT[2], 1)
 bsdf.inputs["Roughness"].default_value = 0.95
-ob.data.materials.clear()
-ob.data.materials.append(mat)
+
+if SLOTS:
+    # The join has already merged the slot materials and kept every face's
+    # index. Each named slot gets its own photograph; anything that was never
+    # tagged is on the default material, which is appended last so its index
+    # is the one untagged faces already point at (0 before any slot existed
+    # would be wrong, so untagged parts are moved onto it explicitly).
+    for name in SLOTS:
+        sm = bpy.data.materials["slot_" + name]
+        sm.use_nodes = True
+        snt = sm.node_tree
+        sb = snt.nodes["Principled BSDF"]
+        sb.inputs["Roughness"].default_value = 0.95
+        tf = SLOT_TEX.get(name)
+        if tf:
+            sp = os.path.abspath(os.path.join(ASSETS, tf))
+            if os.path.exists(sp):
+                simg = bpy.data.images.load(sp)
+                stn = snt.nodes.new('ShaderNodeTexImage')
+                stn.image = simg
+                snt.links.new(stn.outputs['Color'], sb.inputs['Base Color'])
+                simg.pack()
+    # every face that is not on a slot material goes onto the default
+    have = [m.name for m in ob.data.materials]
+    if mat.name not in have:
+        ob.data.materials.append(mat)
+    di = list(ob.data.materials).index(mat)
+    slot_idx = set(i for i, m in enumerate(ob.data.materials)
+                   if m and m.name.startswith("slot_"))
+    for poly in ob.data.polygons:
+        if poly.material_index not in slot_idx:
+            poly.material_index = di
+else:
+    ob.data.materials.clear()
+    ob.data.materials.append(mat)
 
 
 # ------------------------------------------------- photographed materials

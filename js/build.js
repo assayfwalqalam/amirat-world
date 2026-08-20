@@ -3975,48 +3975,66 @@
      Built here rather than in Blender because it is five objects in the whole
      world and it has to sit exactly where the world says a place is.
      None of it moves, so all of it welds with the rest of the town. */
+  /* THE READING STAND, AND WHY IT IS THIS SHAPE.
+     The first one was an X-frame, and the geometry of it did not hold
+     together: the book's two halves were offset in X but tilted about X, so
+     they made a tent in the wrong plane, and the corner posts rose to 0.98
+     while the boards they were supposed to carry sat at 0.885 - the posts
+     came up THROUGH the book. He is right that it is not realistic.
+     This is a kursi al-mushaf instead: a turned column on a spread foot with
+     a V-shaped desk on top. Everything is built around ONE line - the spine,
+     at x = 0, running in Z - and every board and leaf is laid along that V by
+     the same two vectors, so the parts cannot disagree with each other.
+     The desk is wider and deeper than the book BY CONSTRUCTION, and the only
+     thing at x != 0 above the column is the desk. Nothing can protrude. */
+  var SPINE_Y = 0.845;          /* where the two halves meet */
+  var TILT = 0.40;              /* the slope of the desk, in radians */
+
+  /* a point on the V: `out` metres along the board from the spine, `up`
+     metres out of its face, on side sgn */
+  function vPos(sgn, out, up) {
+    var c = Math.cos(TILT), s2 = Math.sin(TILT);
+    return [sgn * (out * c - 0) - sgn * up * s2,
+            SPINE_Y + out * s2 + up * c];
+  }
+
   var lecternGeo = null;
   function lecternGeometry() {
     if (lecternGeo) return lecternGeo;
     var parts = [];
-    /* THE X-FRAME (rihal), and it has to be seen from across a square.
-       The first one was thin sticks at 5.5 cm and it read as a stool. A real
-       reading stand is heavy - it holds a book that weighs as much as a child
-       - so the members are 8 cm, the feet spread, and there is a stretcher
-       between them at the bottom where a joiner would put one. */
-    var LEG = 0.082, SPREAD = 0.30, H = 1.02;
-    for (var s3 = -1; s3 <= 1; s3 += 2) {
-      for (var s4 = -1; s4 <= 1; s4 += 2) {
-        var leg = new T.BoxGeometry(LEG, H, LEG);
-        leg.rotateX(s3 * 0.40);
-        leg.translate(s4 * SPREAD, H * 0.5, 0);
-        parts.push(boxUV(leg, LEG, H, LEG));
-      }
-      /* the foot each pair stands on, so it does not end in a point */
-      var foot = new T.BoxGeometry(0.72, 0.055, 0.075);
-      foot.translate(0, 0.028, s3 * 0.20);
-      parts.push(boxUV(foot, 0.72, 0.055, 0.075));
-    }
-    /* the pin the two halves turn on */
-    var pin = new T.CylinderGeometry(0.026, 0.026, 0.70, 10);
-    pin.rotateZ(Math.PI / 2);
-    pin.translate(0, 0.60, 0);
-    parts.push(pin);
-    /* the stretcher low down between the pairs */
-    var str = new T.BoxGeometry(0.055, 0.055, 0.44);
-    str.translate(0, 0.20, 0);
-    parts.push(boxUV(str, 0.055, 0.055, 0.44));
-    /* the two boards the book lies against, and the ledge that stops it
-       sliding off the bottom of them */
-    for (var k = -1; k <= 1; k += 2) {
-      var rest = new T.BoxGeometry(0.68, 0.05, 0.36);
-      rest.rotateX(k * 0.50);
-      rest.translate(0, 0.885, k * 0.145);
-      parts.push(boxUV(rest, 0.68, 0.05, 0.36));
-      var lip = new T.BoxGeometry(0.68, 0.055, 0.035);
-      lip.rotateX(k * 0.50);
-      lip.translate(0, 0.815, k * 0.30);
-      parts.push(boxUV(lip, 0.68, 0.055, 0.035));
+
+    /* the foot: a spread base, a chamfer, and a plinth the column stands on */
+    parts.push(boxUV(new T.BoxGeometry(0.50, 0.05, 0.50), 0.50, 0.05, 0.50)
+      .translate(0, 0.025, 0));
+    parts.push(boxUV(new T.BoxGeometry(0.40, 0.055, 0.40), 0.40, 0.055, 0.40)
+      .translate(0, 0.077, 0));
+    parts.push(boxUV(new T.BoxGeometry(0.26, 0.05, 0.26), 0.26, 0.05, 0.26)
+      .translate(0, 0.129, 0));
+
+    /* the column, turned: a swell low down, a waist, a collar under the desk */
+    parts.push(new T.CylinderGeometry(0.062, 0.085, 0.14, 14).translate(0, 0.22, 0));
+    parts.push(new T.CylinderGeometry(0.050, 0.062, 0.44, 14).translate(0, 0.51, 0));
+    var t1 = new T.TorusGeometry(0.058, 0.017, 8, 16);
+    t1.rotateX(Math.PI / 2); t1.translate(0, 0.73, 0);
+    parts.push(t1);
+    parts.push(new T.CylinderGeometry(0.070, 0.050, 0.12, 14).translate(0, 0.80, 0));
+
+    /* THE DESK. Two boards meeting on the spine, each laid along the V. They
+       are 40 cm along the slope and 50 cm deep; the book is 33 by 40, so the
+       board stands proud of it on every side. */
+    for (var sg = -1; sg <= 1; sg += 2) {
+      var c = vPos(sg, 0.20, 0);
+      var bd = new T.BoxGeometry(0.40, 0.045, 0.50);
+      boxUV(bd, 0.40, 0.045, 0.50);
+      bd.rotateZ(sg * TILT);
+      bd.translate(c[0], c[1], 0);
+      parts.push(bd);
+      /* the bracket under it, so the desk is carried and not balanced */
+      var br = vPos(sg, 0.13, -0.10);
+      var bk = new T.BoxGeometry(0.16, 0.13, 0.045);
+      bk.rotateZ(sg * TILT);
+      bk.translate(br[0], br[1], 0);
+      parts.push(boxUV(bk, 0.16, 0.13, 0.045));
     }
     lecternGeo = mergeGeos(parts);
     return lecternGeo;
@@ -4028,17 +4046,19 @@
     var parts = [];
     /* THE COVER, which overhangs the block of pages on three sides - that
        overhang is most of what makes a shape read as a bound book rather than
-       as a folded card. */
-    for (var k = -1; k <= 1; k += 2) {
-      var cov = new T.BoxGeometry(0.34, 0.022, 0.40);
-      cov.rotateX(k * 0.50);
-      cov.translate(k * 0.175, 0.905, k * 0.155);
-      parts.push(boxUV(cov, 0.34, 0.022, 0.40));
+       as a folded card. It lies ON the desk board: 3.5 cm out along the
+       board's own normal, which is half the board plus half the cover. */
+    for (var sg = -1; sg <= 1; sg += 2) {
+      var c = vPos(sg, 0.170, 0.035);
+      var cv = new T.BoxGeometry(0.33, 0.024, 0.40);
+      boxUV(cv, 0.33, 0.024, 0.40);
+      cv.rotateZ(sg * TILT);
+      cv.translate(c[0], c[1], 0);
+      parts.push(cv);
     }
     /* the spine standing between the two halves */
-    var spine = new T.BoxGeometry(0.045, 0.075, 0.36);
-    spine.translate(0, 0.925, 0);
-    parts.push(boxUV(spine, 0.045, 0.075, 0.36));
+    parts.push(boxUV(new T.BoxGeometry(0.038, 0.075, 0.38), 0.038, 0.075, 0.38)
+      .translate(0, SPINE_Y + 0.052, 0));
     bookGeo = mergeGeos(parts);
     return bookGeo;
   }
@@ -4048,14 +4068,18 @@
     var parts = [];
     /* THE PAGES, as three thin layers rather than one slab. The edge of a
        block of paper is the other half of reading as a book: one flat plane
-       is a sheet, three stepped ones are a quire. */
-    for (var k = -1; k <= 1; k += 2) {
+       is a sheet, three stepped ones are a quire. Each sits a little further
+       out along the same normal, and a little shorter, so the block tapers
+       the way a gathering does. */
+    for (var sg = -1; sg <= 1; sg += 2) {
       for (var q = 0; q < 3; q++) {
-        var w = 0.315 - q * 0.014, d = 0.375 - q * 0.016;
+        var w = 0.300 - q * 0.013, d = 0.372 - q * 0.015;
+        var c = vPos(sg, 0.166 - q * 0.004, 0.050 + q * 0.011);
         var pg = new T.BoxGeometry(w, 0.010, d);
-        pg.rotateX(k * 0.50);
-        pg.translate(k * 0.168, 0.921 + q * 0.011, k * 0.150);
-        parts.push(boxUV(pg, w, 0.010, d));
+        boxUV(pg, w, 0.010, d);
+        pg.rotateZ(sg * TILT);
+        pg.translate(c[0], c[1], 0);
+        parts.push(pg);
       }
     }
     bookPageGeo = mergeGeos(parts);
