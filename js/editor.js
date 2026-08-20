@@ -911,6 +911,33 @@
   }
   W.mesaUnderQasr = mesaUnderQasr;
 
+  /* TAKE THE MOUND BACK OUT FROM UNDER THE TOWN.
+     mesaUnder REPLACES the whole land patch with one mesa, so the twelve metre
+     table raised for the palace was the only land in the world - and once the
+     town was laid at the origin, half of it stood in the skirt of a mound that
+     was never meant for it. This flattens the land back to nothing under
+     everything that is NOT the palace, blending out to whatever else is
+     painted, and SAVES - so it is gone for good, not just for this session. */
+  function levelUnderTown() {
+    var minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9, n = 0;
+    PLACED.forEach(function (r) {
+      if (r.dead) return;
+      if (/qasr|palace/i.test(r.key || '')) return;   /* the palace keeps its mound */
+      minX = Math.min(minX, r.x); maxX = Math.max(maxX, r.x);
+      minZ = Math.min(minZ, r.z); maxZ = Math.max(maxZ, r.z);
+      n++;
+    });
+    if (!n) { toast('nothing placed to level under'); return; }
+    var cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    var hx = (maxX - minX) / 2 + 14, hz = (maxZ - minZ) / 2 + 14;
+    if (!W.levelUnder) { toast('this build has no land leveller'); return; }
+    W.levelUnder(cx, cz, hx, hz, 95, true);
+    toast('land levelled under ' + n + ' pieces · ' +
+          Math.round(hx * 2) + ' by ' + Math.round(hz * 2) + ' m, and saved');
+    W.wake();
+  }
+  W.levelUnderTown = levelUnderTown;
+
   /* ------------------------------------------------- the scatter preview
      While the cursor is over the ground in scatter mode, the area and every
      place a thing would land are drawn live: move the mouse, change a number,
@@ -1429,6 +1456,8 @@
     /* the mound, sized to whatever palace is standing in the layout */
     var mesaBtn = document.getElementById('mesa');
     if (mesaBtn) mesaBtn.onclick = function () { mesaUnderQasr(); };
+    var lvlBtn = document.getElementById('level');
+    if (lvlBtn) lvlBtn.onclick = function () { levelUnderTown(); };
 
     var shapeSel = document.getElementById('bShape');
     if (shapeSel) shapeSel.onchange = function () {

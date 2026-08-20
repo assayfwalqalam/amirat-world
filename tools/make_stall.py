@@ -366,6 +366,35 @@ bpy.ops.object.join()
 ob = bpy.context.active_object
 ob.name = SHAPE + "_" + TRADE
 
+# The stalls went straight from raw boxes to the AO bake: no bevel and no
+# smoothing at all, so every post was a hard-edged rectangular prism and every
+# rolled bolt of cloth was a faceted drum. Same finish as the props now.
+m = ob.modifiers.new("bv", 'BEVEL')
+m.width = 0.010
+m.segments = 2
+m.limit_method = 'ANGLE'
+m.angle_limit = math.radians(40)
+bpy.context.view_layer.objects.active = ob
+bpy.ops.object.modifier_apply(modifier=m.name)
+
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.remove_doubles(threshold=0.0005)
+bpy.ops.mesh.normals_make_consistent(inside=False)
+bpy.ops.object.mode_set(mode='OBJECT')
+
+bpy.ops.object.shade_smooth()
+try:
+    ob.data.use_auto_smooth = True
+    ob.data.auto_smooth_angle = math.radians(36)
+except AttributeError:
+    try:
+        bpy.ops.object.modifier_add(type='SMOOTH_BY_ANGLE')
+        ob.modifiers[-1]["Input_1"] = math.radians(36)
+        bpy.ops.object.modifier_apply(modifier=ob.modifiers[-1].name)
+    except Exception as e:
+        print("auto-smooth unavailable:", e)
+
 while len(ob.data.color_attributes):
     ob.data.color_attributes.remove(ob.data.color_attributes[0])
 ob.data.color_attributes.active_color = ob.data.color_attributes.new(

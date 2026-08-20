@@ -257,7 +257,11 @@ def cloth():
 JOBS = [
     ("t_adobe_d.jpg", adobe),
     ("t_plaster_d.jpg", plaster),
-    ("t_wood_d.jpg", wood),
+    # t_wood_d is baked by tools/make_wood_tex.py now - the version
+    # here was straight parallel stripes with no figure and no knots,
+    # which is what made every wooden prop read as plastic laminate.
+    # Left in place but not written, so nothing silently overwrites it.
+    # ("t_wood_d.jpg", wood),
     ("t_clay_d.jpg", clay),
     ("t_ashlar_d.jpg", ashlar),
     ("t_cloth_d.jpg", cloth),

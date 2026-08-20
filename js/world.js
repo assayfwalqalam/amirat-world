@@ -283,6 +283,47 @@
     return lp;
   };
 
+  /* THE OPPOSITE OF mesaUnder, and the thing that was missing.
+     mesaUnder REPLACES the whole land patch with one mesa - so the twelve
+     metre table built for the palace was the ONLY land in the world, and when
+     the town was laid at the origin half of it ended up buried in the skirt of
+     a mound that was never meant for it.
+     This takes the land back down to nothing over a rectangle and blends out
+     to whatever else he has painted, editing in place so the rest of his work
+     survives. It does NOT write to his saved land unless it is asked to: the
+     game levels the ground under the town every time it builds, and his file
+     keeps whatever he put in it. */
+  W.levelUnder = function (cx, cz, topX, topZ, skirt, save) {
+    if (!LPATCH) return null;
+    var n = LPATCH.n, size = LPATCH.size, step = size / (n - 1), hs = size / 2;
+    var touched = 0;
+    for (var v = 0; v < n; v++) {
+      var wz = -hs + v * step;
+      for (var u = 0; u < n; u++) {
+        var wx = -hs + u * step;
+        var dx = Math.max(0, Math.abs(wx - cx) - topX);
+        var dz = Math.max(0, Math.abs(wz - cz) - topZ);
+        var d = Math.sqrt(dx * dx + dz * dz);
+        var t = d <= 0 ? 1 : (d >= skirt ? 0 : 1 - d / skirt);
+        t = t * t * (3 - 2 * t);            /* 1 inside, 0 past the skirt */
+        if (t > 0.001) {
+          LPATCH.elev[v * n + u] *= (1 - t);
+          touched++;
+        }
+      }
+    }
+    if (save) {
+      try {
+        localStorage.setItem('amirat.layout.land', JSON.stringify({
+          n: n, size: size, elev: Array.from(LPATCH.elev),
+          water: Array.from(LPATCH.water), shaped: true
+        }));
+      } catch (e) {}
+    }
+    if (W.touchTerrain) W.touchTerrain(cx, cz, topX + topZ + skirt + 80);
+    return touched;
+  };
+
   function lpatchAt(grid, x, z) {
     var n = LPATCH.n, hs = LPATCH.size / 2;
     var u = (x + hs) / LPATCH.size * (n - 1);
@@ -726,20 +767,34 @@
        the only direction. Kept low on purpose, because every fire and lamp in
        the town has to read as the brighter thing -- that is what makes a night
        scene look like night rather than a dim afternoon. */
-    var hemi = new THREE.HemisphereLight(0x5b5ea6, 0x241f36, 0.36);
-    var amb = new THREE.AmbientLight(0x33325a, 0.16);
+    /* THE MOON WAS DOING THE WORK OF THE SUN. Measured in the market: the
+       cool lights came to 1.12 between them (moon 0.60, sky 0.36, ambient
+       0.16) while the whole town's fires and lamps are served by a pool of
+       fourteen point lights, half of them idle at any moment. Everything
+       therefore came out evenly lit and blue - tan sackcloth read as
+       concrete, terracotta read as grey - which is what "bland" meant. The
+       textures were never the fault; they are photographs and they are
+       correct. Night is now dark enough that a torch is the brightest thing
+       in the street, and the ground fill is warmed so that unlit stone goes
+       brown rather than purple. */
+    var hemi = new THREE.HemisphereLight(0x4a4f80, 0x2a2118, 0.28);
+    var amb = new THREE.AmbientLight(0x2b2a48, 0.125);
     scene.add(hemi); scene.add(amb);
-    var moon = new THREE.DirectionalLight(0xc6cdf5, 0.60);
+    /* Measured across eight places in the town, the ground the player walks
+       on came out at 15 of 255 with the cool lights at their lowest - dark is
+       right, unreadable is not. This is the balance that keeps a torch the
+       brightest thing in the street while still letting you see the street. */
+    var moon = new THREE.DirectionalLight(0xc6cdf5, 0.38);
     /* The editor needs to see what it is placing, so it can raise the sun.
        Night is what the game ships with; this only changes the lights. */
     W.setDaylight = function (on) {
       W.DAYLIGHT = !!on;
-      hemi.intensity = on ? 1.15 : 0.36;
-      hemi.color.setHex(on ? 0xbfd4f2 : 0x5b5ea6);
-      hemi.groundColor.setHex(on ? 0x6d5f49 : 0x241f36);
-      amb.intensity = on ? 0.42 : 0.16;
-      amb.color.setHex(on ? 0x9aa6c4 : 0x33325a);
-      moon.intensity = on ? 1.5 : 0.60;
+      hemi.intensity = on ? 1.15 : 0.28;
+      hemi.color.setHex(on ? 0xbfd4f2 : 0x4a4f80);
+      hemi.groundColor.setHex(on ? 0x6d5f49 : 0x2a2118);
+      amb.intensity = on ? 0.42 : 0.125;
+      amb.color.setHex(on ? 0x9aa6c4 : 0x2b2a48);
+      moon.intensity = on ? 1.5 : 0.38;
       moon.color.setHex(on ? 0xfff2d8 : 0xc6cdf5);
       renderer.toneMappingExposure = on ? 1.0 : 0.95;
       if (scene.fog) scene.fog.density = on ? 0.00035 : 0.00105;
@@ -937,7 +992,9 @@
              to stand in for ground at night: left alone it reads as lit
              concrete and outshines the walls it should sit beneath. */
           'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.34 * uNight);',
-          'col *= mix(1.0, 0.52, uNight);',
+          /* the street was the brightest thing in every night frame, which is
+             backwards: a dirt lane has nothing to be bright with. */
+          'col *= mix(1.0, 0.50, uNight);',
           /* grassy ground keeps its green at night, or the blades stand on
              grey-mauve dirt and the two read as different worlds */
           'col = mix(col, col * vec3(0.86, 1.22, 0.80), smoothstep(0.35, 0.8, gW) * 0.5 * uNight);',
@@ -1645,10 +1702,20 @@
     }
   }
 
-  var hbEl, frames = 0, hbT = 0, lastRaf = 0;
+  /* THE CHIP IN THE CORNER IS THE ONLY HONEST MEASUREMENT OF THIS.
+     Nothing measured from a hidden browser pane can be believed: it does not
+     composite, so the same frame reads 30 ms one moment and 600 the next, and
+     rendering twice inside one call simply queues up behind the GPU. On a real
+     machine, painting to a real screen, this is the truth - and the number that
+     matters is not the average but the WORST frame in the last second, because
+     that is what is felt as a stutter. Draw calls are next to it because they,
+     not triangles, are what costs on this hardware: the town ran FASTER with
+     15.8 million triangles of full-detail props than with the slimmed ones. */
+  var hbEl, frames = 0, hbT = 0, lastRaf = 0, hbWorst = 0;
   function frame() {
     var dt = Math.min(clock.getDelta(), 0.05);
     hbT += dt;
+    if (dt > hbWorst) hbWorst = dt;
     if (W.tickWater) W.tickWater(clock.elapsedTime);
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
     step(dt);
@@ -1657,9 +1724,11 @@
     frames++;
     if (hbT > 1) {
       hbT = 0;
-      if (hbEl) hbEl.textContent = frames + ' fps · ' +
-        Math.round(renderer.info.render.triangles / 1000) + 'k · q' + QSTEP;
-      frames = 0;
+      if (hbEl) hbEl.textContent = frames + ' fps · worst ' +
+        Math.round(hbWorst * 1000) + 'ms · ' + renderer.info.render.calls +
+        ' draws · ' + Math.round(renderer.info.render.triangles / 1000) +
+        'k · q' + QSTEP;
+      frames = 0; hbWorst = 0;
     }
   }
   function loop() {

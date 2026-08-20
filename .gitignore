@@ -3,3 +3,4 @@ shots/
 tools/out/
 assets/models/*.orig.glb
 shots/ref/fantasy*
+__pycache__/

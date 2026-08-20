@@ -101,7 +101,17 @@
       L.position.set(src.x, src.y, src.z);
       /* dim with distance as well, so nothing pops as it enters range */
       var range = 1 - W.sstep(MAX_D2 * 0.55, MAX_D2, src.d2);
-      L.intensity = Math.min(2.7, src.base * src.lit * sl.fade * range);
+      /* AND EASE OFF WHEN YOU ARE ON TOP OF IT. These are inverse-square
+         lights, which is right, but it means the last two metres of walking
+         up to a torch multiply what reaches you by twenty - the screen goes
+         white and everything behind it disappears. A real flame is not a
+         point either; it has a body a hand's breadth across, and light from
+         a body stops climbing once you are closer than that body is wide.
+         This is that: below three metres the source is allowed to give less,
+         which is both truer and the end of the flare. */
+      var dNear = Math.sqrt(src.d2);
+      var soft = 0.30 + 0.70 * W.sstep(0.7, 3.1, dNear);
+      L.intensity = Math.min(2.7, src.base * src.lit * sl.fade * range * soft);
     }
   }
 
@@ -279,10 +289,16 @@
       layers.push({ mesh: m, tex: tex, sp: sp.sp, off: i * 5 });
     }
 
-    /* the pool of light it throws on the ground */
-    var pool = new T.Mesh(new T.PlaneGeometry(5.2 * scale, 5.2 * scale),
+    /* THE POOL OF LIGHT IT THROWS ON THE GROUND.
+       It was sized off the sprite, so a wall torch - whose flame is small on
+       purpose, 0.42 - lit a circle two metres across and the lane around it
+       stayed black. A flame's pool is set by how far it CARRIES, which is
+       what `power` already says, so that is what sizes it now: a bracket
+       torch reaches about nine metres of ground, a brazier more. */
+    var poolR = Math.min(15, 4.4 + 6.4 * Math.sqrt(power));
+    var pool = new T.Mesh(new T.PlaneGeometry(poolR, poolR),
       new T.MeshBasicMaterial({ map: poolTex, color: 0xff9a48, transparent: true,
-        blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.34 }));
+        blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.46 }));
     pool.rotation.x = -Math.PI / 2;
     pool.position.y = -y + (groundY === undefined ? W.heightAt(x, z) : groundY) + 0.06;
     g.add(pool);
@@ -376,6 +392,137 @@
      their own draw call for want of a shared material. Nothing is ever
      changed on this material: the flicker rides on the pooled point light. */
   var glowGeo = null, glowMat = null;
+  /* WHICH WALL IS THIS LAMP ON, AND WHICH WAY DOES IT FACE?
+     A lantern was being set down at a bare point with `Math.random() * 3` for
+     its rotation, so it hung at a random angle to whatever it was supposed to
+     be fixed to - sometimes edge-on, sometimes half inside the stone. The
+     engine already knows where every wall is, because it has to stop the
+     player walking through them; this asks.
+     Returns the outward normal of the nearest solid face and a point standing
+     clear of it, or null when the lamp is out in the open. */
+  function wallFacing(x, y, z, look) {
+    if (!W.nearBoxes) return null;
+    var bs = W.nearBoxes(x, z), best = null;
+    look = look || 1.15;
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (b.dead) continue;
+      if (b.y1 < y - 0.25 || b.y0 > y + 0.25) continue;    /* not at this height */
+      /* into the box's own frame, because a wall may stand at any angle */
+      var ddx = x - b.cx, ddz = z - b.cz;
+      var lx = ddx * b.c - ddz * b.s;
+      var lz = ddx * b.s + ddz * b.c;
+      /* how far outside each face this point lies; negative means inside */
+      var cand = [
+        { d: lx - b.hx, nx: 1, nz: 0, fl: b.hx, tl: lz, half: b.hz },
+        { d: -b.hx - lx, nx: -1, nz: 0, fl: -b.hx, tl: lz, half: b.hz },
+        { d: lz - b.hz, nx: 0, nz: 1, fl: b.hz, tl: lx, half: b.hx },
+        { d: -b.hz - lz, nx: 0, nz: -1, fl: -b.hz, tl: lx, half: b.hx }
+      ];
+      for (var k = 0; k < 4; k++) {
+        var c = cand[k];
+        /* only faces this lamp is beside, within arm's reach of the wall */
+        if (c.d > look || c.d < -0.35) continue;
+        /* and only if the lamp is within the span of that face */
+        if (Math.abs(c.tl) > c.half + 0.2) continue;
+        if (!best || Math.abs(c.d) < Math.abs(best.d)) {
+          /* the point on the face, and the outward normal, back in world */
+          var flx = c.nx !== 0 ? c.fl : lx;
+          var flz = c.nz !== 0 ? c.fl : lz;
+          best = {
+            d: c.d,
+            nx: c.nx * b.c + c.nz * b.s,
+            nz: -c.nx * b.s + c.nz * b.c,
+            fx: b.cx + flx * b.c + flz * b.s,
+            fz: b.cz - flx * b.s + flz * b.c
+          };
+        }
+      }
+    }
+    return best;
+  }
+
+  /* the highest solid top below this point, or null when nothing is under it */
+  function floorUnder(x, y, z) {
+    var best = null;
+    if (W.nearBoxes) {
+      var bs = W.nearBoxes(x, z);
+      for (var i = 0; i < bs.length; i++) {
+        var b = bs[i];
+        if (b.dead || b.y1 > y - 0.05) continue;
+        if (boxClear(b, x, z, -0.05)) continue;      /* not over this box */
+        if (best === null || b.y1 > best) best = b.y1;
+      }
+    }
+    var g = W.heightAt ? W.heightAt(x, z) : null;
+    if (g !== null && g < y - 0.05 && (best === null || g > best)) best = g;
+    return best;
+  }
+
+  /* the lowest solid underside above this point */
+  function ceilingOver(x, y, z) {
+    if (!W.nearBoxes) return null;
+    var bs = W.nearBoxes(x, z), best = null;
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (b.dead || b.y0 < y + 0.05) continue;
+      if (boxClear(b, x, z, -0.05)) continue;
+      if (best === null || b.y0 < best) best = b.y0;
+    }
+    return best;
+  }
+
+  /* THE IRONWORK THAT HOLDS A WALL LANTERN.
+     Bracketed square to the wall it still read as a lantern glued to stone,
+     because there was nothing between the two. A real one is a plate pinned
+     to the wall, an arm reaching out from it, and a hook on the end of the
+     arm that the lantern hangs off - and the lantern hangs BELOW the arm, not
+     level with it. All of it is set down once and never moves, so it welds in
+     with the rest of the town's iron and costs nothing to draw.
+     Built in the wall's own frame: local +x points out of the wall. */
+  var bracketGeo = null;
+  function wallBracket(fx, fy, fz, yaw) {
+    if (!bracketGeo) {
+      var parts = [];
+      var plate = new T.BoxGeometry(0.035, 0.26, 0.11);
+      plate.translate(0.018, 0.0, 0);
+      parts.push(plate);
+      var arm = new T.BoxGeometry(0.26, 0.028, 0.028);
+      arm.translate(0.16, 0.105, 0);
+      parts.push(arm);
+      /* the stay under the arm, so it is not a stick poking out of a wall */
+      var stay = new T.BoxGeometry(0.15, 0.022, 0.022);
+      stay.rotateZ(0.72);
+      stay.translate(0.10, 0.0, 0);
+      parts.push(stay);
+      var hook = new T.CylinderGeometry(0.011, 0.011, 0.09, 6, 1);
+      hook.translate(0.275, 0.062, 0);
+      parts.push(hook);
+      bracketGeo = mergeGeos(parts);
+    }
+    var m = new T.Mesh(bracketGeo, M.iron || M.wood);
+    m.position.set(fx, fy, fz);
+    m.rotation.y = yaw;
+    W.scene.add(m);
+    return m;
+  }
+
+  /* the iron rod a hanging lamp hangs from. Static, so it welds with the
+     rest of the ironwork and costs nothing to draw. */
+  var rodGeoCache = {};
+  function hangRod(x, y, z, len) {
+    var key = len.toFixed(2);
+    if (!rodGeoCache[key]) {
+      var g = new T.CylinderGeometry(0.015, 0.015, len, 6, 1);
+      g.translate(0, len / 2, 0);
+      rodGeoCache[key] = g;
+    }
+    var m = new T.Mesh(rodGeoCache[key], M.iron || M.wood);
+    m.position.set(x, y, z);
+    W.scene.add(m);
+    return m;
+  }
+
   function lamp(x, y, z, power, model, reach) {
     if (!glowGeo) {
       glowGeo = new T.PlaneGeometry(1.5, 1.5);
@@ -385,16 +532,216 @@
     }
     var g = new T.Mesh(glowGeo, glowMat);
     g.position.set(x, y, z);
-    /* this one may be welded: it is a fixed plane, not a billboard that has to
-       be re-aimed every frame */
-    g.userData.weldGlow = 1;
     W.scene.add(g);
     var e = { g: g, base: (power || 1.5) * 1.9, reach: reach || 26, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
     lamps.push(e);
     EMIT.push(e);
-    if (model !== false) place('lantern', x, y - 0.34, z, 0.62, Math.random() * 3);
+    W.LAMPS = lamps;          /* so a probe can check where they ended up */
+    if (model !== false) {
+      /* A LANTERN HAS TO BE ON SOMETHING, and it was on nothing. `place`
+         puts a model's foot 14 cm under the y it is given, so a lantern
+         asked for at y - 0.34 stands with its base 48 cm below the light -
+         which for a lamp called half a metre above a roof terrace left it
+         hanging in clear air over the tiles. Three cases, in order:
+           on a wall  - bracketed to the face, turned square to it
+           over a floor - set down on that floor
+           in the open air - hung, with a rod up to whatever is above it
+         so that there is never a lantern with nothing holding it. */
+      var wf = wallFacing(x, y, z);
+      var lx = x, lz = z, yaw, ly = y - 0.34;
+      if (wf) {
+        /* Far enough out that the lantern's body clears the stone. At 16 cm
+           it was half inside the wall, which is what made it look painted on
+           rather than hung. */
+        var OFF = 0.275;
+        lx = wf.fx + wf.nx * OFF;
+        lz = wf.fz + wf.nz * OFF;
+        yaw = Math.atan2(wf.nx, wf.nz);
+        wallBracket(wf.fx, y + 0.16, wf.fz, yaw);
+        e.x = lx; e.z = lz;                 /* light it from where it hangs */
+        e.nx = wf.nx; e.nz = wf.nz;
+      } else {
+        yaw = hashU(((x * 61.7 + z * 137.1) * 1000) | 0) * 6.283;
+        var flr = floorUnder(x, y, z);
+        if (flr !== null && y - flr < 1.9) {
+          ly = flr + 0.14;                  /* set it down on that floor */
+        } else {
+          /* hung: give it the rod it hangs from, up to whatever is over it */
+          var top = ceilingOver(x, y, z);
+          var up = (top === null || top - y > 2.2) ? 0.55 : (top - y);
+          hangRod(lx, y + 0.16, lz, Math.max(0.22, up - 0.16));
+        }
+      }
+      place('lantern', lx, ly, lz, 0.62, yaw);
+      e.gx = lx; e.gz = lz;
+    }
+    LAMP_POOLS.push({ x: e.x, y: y, z: e.z,
+                      r: Math.min(11, 3.0 + (reach || 26) * 0.24) });
     return e;
+  }
+
+  /* ------------------------------------------------- what the lamps light
+     A lamp used to light NOTHING on the street. Its real light is a
+     PointLight out of a pool of fourteen serving a town of four hundred and
+     fifty lamps, so almost every one of them was a bright dot hanging over
+     black ground - which is the other half of why props looked as though
+     they hovered: nothing under a thing was lit, so nothing told the eye
+     where the ground was.
+     Every lamp now paints its own circle on the earth. They are steady, not
+     flickering, so all of them weld into ONE mesh and cost one draw call for
+     the whole town. */
+  /* ------------------------------------------------ where a thing touches
+     A sack in the market measured 6.98 with the ground at 7.00 - it was
+     standing exactly where it should. It still LOOKED as though it hovered,
+     because nothing under it was darker than the ground beside it. Real
+     shadow maps cover the sun's direction only and cost a pass; what tells
+     the eye a thing is resting on earth is the small dark smudge where the
+     two meet, and that can be painted.
+     Every prop gets one, sized to its own footprint, and all of them are a
+     single mesh multiplied into the ground - one draw call for the whole
+     town, no light and no shadow map involved. */
+  var CONTACTS = [];
+  var contactTex = null;
+  function makeContactTex() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 64;
+    var x = c.getContext('2d');
+    var g = x.createRadialGradient(32, 32, 1, 32, 32, 31);
+    /* soft, and never a hard edge: a smudge, not a disc */
+    g.addColorStop(0.00, 'rgba(0,0,0,0.70)');
+    g.addColorStop(0.45, 'rgba(0,0,0,0.34)');
+    g.addColorStop(0.78, 'rgba(0,0,0,0.08)');
+    g.addColorStop(1.00, 'rgba(0,0,0,0.00)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 64, 64);
+    var t = new T.CanvasTexture(c);
+    t.needsUpdate = true;
+    return t;
+  }
+
+  function layContacts() {
+    if (!CONTACTS.length) return 0;
+    if (!contactTex) contactTex = makeContactTex();
+    var pos = [], uv = [], idx = [], off = 0, n = 0;
+    for (var i = 0; i < CONTACTS.length; i++) {
+      var c = CONTACTS[i];
+      var gy = W.heightAt(c.x, c.z);
+      /* a thing on a table or a roof gets no smudge on the street below */
+      if (Math.abs(c.y - gy) > 0.9) continue;
+      var r = c.r;
+      var y = gy + 0.035;
+      pos.push(c.x - r, y, c.z - r,  c.x + r, y, c.z - r,
+               c.x + r, y, c.z + r,  c.x - r, y, c.z + r);
+      uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      idx.push(off, off + 1, off + 2, off, off + 2, off + 3);
+      off += 4; n++;
+    }
+    if (!n) return 0;
+    var g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    var m = new T.Mesh(g, new T.MeshBasicMaterial({
+      map: contactTex, transparent: true, depthWrite: false,
+      toneMapped: false, opacity: 0.85, color: 0xffffff
+    }));
+    /* AFTER the light pools, not before. Drawn first, the additive orange of
+       a torch pool was simply painted back over the smudge and the shadow
+       vanished - which is backwards: a sack standing in lamplight is exactly
+       where the lamplight does NOT reach the floor. */
+    m.renderOrder = 6;
+    m.frustumCulled = false;
+    m.userData.noWeld = true;
+    W.scene.add(m);
+    return n;
+  }
+
+  /* a probe: for every prop we set down, how far is its foot from the
+     surface underneath it? Positive floats, negative sinks. */
+  W.auditSit = function () {
+    /* Read from the PIECE LIST, not from the scene: by the time anyone asks,
+       the weld has already taken every prop out of the scene graph and
+       folded it into a batch, so walking the scene finds nothing. */
+    var bad = [], n = 0, bbCache = {};
+    (PLACED_LOG || []).forEach(function (rec) {
+      var m = MODELS[rec.k];
+      if (!m) return;
+      if (bbCache[rec.k] === undefined) {
+        var b0 = new T.Box3().setFromObject(m);
+        bbCache[rec.k] = isFinite(b0.min.y) ? b0.min.y : null;
+      }
+      var minL = bbCache[rec.k];
+      if (minL === null) return;
+      var footY = rec.p[1] + minL * (rec.s || 1);
+      /* Ask about the surface AT THE FOOT, not half a metre above it.
+         floorUnder returns the highest top below the height it is given, so
+         a generous lookup happily reported a doorstep or a mat forty
+         centimetres up as "the floor" and then declared the prop sunk by
+         exactly that much - which is why every offence came back at -0.41,
+         the size of the window rather than the size of any real fault. */
+      var f = floorUnder(rec.p[0], footY + 0.06, rec.p[2]);
+      if (f === null) return;
+      n++;
+      var d = footY - f;
+      if (Math.abs(d) > 0.14) bad.push({ k: rec.k, x: +rec.p[0].toFixed(1),
+                                         z: +rec.p[2].toFixed(1),
+                                         off: +d.toFixed(2) });
+    });
+    bad.sort(function (a, b2) { return Math.abs(b2.off) - Math.abs(a.off); });
+    /* Buildings are SET INTO the ground on purpose - a house whose base sits
+       exactly on the terrain shows a hairline of daylight under it wherever
+       the ground is not perfectly flat - and a torch is nailed up a wall, so
+       the floor being two metres below it is not a fault. Neither belongs in
+       a list of things that do not sit right. */
+    var EXEMPT = /^(bh\d|m_|b_|w_|lib|pal|p_torch)/;
+    var real = bad.filter(function (b4) { return !EXEMPT.test(b4.k); });
+    var byKind = {};
+    real.forEach(function (b3) {
+      var e = byKind[b3.k] || { n: 0, lo: 9, hi: -9 };
+      e.n++; e.lo = Math.min(e.lo, b3.off); e.hi = Math.max(e.hi, b3.off);
+      byKind[b3.k] = e;
+    });
+    return { checked: n, wrong: real.length, exempt: bad.length - real.length,
+             byKind: byKind, worst: real.slice(0, 10) };
+  };
+
+  var LAMP_POOLS = [];
+  function layLampPools() {
+    if (!LAMP_POOLS.length || !poolTex) return 0;
+    var pos = [], uv = [], idx = [], off = 0, n = 0;
+    for (var i = 0; i < LAMP_POOLS.length; i++) {
+      var L = LAMP_POOLS[i];
+      var gy = W.heightAt(L.x, L.z);
+      /* only where the lamp actually hangs over open ground: a lamp on the
+         third storey does not light the street, and one inside a room must
+         not paint its pool through the floor */
+      if (L.y - gy > 5.2) continue;
+      var r = L.r * 0.5;
+      var y = gy + 0.05;
+      pos.push(L.x - r, y, L.z - r,  L.x + r, y, L.z - r,
+               L.x + r, y, L.z + r,  L.x - r, y, L.z + r);
+      uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      idx.push(off, off + 1, off + 2, off, off + 2, off + 3);
+      off += 4; n++;
+    }
+    if (!n) return 0;
+    var g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    var m = new T.Mesh(g, new T.MeshBasicMaterial({
+      map: poolTex, color: 0xffb066, transparent: true,
+      blending: T.AdditiveBlending, depthWrite: false, toneMapped: false,
+      opacity: 0.30
+    }));
+    m.renderOrder = 3;
+    m.frustumCulled = false;
+    m.userData.noWeld = true;
+    W.scene.add(m);
+    return n;
   }
 
   /* a torch: the iron bracket is a real model, the flame sits in its head */
@@ -437,6 +784,33 @@
     return g;
   }
 
+  /* A BOX'S UVS RUN 0..1 ON EVERY FACE NO MATTER HOW BIG THE FACE IS.
+     The door leaf is an ExtrudeGeometry, and three.js gives those UVs in
+     world metres. The ribs and the ledger nailed across it were BoxGeometry,
+     which means the WHOLE wood photograph was crushed onto a strip four and a
+     half centimetres wide - so every door carried three vertical bands of
+     wildly magnified, smeared grain running at a completely different scale
+     from the boards behind them. That is the "weird texture" on the doors.
+     This puts a box into the same world-metre UV space as the extrusion, so
+     every part of a door is cut from the same plank. */
+  function boxUV(g, w, h, d) {
+    var uv = g.attributes.uv;
+    if (!uv) return g;
+    /* BoxGeometry lays its faces out in this order, four vertices each:
+       +x, -x, +y, -y, +z, -z -- and each face's u runs across the first
+       dimension named here and its v down the second. */
+    var span = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    var per = uv.count / 6;
+    for (var f = 0; f < 6; f++) {
+      for (var i = 0; i < per; i++) {
+        var k = f * per + i;
+        uv.setXY(k, uv.getX(k) * span[f][0], uv.getY(k) * span[f][1]);
+      }
+    }
+    uv.needsUpdate = true;
+    return g;
+  }
+
   /* the leaf with its planks already in it, one geometry per door size */
   var boardedGeos = {}, bandGeos = {}, knobGeo = null;
   function boardedLeaf(w, h) {
@@ -444,7 +818,7 @@
     if (boardedGeos[key]) return boardedGeos[key];
     var parts = [leafGeometry(w, h).clone()];
     for (var pl = 1; pl < 4; pl++) {
-      var rib = new T.BoxGeometry(0.045, h * 0.94, 0.03);
+      var rib = boxUV(new T.BoxGeometry(0.045, h * 0.94, 0.03), 0.045, h * 0.94, 0.03);
       rib.translate(w * pl / 4, h * 0.47, 0.075);
       parts.push(rib);
     }
@@ -454,7 +828,7 @@
   function bandGeometry(w, h) {
     var key = w.toFixed(2) + 'x' + h.toFixed(2);
     if (!bandGeos[key]) {
-      var g = new T.BoxGeometry(w * 0.92, 0.09, 0.035);
+      var g = boxUV(new T.BoxGeometry(w * 0.92, 0.09, 0.035), w * 0.92, 0.09, 0.035);
       g.translate(w / 2, h * 0.28, 0.08);
       bandGeos[key] = g;
     }
@@ -1233,15 +1607,77 @@
   };
   var SMALL = [];
 
+  /* A THING SET DOWN SITS ON ITS OWN LOWEST POINT.
+     Not every model is authored with its base at the origin: the market
+     barrows carry their wheels 48 cm BELOW theirs, so every barrow in the town
+     was buried to the axle. Measured across 1,564 placed pieces, 47 of them
+     were wrong this way. Buildings are left alone - a house's plinth is meant
+     to go into the ground - and so are rocks and trees, which are set into the
+     earth on purpose. */
+  var sitCache = {};
+  function sitOn(key, y, scale) {
+    if (sitCache[key] === undefined) {
+      var m = MODELS[key];
+      if (!m) { sitCache[key] = 0; }
+      else if (/^(rock|tree)\//.test(key) || /^rock_/.test(key)) { sitCache[key] = 0; }
+      else {
+        var b = new T.Box3().setFromObject(m);
+        sitCache[key] = (isFinite(b.min.y) && Math.abs(b.min.y) > 0.12) ? -b.min.y : 0;
+      }
+    }
+    return y + sitCache[key] * (scale || 1);
+  }
+  W.sitOn = sitOn;
+
+  /* how wide a thing sits, from its own model, measured once */
+  var footCache = {};
+  function footOf(key, scale) {
+    if (footCache[key] === undefined) {
+      var m = MODELS[key];
+      if (!m) { footCache[key] = 0; }
+      else {
+        var b = new T.Box3().setFromObject(m);
+        footCache[key] = isFinite(b.min.x)
+          ? Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * 0.5 : 0;
+      }
+    }
+    return footCache[key] * (scale || 1);
+  }
+
+  function markContact(key, x, y, z, scale) {
+    var f = footOf(key, scale);
+    if (f < 0.10 || f > 4.2) return;        /* not a speck, not a building */
+    CONTACTS.push({ x: x, y: y, z: z, r: Math.min(3.0, f * 1.55) });
+  }
+
   function propOn(list, seed, x, y, z, rot, scale) {
     var key = list[Math.floor(hashU(seed) * list.length) % list.length];
     if (!MODELS[key]) return null;
-    var g = placeBuilt(key, x, y, z, rot, scale || 1);
-    if (g) { g.userData.far = BIG_PROP[key] ? 19600 : 2500; SMALL.push(g); }
+    var g = placeBuilt(key, x, sitOn(key, y, scale || 1), z, rot, scale || 1);
+    if (g) { g.userData.far = BIG_PROP[key] ? 19600 : 2500; g.userData.key = key;
+             SMALL.push(g); markContact(key, x, y, z, scale || 1); }
     return g;
   }
 
   /* what stands against a wall, and what belongs in the middle */
+  /* A COLLIDER IS NAMED cx/cz AND IT MAY BE TURNED.
+     Every test in this file asked it for `b.x` and `b.z`, which do not exist,
+     so `Math.abs(x - undefined)` was NaN, every comparison against NaN was
+     false, and every one of these "is there room here?" questions has always
+     answered yes. That is why furniture stands inside internal walls and
+     stalls are pitched through the side of a building. The boxes are also
+     ROTATED - the same rotation the player is pushed out of - so the point
+     has to be taken into the box's own frame before it is compared, exactly
+     as world.js does it in resolve().
+     Returns true when (x, z) is at least r clear of the box at this height. */
+  function boxClear(b, x, z, r) {
+    var dx = x - b.cx, dz = z - b.cz;
+    /* rotation.y carries local +x to world (cos, -sin); this is its inverse */
+    var lx = dx * b.c - dz * b.s;
+    var lz = dx * b.s + dz * b.c;
+    return Math.abs(lx) > b.hx + r || Math.abs(lz) > b.hz + r;
+  }
+
   /* is this spot free at THIS height? the room rectangle covers the internal
      walls as well as the floor, so every piece of furniture has to ask */
   function clearAt(x, y, z, r) {
@@ -1250,7 +1686,7 @@
     for (var i = 0; i < bs.length; i++) {
       var b = bs[i];
       if (b.y1 < y + 0.15 || b.y0 > y + 1.5) continue;
-      if (Math.abs(x - b.x) < b.hx + r && Math.abs(z - b.z) < b.hz + r) return false;
+      if (!boxClear(b, x, z, r)) return false;
     }
     return true;
   }
@@ -1306,11 +1742,34 @@
       if (placed > 9) break;
     }
 
-    /* the light of the room, so a window reads as a window and not a hole.
-       Short reach on purpose: a point light is not stopped by a wall, and a
-       room lamp that carries thirty metres lights the street through it. */
+    /* THE LIGHT OF THE ROOM, AND THE THING THAT IS MAKING IT.
+       This used to be an invisible point light floating in the middle of the
+       floor: the room glowed and there was nothing in it to glow. A room in
+       a house like this is lit by a lamp on a bracket on the wall, so that is
+       what this looks for - it walks the four walls and takes the first one
+       the engine agrees is solid, and only falls back to the middle of the
+       room if the room somehow has no walls at all.
+       Short reach on purpose either way: a point light is not stopped by a
+       wall, and a room lamp that carries thirty metres lights the street
+       outside through the stone. */
     if (hashU(seed0 ^ 0x2b1d) > 0.24) {
-      lamp(mid[0], by + ly + 1.5, mid[1], 0.55, false, 6.5);
+      var lit = false;
+      var order = [0, 1, 2, 3];
+      var start = Math.floor(hashU(seed0 ^ 0x5c1) * 4) % 4;
+      for (var q = 0; q < 4 && !lit; q++) {
+        var e2 = order[(start + q) % 4];
+        var wx2, wz2;
+        if (e2 === 0) { wx2 = 0; wz2 = -rz * 0.93; }
+        else if (e2 === 1) { wx2 = rx * 0.93; wz2 = 0; }
+        else if (e2 === 2) { wx2 = 0; wz2 = rz * 0.93; }
+        else { wx2 = -rx * 0.93; wz2 = 0; }
+        var wp = world(sp.c[0] * scale + wx2, sp.c[2] * scale + wz2);
+        var wy = by + ly + 1.68;
+        if (!wallFacing(wp[0], wy, wp[1], 0.9)) continue;
+        lamp(wp[0], wy, wp[1], 0.5, true, 6.5);
+        lit = true;
+      }
+      if (!lit) lamp(mid[0], by + ly + 1.5, mid[1], 0.55, false, 6.5);
     }
   }
 
@@ -1370,20 +1829,18 @@
                  : (hashU(sd ^ 0x99) > 0.86 ? PROPS_ARMS : PROPS_ROOF);
         propOn(list, sd, wx, by + ly, wz, hashU(sd ^ 0x77) * 6.283, 1);
         /* a lamp burning on some terraces */
-        if (sp.k !== 'room' && j === 0 && hashU(sd ^ 0x1234) > 0.55) {
+        /* A LAMP IS A DRAW CALL THAT CANNOT BE WELDED, because it is turned to
+           face the camera every frame. A house has three roof places and a
+           porch, and nearly every one of them was getting a light: 867 lamps
+           in a town of 121 houses, 355 of them on screen at once from a single
+           street. One terrace in five keeps its lamp. */
+        if (sp.k !== 'room' && j === 0 && hashU(sd ^ 0x1234) > 0.80) {
           lamp(wx, by + ly + 0.9, wz, 0.85);
         }
-        /* Rooms are lit from within, so a window reads as a lit window and not
-           a black hole punched in the wall. Most houses, not all -- some
-           people have gone to bed. */
-        if (sp.k === 'room' && j === 0 && hashU(sd ^ 0x2b1d) > 0.28) {
-          var rx = bx + (sp.c[0] * scale) * c - (sp.c[2] * scale) * s2;
-          var rz = bz + (sp.c[0] * scale) * s2 + (sp.c[2] * scale) * c;
-          /* short reach on purpose · point lights are not stopped by walls, so
-             a room lamp with a long reach lights the street outside through
-             the wall, and walking past a house made the night flare */
-          lamp(rx, by + ly + 1.35, rz, 0.5, false, 6.5);
-        }
+        /* (A second room lamp used to be raised here. It has been unreachable
+           since rooms started going to dressRoom above, which does the job
+           properly - against a wall, with a lantern you can see. Removed
+           rather than left to look as though it still runs.) */
       }
     }
   }
@@ -1463,7 +1920,13 @@
         if (!mat.map) return;
         mat.emissive = new T.Color(0xffffff);
         mat.emissiveMap = mat.map;
-        mat.emissiveIntensity = 0.17;
+        /* This fakes lamplight from inside the cloth, and it was set when the
+           night was lit like a dim afternoon. Against a properly dark street
+           it made every awning and every bale of cloth glow white - the one
+           thing in the market that did not look like an object. It stays only
+           as a floor, so a stall at the far end of a lane is not a black hole
+           before the light pool reaches it. */
+        mat.emissiveIntensity = 0.04;
         mat.needsUpdate = true;
       });
     });
@@ -1476,9 +1939,52 @@
     for (var i = 0; i < bs.length; i++) {
       var b = bs[i];
       if (b.y1 < y + 0.3 || b.y0 > y + 2.6) continue;   /* under foot or overhead */
-      if (Math.abs(x - b.x) < b.hx + r && Math.abs(z - b.z) < b.hz + r) return false;
+      if (!boxClear(b, x, z, r)) return false;
     }
     return true;
+  }
+
+  /* ------------------------------------------------- lighting the streets
+     A town lights its lanes, and this one did not: the only lamps were the
+     ones a house happened to put on its own terrace, so whole streets ran
+     black between them and you walked by moonlight. Nor is a lamp on a post
+     in the middle of a street right for this place - the light is fixed to
+     the buildings, which is what `wallFacing` is for.
+     This walks every lane at a fixed spacing, looks to both sides for a wall
+     within reach at the height a lamp is hung, and puts one on the first wall
+     it finds. Where there is no wall - a lane running between gardens - it
+     lights nothing, which is correct: there is nothing there to fix a lamp
+     to. Alternate sides, so the pools of light stagger down the street
+     instead of facing each other in pairs. */
+  function lightTheLanes() {
+    var made = 0, side = 0;
+    var STEP = 12.5;               /* far enough apart that the pools do not
+                                      merge into one continuous glare */
+    WAYS.forEach(function (w, wi) {
+      var len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+      if (len < 9 || w.half < 1.6) return;
+      var ux = (w.bx - w.ax) / len, uz = (w.bz - w.az) / len;
+      var nx = -uz, nz = ux;
+      var n = Math.max(1, Math.floor(len / STEP));
+      for (var i = 0; i < n; i++) {
+        var t = (i + 0.5) * (len / n);
+        var cx = w.ax + ux * t, cz = w.az + uz * t;
+        var y = W.heightAt(cx, cz) + 2.75;
+        side++;
+        for (var k = 0; k < 2; k++) {
+          var sd = ((side + k) % 2) ? 1 : -1;
+          /* reach out to where a wall would be, and ask if one is there */
+          var px = cx + nx * sd * (w.half + 0.55);
+          var pz = cz + nz * sd * (w.half + 0.55);
+          if (!wallFacing(px, y, pz, 1.25)) continue;
+          lamp(px, y, pz, 0.95, true, 21);
+          made++;
+          break;
+        }
+      }
+    });
+    if (W.diag && made) W.diag('street lamps: ' + made);
+    return made;
   }
 
   function buildSouk() {
@@ -1517,12 +2023,16 @@
           var y = W.heightAt(bx, bz);
           /* the shop faces the street it stands on */
           var face = Math.atan2(-nx * sd, -nz * sd);
-          if (!placeBuilt(T.booth, bx, y, bz, face, 1)) continue;
+          if (!placeBuilt(T.booth, bx, sitOn(T.booth, y, 1), bz, face, 1)) continue;
+          markContact(T.booth, bx, y, bz, 1);
           made++;
           /* its table or its mat, out in front toward the lane */
           var fx = bx - nx * sd * 1.85, fz = bz - nz * sd * 1.85;
           var fk = T.front[Math.floor(hashU(seed ^ 0x11) * T.front.length) % T.front.length];
-          if (clearGround(fx, fz, 0.9)) placeBuilt(fk, fx, W.heightAt(fx, fz), fz, face, 1);
+          if (clearGround(fx, fz, 0.9)) {
+            placeBuilt(fk, fx, sitOn(fk, W.heightAt(fx, fz), 1), fz, face, 1);
+            markContact(fk, fx, W.heightAt(fx, fz), fz, 1);
+          }
           /* goods stacked behind the shop, where the wall is */
           for (var g = 0; g < 1; g++) {
             var gsd = (seed ^ (g * 40503)) | 0;
@@ -1541,8 +2051,11 @@
              one is its own draw call - two hundred shops put the town over
              fourteen hundred calls on its own. The warmed cloth carries the
              look; a real light hangs every fourth shop. */
-          if (made % 4 === 1) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
-          if (made % 12 === 5) {
+          /* These were spaced for a souk of two hundred shops. The clearance
+             test now refuses any pitch standing inside a wall, so there are a
+             hundred and fifty and the market had gone dark between them. */
+          if (made % 5 === 2) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
+          if (made % 6 === 2) {
             torchPost(cx + nx * sd * (w.half + 0.5), W.heightAt(cx, cz),
                       cz + nz * sd * (w.half + 0.5));
           }
@@ -1578,10 +2091,11 @@
                 : (pick > 0.34 ? TQ.front[0]
                 : (pick > 0.18 ? 'p_stall' : 'p_awning'));
         if (!MODELS[key]) key = 'p_stall';
-        placeBuilt(key, sx, y, sz, face, 1);
+        placeBuilt(key, sx, sitOn(key, y, 1), sz, face, 1);
+        markContact(key, sx, y, sz, 1);
         if (pick > 0.62 && MODELS[TQ.mat]) {
           var mx2 = sx - Math.sin(face) * 1.9, mz2 = sz - Math.cos(face) * 1.9;
-          placeBuilt(TQ.mat, mx2, W.heightAt(mx2, mz2), mz2, face, 1);
+          placeBuilt(TQ.mat, mx2, sitOn(TQ.mat, W.heightAt(mx2, mz2), 1), mz2, face, 1);
         }
         /* the goods behind the stall, and one thing set out in front */
         for (var k = 0; k < 3; k++) {
@@ -2074,7 +2588,14 @@
              apart: nearly half are allowed to crowd right up to a neighbour,
              which is what makes blocks and narrow alleys instead of a field
              of separate boxes */
-          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.42 ? 0.62 : 0.94);
+          /* HOUSES MAY SHARE A WALL. THEY MAY NOT SHARE THE GROUND.
+             At 0.62 of the pair radius six pairs were driven up to 6.8 m into
+             one another, so two sets of walls occupied the same stone and the
+             door of one stood inside the other - which is exactly what reads
+             as "doors that overlap with weird textures": it is z-fighting
+             between two buildings. Touching is what makes a block; passing
+             through is a fault. */
+          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.42 ? 0.76 : 0.96);
           if (Math.hypot(x - pl[0], z - pl[1]) < need) { ok = false; break; }
         }
         if (!ok) continue;
@@ -3226,10 +3747,13 @@
     /* The small props were kept out of the weld because they are shown and
        hidden by distance to save draw calls. Welding saves far more than the
        toggling ever did, so they go in and the toggle list is emptied. */
-    /* only what MOVES stays loose. A fire's sheets run their frames and its
-       embers rise, so it is protected; a lamp's glow is a plane that is set
-       down once and never touched again. */
-    EMIT.forEach(function (e) { if (e.layers) protect(e.g || e.mesh); });
+    /* Everything that is re-aimed or re-timed each frame stays loose. I tried
+       welding the lamp glows on the grounds that they are set down once and
+       never touched - and they ARE touched: driveLights calls lookAt on every
+       one of them every frame, so welded they froze facing whichever way they
+       were built and went edge-on to the camera. The comment that was already
+       here was right. */
+    EMIT.forEach(function (e) { protect(e.g || e.mesh); });
 
     var groups = new Map();
     var victims = [];
@@ -3249,9 +3773,7 @@
       if (Array.isArray(m)) return;
       /* billboards, glows and anything additive live by being re-aimed or
          faded every frame; welded they freeze into dark slabs in the sky */
-      if (!(o.userData && o.userData.weldGlow)) {
-        if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
-      }
+      if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
       /* Weld by material AND by where it stands. One batch for the whole
          town is one draw call, but it is never off screen, so all eight and
          a half million triangles are pushed every frame wherever you look.
@@ -3463,10 +3985,37 @@
     }
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
-      if (lp.d2 > 60000) { lp.g.visible = false; continue; }
+      /* 60,000 is 245 metres - the whole town and then some, so every glow in
+         it was drawn and re-aimed every frame. At seventy metres a glow is a
+         smear two pixels across and the lantern it hangs on is welded stone
+         that stays exactly where it was. */
+      /* IT USED TO SWITCH ON. Past 51 metres the glow was simply hidden and
+         inside it it was simply shown, at full strength, so walking up a
+         street made lamps appear one after another out of nothing. It grows
+         in over the last twenty metres instead: the sprite is additive, so
+         its area IS its brightness and scaling it from nothing is a fade
+         that costs no material of its own.
+         (Which matters, because the material is SHARED between every lamp in
+         the town. The line that used to sit here set `.material.opacity`,
+         and with one material behind four hundred and fifty lamps that meant
+         whichever lamp happened to be last in this loop set the brightness
+         of all of them - so every glow in the world flickered in lockstep
+         with one lamp somewhere behind you.) */
+      var vis = 1 - W.sstep(2600, 5400, lp.d2);
+      if (vis <= 0.02) { lp.g.visible = false; continue; }
       lp.g.visible = true;
       lp.g.lookAt(cp);
-      lp.g.material.opacity = 0.5 + 0.16 * lp.lit;
+      /* AND IT MUST NOT CUT INTO THE WALL IT HANGS ON. A billboard turned to
+         face the camera is a flat plane standing in the air; against a wall
+         behind it, half of it disappears into the stone and the rest reads as
+         a hard-edged half-disc sliding about as you move. Nudged towards the
+         camera it always clears the surface. */
+      var gx = lp.gx === undefined ? lp.x : lp.gx;
+      var gz = lp.gz === undefined ? lp.z : lp.gz;
+      var ox = cp.x - gx, oy = cp.y - lp.y, oz = cp.z - gz;
+      var ol = 0.26 / Math.max(0.001, Math.sqrt(ox * ox + oy * oy + oz * oz));
+      lp.g.position.set(gx + ox * ol, lp.y + oy * ol, gz + oz * ol);
+      lp.g.scale.setScalar(vis * (0.90 + 0.16 * lp.lit));
     }
     for (var fy2 = 0; fy2 < FIREFLIES.length; fy2++) {
       var fl2 = FIREFLIES[fy2];
@@ -3494,6 +4043,12 @@
        absolute height, but the ground has to be under it */
     try {
       var g = JSON.parse(localStorage.getItem('amirat.layout.ground') || 'null');
+      if (g && g.flats && g.flats.length && W.levelUnder) {
+        /* the biggest flat in the list is the town's own: level the land under
+           it so an imported town does not stand in somebody else's mound */
+        var big = g.flats.slice().sort(function (a, b) { return b[2] - a[2]; })[0];
+        W.levelUnder(big[0], big[1], big[2] * 0.78, big[2] * 0.78, 95, false);
+      }
       if (g) {
         (g.flats || []).forEach(function (f) { W.addFlat(f[0], f[1], f[2], f[3], f[4]); });
         (g.roads || []).forEach(function (r) { W.addRoad(r[0], r[1], r[2], r[3], r[4]); });
@@ -3628,6 +4183,14 @@
       }
     }
 
+    /* LEVEL THE GROUND UNDER THE TOWN FIRST. addFlat does NOT touch the
+       terrain height - it only says where nothing grows - so a mound painted
+       into the land (the twelve metre table built for the palace covered the
+       whole world, because mesaUnder replaces the patch rather than adding to
+       it) came straight up through the streets. This takes it back down under
+       the town and blends out to whatever else he has painted. Memory only:
+       his saved land is never rewritten by the game. */
+    if (W.levelUnder) W.levelUnder(TOWN.x, TOWN.z, TOWNSQ * 1.12, TOWNSQ * 1.12, 95, false);
     var baseY = W.heightAt(TOWN.x, TOWN.z);
     TOWN.y = Math.max(baseY, W.WATER_Y + 7);
     W.addFlat(TOWN.x, TOWN.z, TOWNSQ * 1.46, TOWN.y, 80);
@@ -3701,6 +4264,7 @@
         buildCitadel();
         buildSculptedHouses();
         buildSouk();
+        lightTheLanes();
         dressSquares();
         /* the friday mosque, made in Blender: hall, dome, minaret, courtyard */
         if (MODELS.m_mosque) {
@@ -3729,6 +4293,10 @@
         buildBustan(195, 245);
         buildMapSites();
         if (new URLSearchParams(location.search).get('site')) buildTestSite();
+
+        /* the ground remembers what stands on it and what lights it */
+        var _cn = layContacts(), _lp = layLampPools();
+        if (W.diag) W.diag('ground: ' + _cn + ' contacts, ' + _lp + ' lamp pools');
 
         if (W.refreshVeg) W.refreshVeg();
       });
