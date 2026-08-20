@@ -974,6 +974,31 @@
              pavement under the moon, which is what every night shot showed. */
           'trod = mix(trod, vec3(dot(trod, vec3(0.36, 0.5, 0.14))), 0.30) * vec3(0.95, 0.84, 0.68);',
           'trod *= (0.78 + 0.38 * macro2) * (0.90 + 0.20 * fine);',
+          /* ONE TONE OVER THE WHOLE TOWN IS A FLOOR, NOT A STREET. This pass
+             gave every square inside the walls the same grey-tan, and since
+             the ground is the largest thing in almost any frame the result
+             was a town standing on a sheet of card.
+             Ground that is walked on is not uniform: it is worn pale and
+             polished where the traffic goes, damp and dark in the hollows
+             where nothing dries, and it has stone pressed into it - which is
+             the part you only see when you are standing on it. */
+          'float wear = texture2D(tMask, wxz * 0.0118 + vec2(0.77, 0.29)).r;',
+          'float wear2 = texture2D(tMask, wxz * 0.0410 + vec2(0.13, 0.61)).r;',
+          'trod *= 0.60 + 0.84 * (wear * 0.66 + wear2 * 0.34);',
+          /* the pebbles, close to only, or they crawl at distance */
+          'float camD0 = length(vWPos - cameraPosition);',
+          'float pebW = 1.0 - smoothstep(4.0, 26.0, camD0);',
+          'if (pebW > 0.003) {',
+          '  float peb = texture2D(tGrav, wxz * 0.74).r;',
+          '  float peb2 = texture2D(tGrav, wxz * 2.30 + vec2(0.31, 0.77)).r;',
+          '  float pk = smoothstep(0.58, 0.86, peb);',
+          /* Measured across the square, the whole ground spanned 22 levels of
+             255 - which at a grazing angle is a sheet of card. It needs real
+             contrast between the stone and the earth it is pressed into, not
+             a hint of one. */
+          '  trod = mix(trod, trod * (0.40 + 1.45 * peb) * (0.86 + 0.28 * peb2), pebW * 0.80);',
+          '  trod += vec3(0.075, 0.066, 0.052) * pk * pebW;',
+          '}',
           'col = mix(col, trod, town * 0.85);',
           'col *= 0.94 + 0.12 * fine;',
           /* Grain underfoot. The broad layers repeat every ten metres or so,
@@ -991,7 +1016,13 @@
           /* Moonlight is blue, and photographed daylight sand is far too bright
              to stand in for ground at night: left alone it reads as lit
              concrete and outshines the walls it should sit beneath. */
-          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.78, 0.85, 1.08), 0.34 * uNight);',
+          /* Desaturating a THIRD of the way to grey and then pushing that
+             grey blue is what left the streets reading as cold concrete: the
+             ground is the largest thing in almost every frame, so whatever it
+             does the whole scene does. It keeps more of its own colour now,
+             and what is taken out goes barely blue at all - the moon is cool,
+             but a dirt lane under it is still dirt. */
+          'col = mix(col, vec3(dot(col, vec3(0.34, 0.5, 0.16))) * vec3(0.90, 0.90, 1.02), 0.19 * uNight);',
           /* the street was the brightest thing in every night frame, which is
              backwards: a dirt lane has nothing to be bright with. */
           'col *= mix(1.0, 0.50, uNight);',
