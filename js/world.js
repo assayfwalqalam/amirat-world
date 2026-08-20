@@ -1437,6 +1437,10 @@
 
     function lock() {
       if (plBlocked || 'ontouchstart' in window) return;
+      /* never grab the pointer back while she has a panel open - she is
+         trying to click a button, and the lock would eat the click and start
+         turning the camera instead */
+      if (W.UI_OPEN) return;
       try {
         var p = canvas.requestPointerLock && canvas.requestPointerLock();
         if (p && p.catch) p.catch(function () { plBlocked = true; });
@@ -1486,10 +1490,22 @@
       if (e.pointerId === movePid) { movePid = null; moveOrigin = null; moveVec.x = moveVec.y = 0; stickEl.style.display = 'none'; }
       delete looks[e.pointerId];
     }
+    /* the same for touch: a panel open means the stick is let go of, or she
+       keeps walking behind the sheet she is reading */
+    W.dropStick = function () {
+      movePid = null; moveOrigin = null; moveVec.x = moveVec.y = 0;
+      if (stickEl) stickEl.style.display = 'none';
+      looks = {};
+    };
     addEventListener('pointerup', endPtr);
     addEventListener('pointercancel', endPtr);
 
     document.addEventListener('keydown', function (e) {
+      /* A PANEL IS OPEN: THE WORLD IS NOT LISTENING. Without this she types
+         her name into the box and walks north at the same time, because W is
+         both a letter and a direction. The keys are also cleared on the way in
+         so nothing stays stuck down while the panel is up. */
+      if (W.UI_OPEN) { W.releaseKeys(); return; }
       keys[e.code] = true; wake();
       if (e.code === 'KeyF') { fly = !fly; setMode(); }
       if (e.code === 'KeyE' && W.interact) W.interact(W);
@@ -1562,6 +1578,10 @@
     return { x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch };
   };
   W.keyHeld = function (code) { return !!keys[code]; };
+  /* let go of everything: called when a panel opens, so nothing is left held */
+  W.releaseKeys = function () {
+    for (var k in keys) if (keys[k]) keys[k] = false;
+  };
 
   var _vegTick = 0;
 
@@ -1749,6 +1769,7 @@
     if (dt > hbWorst) hbWorst = dt;
     if (W.tickWater) W.tickWater(clock.elapsedTime);
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
+    if (W.uiTick) W.uiTick();
     step(dt);
     if (composer) composer.render(); else renderer.render(scene, cam);
     qualityWatch(dt);

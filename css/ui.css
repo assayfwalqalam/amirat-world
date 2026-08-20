@@ -1,0 +1,255 @@
+/* THE FRONT OF THE WORLD.
+   =================================================================
+   The palette, the type and the ruled gold hairlines are taken from the
+   As-Sayf wal-Qalam site, because these two things belong to one house and
+   should look as though they do: the same warm near-black, the same two golds,
+   the same EB Garamond over Amiri. What is different is that all of it sits
+   OVER a live night world instead of over a page, so every panel has to be
+   dark enough and opaque enough to read against a lit street, and nothing may
+   ever cover the whole screen while she is walking.
+
+   One rule holds the whole file together: a panel is either open or it is not,
+   and when one is open the world stops taking input. Two things listening to
+   the same key is how a menu ends up moving the player. */
+
+:root {
+  --bg: #0d0b08;
+  --bg2: #15110b;
+  --panel: rgba(17, 13, 8, 0.94);
+  --ink: #e9dcc1;
+  --muted: #b3a482;
+  --faint: #7e7257;
+  --gold: #c8a96e;
+  --gold-bright: #ecdfae;
+  --sage: #8a9a73;
+  --line: rgba(200, 169, 110, 0.22);
+  --line-strong: rgba(200, 169, 110, 0.46);
+  --shadow: 0 26px 80px -22px rgba(0, 0, 0, 0.9);
+}
+
+/* ------------------------------------------------------------- the bar
+   Along the top, over the world, and it fades back when she is walking so
+   that it is never the brightest thing in a night street. */
+#ui-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 11px 16px;
+  background: linear-gradient(180deg, rgba(13, 11, 8, .88), rgba(13, 11, 8, 0));
+  pointer-events: none;
+  transition: opacity .45s ease;
+}
+#ui-bar.dim { opacity: .34; }
+#ui-bar .brand {
+  display: flex; align-items: baseline; gap: 9px;
+  pointer-events: auto; text-decoration: none; color: var(--ink);
+}
+#ui-bar .brand .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 21px; line-height: 1; color: var(--gold-bright);
+}
+#ui-bar .brand .en {
+  font-size: 10.5px; letter-spacing: .21em; text-transform: uppercase;
+  color: var(--muted);
+}
+#ui-menu { display: flex; gap: 5px; pointer-events: auto; }
+#ui-menu button {
+  font: 500 12.5px/1 'EB Garamond', Georgia, serif;
+  letter-spacing: .08em;
+  padding: 8px 13px; border-radius: 3px; cursor: pointer;
+  color: var(--muted); background: rgba(13, 11, 8, .5);
+  border: 1px solid var(--line);
+  transition: color .2s, border-color .2s, background .2s;
+}
+#ui-menu button:hover { color: var(--gold-bright); border-color: var(--line-strong); }
+#ui-menu button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+#ui-menu button .tick {
+  display: inline-block; margin-left: 7px; color: var(--gold);
+  font-variant-numeric: tabular-nums; opacity: .75;
+}
+
+/* ------------------------------------------------------------ the sheet
+   Everything that opens is one of these: a dark panel that slides up from the
+   bottom on a phone and sits centred on a desk. It never fills the screen -
+   the world stays visible down one side, because the world is the point. */
+#ui-veil {
+  position: fixed; inset: 0; z-index: 30; display: none;
+  background: rgba(6, 5, 3, .62);
+  backdrop-filter: blur(3px);
+}
+#ui-veil.on { display: block; }
+
+.sheet {
+  position: fixed; z-index: 31; display: none;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(78vh, 760px);
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: 4px;
+  box-shadow: var(--shadow);
+  font: 400 16px/1.62 'EB Garamond', Georgia, serif;
+  overflow: hidden;
+}
+.sheet.on { display: flex; flex-direction: column; }
+.sheet header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 14px; padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet header .ttl { min-width: 0; }
+.sheet header .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 25px; line-height: 1.35; color: var(--gold-bright);
+  display: block; margin-bottom: 3px;
+}
+.sheet header .en {
+  font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--faint);
+}
+.sheet .body { padding: 18px 20px 22px; overflow-y: auto; }
+.sheet .foot {
+  padding: 12px 20px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; color: var(--faint);
+}
+
+.x {
+  flex: none; width: 32px; height: 32px; border-radius: 3px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line);
+  color: var(--muted); font: 400 17px/1 'EB Garamond', serif;
+}
+.x:hover { color: var(--gold-bright); border-color: var(--line-strong); }
+.x:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+.btn {
+  font: 500 13px/1 'EB Garamond', Georgia, serif; letter-spacing: .08em;
+  padding: 9px 15px; border-radius: 3px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: transparent;
+  color: var(--muted); transition: color .2s, background .2s;
+}
+.btn:hover { color: var(--gold-bright); }
+.btn:disabled { opacity: .34; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.btn.gold { background: var(--gold); border-color: var(--gold); color: #23170a; }
+.btn.gold:hover { background: var(--gold-bright); color: #23170a; }
+
+/* ------------------------------------------------------- the shelf of books */
+.shelf { display: flex; flex-direction: column; gap: 9px; }
+.vol {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 13px 15px; text-align: left; cursor: pointer;
+  background: rgba(232, 214, 175, .035);
+  border: 1px solid var(--line); border-radius: 3px;
+  color: var(--ink); transition: border-color .2s, background .2s;
+}
+.vol:hover { border-color: var(--line-strong); background: rgba(232, 214, 175, .07); }
+.vol:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.vol .nm { flex: 1; min-width: 0; }
+.vol .nm .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 20px; line-height: 1.4; color: var(--gold-bright); display: block;
+}
+.vol .nm .en { font-size: 13px; color: var(--muted); }
+.vol .cnt {
+  flex: none; font-size: 12.5px; color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.vol .seal { flex: none; font-size: 15px; color: var(--gold); }
+
+/* --------------------------------------------------------------- reading */
+.reading .n {
+  font: 500 11px/1 'EB Garamond', serif; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 9px;
+}
+.reading h3 {
+  margin: 0 0 18px; font-weight: 500; font-size: 21px; line-height: 1.3;
+  color: var(--ink); text-wrap: balance;
+}
+.reading .lbl {
+  font: 500 9.5px/1 'EB Garamond', serif; letter-spacing: .19em;
+  text-transform: uppercase; color: var(--faint); margin: 0 0 8px;
+}
+.reading .ar-block {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  direction: rtl; text-align: right;
+  font-size: 21px; line-height: 2.05; color: var(--ink);
+  border-right: 2px solid var(--gold); padding-right: 13px;
+  margin: 0 0 20px;
+}
+.reading .isnad-block {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  direction: rtl; text-align: right;
+  font-size: 17px; line-height: 1.95; color: var(--faint);
+  margin: 0 0 20px;
+}
+.reading .en-block { margin: 0; color: var(--ink); }
+
+/* ------------------------------------------------------------- her page */
+.band-row { display: flex; align-items: baseline; gap: 11px; margin-bottom: 6px; }
+.band-row .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 27px; color: var(--gold-bright);
+}
+.band-row .en {
+  font-size: 11px; letter-spacing: .19em; text-transform: uppercase;
+  color: var(--faint);
+}
+.meter {
+  height: 3px; border-radius: 2px; margin: 12px 0 8px;
+  background: rgba(200, 169, 110, .17); overflow: hidden;
+}
+.meter i {
+  display: block; height: 100%; background: var(--gold);
+  transition: width .5s ease;
+}
+.toward { font-size: 13px; color: var(--faint); margin: 0 0 26px; }
+.namer { display: flex; gap: 8px; margin: 0 0 26px; }
+.namer input {
+  flex: 1; min-width: 0; padding: 9px 12px; border-radius: 3px;
+  font: 400 15px/1.3 'EB Garamond', Georgia, serif;
+  background: rgba(0, 0, 0, .3); color: var(--ink);
+  border: 1px solid var(--line);
+}
+.namer input:focus { outline: none; border-color: var(--line-strong); }
+.seals { display: flex; flex-wrap: wrap; gap: 8px; }
+.seals .s {
+  padding: 7px 12px; border-radius: 3px; font-size: 13px;
+  border: 1px solid var(--line); color: var(--faint);
+}
+.seals .s.got { color: var(--gold-bright); border-color: var(--line-strong); }
+
+/* --------------------------------------------------------- what she earned
+   A note that slides in at the top and takes itself away. It never asks for a
+   click, because she is walking when it happens. */
+#ui-note {
+  position: fixed; z-index: 25; left: 50%; top: 64px;
+  transform: translate(-50%, -14px);
+  padding: 11px 20px; border-radius: 3px;
+  background: rgba(17, 13, 8, .95); border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  color: var(--ink); font: 400 15px/1.4 'EB Garamond', Georgia, serif;
+  text-align: center; pointer-events: none;
+  opacity: 0; transition: opacity .5s ease, transform .5s ease;
+  max-width: min(420px, calc(100vw - 32px));
+}
+#ui-note.on { opacity: 1; transform: translate(-50%, 0); }
+#ui-note .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 21px; color: var(--gold-bright); display: block; margin-bottom: 2px;
+}
+#ui-note .en {
+  font-size: 10.5px; letter-spacing: .19em; text-transform: uppercase;
+  color: var(--faint);
+}
+
+@media (max-width: 640px) {
+  .sheet {
+    left: 0; right: 0; bottom: 0; top: auto; transform: none;
+    width: 100%; max-height: 82vh; border-radius: 4px 4px 0 0;
+    border-left: none; border-right: none; border-bottom: none;
+  }
+  #ui-menu button { padding: 8px 10px; font-size: 12px; }
+  #ui-bar .brand .en { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ui-note, .meter i, #ui-bar { transition: none; }
+}

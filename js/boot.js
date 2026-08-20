@@ -14,7 +14,12 @@
     'js/MaskPass.js',
     'js/UnrealBloomPass.js',
     'js/world.js',
-    'js/build.js'
+    'js/build.js',
+    /* rawda.js holds what she has read and where the books stand; ui.js is the
+       bar, the shelf, the reader and her page. Both come after build.js
+       because both hang off things the engine defines. */
+    'js/rawda.js',
+    'js/ui.js'
   ];
 
   function load(list, ver, done) {
@@ -50,6 +55,13 @@
        and the new work never arrived on the player's machine. Everything the
        engine fetches now carries this build number. */
     window.__BUILD = ver;
+    /* the stylesheet for the front of the world, versioned like everything
+       else so a changed panel is never served from a stale cache */
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'css/ui.css?v=' + ver;
+    document.head.appendChild(css);
+
     load(FILES, ver, function () {
       var l = document.getElementById('load');
       if (l) l.style.display = 'none';
@@ -57,6 +69,18 @@
       if (st) st.style.display = '';
       try { W.start(); } catch (e) {
         if (window.W && W.diag) W.diag('start failed: ' + e.message);
+      }
+      /* The readings are fetched alongside the world rather than before it:
+         they are 217 KB and the world is tens of megabytes, so waiting on them
+         would be waiting on nothing. The shelf simply says so until they land. */
+      try {
+        if (W.uiBuild) W.uiBuild();
+        if (W.loadRawda) W.loadRawda().then(function () {
+          if (W.uiRefresh) W.uiRefresh();
+          if (W.standBooksWhenReady) W.standBooksWhenReady();
+        });
+      } catch (e) {
+        if (window.W && W.diag) W.diag('the front did not build: ' + e.message);
       }
     });
   }

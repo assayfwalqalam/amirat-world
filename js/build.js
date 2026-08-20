@@ -164,6 +164,10 @@
     M.win = new T.MeshBasicMaterial({ color: 0xffc271, toneMapped: false });
     M.winOff = new T.MeshBasicMaterial({ color: 0x0a0b16 });
     M.floor = surf('t_floor', 0xb9a184, { nrm: 0.8 });
+    /* the leaves of an open manuscript, so a book on a lectern does not read
+       as a plank of wood lying on another plank of wood */
+    M.parch = new T.MeshStandardMaterial({ map: W.tex('assets/t_parch.jpg', true, true),
+                                           color: 0xe4d6b4, roughness: 0.94 });
   }
 
   /* every face gets the same brick size, whatever the wall's dimensions */
@@ -2081,6 +2085,14 @@
   /* A market stands in every open place: stalls under awnings around the rim,
      the goods stacked behind them, a brazier for the cold. Without this the
      squares read as empty yards, which is the one thing a town square is not. */
+  /* published for anything that needs to stand something in an open place */
+  function publishSquares() {
+    W.SQUARES = SQUARES.map(function (s) {
+      return { x: s.x, z: s.z, r: s.r, y: W.heightAt(s.x, s.z) };
+    });
+    return W.SQUARES.length;
+  }
+
   function dressSquares() {
     var GOODS = ['p_jars', 'p_crates', 'p_sacks', 'p_barrels', 'p_basket',
                  'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood', 'p_stones'];
@@ -2481,6 +2493,11 @@
     return { d: best, at: bestSeg };
   }
 
+  /* THE OPEN PLACES, AND SAYING SO OUT LOUD.
+     These were known only inside this file, so nothing else could put anything
+     in one of them without guessing a coordinate - and a guessed coordinate is
+     how a thing ends up standing in a field. They are published with a real
+     ground height as soon as the streets are grown. */
   var SQUARES = [];       /* the open places · where a market stands */
 
   function growStreets(S) {
@@ -3951,23 +3968,181 @@
   }
   W.crunch = crunch;
 
+  /* ------------------------------------------------------------ the books
+     A manuscript in the world is a real thing standing on a real lectern, lit
+     by its own small lamp so that it can be found in a dark room. The lectern
+     is the folding X-frame a mus-haf is read from; the book lies open on it.
+     Built here rather than in Blender because it is five objects in the whole
+     world and it has to sit exactly where the world says a place is.
+     None of it moves, so all of it welds with the rest of the town. */
+  var lecternGeo = null;
+  function lecternGeometry() {
+    if (lecternGeo) return lecternGeo;
+    var parts = [];
+    /* the two crossed legs */
+    for (var s3 = -1; s3 <= 1; s3 += 2) {
+      var leg = new T.BoxGeometry(0.055, 0.92, 0.055);
+      leg.rotateX(s3 * 0.42);
+      leg.translate(0.24, 0.44, 0);
+      parts.push(boxUV(leg, 0.055, 0.92, 0.055));
+      var leg2 = new T.BoxGeometry(0.055, 0.92, 0.055);
+      leg2.rotateX(s3 * 0.42);
+      leg2.translate(-0.24, 0.44, 0);
+      parts.push(boxUV(leg2, 0.055, 0.92, 0.055));
+    }
+    /* the pin they turn on, and the rest the book lies against */
+    var pin = new T.CylinderGeometry(0.022, 0.022, 0.56, 8);
+    pin.rotateZ(Math.PI / 2);
+    pin.translate(0, 0.52, 0);
+    parts.push(pin);
+    for (var k = -1; k <= 1; k += 2) {
+      var rest = new T.BoxGeometry(0.52, 0.045, 0.30);
+      rest.rotateX(k * 0.52);
+      rest.translate(0, 0.80, k * 0.11);
+      parts.push(boxUV(rest, 0.52, 0.045, 0.30));
+    }
+    lecternGeo = mergeGeos(parts);
+    return lecternGeo;
+  }
+
+  var bookGeo = null;
+  function bookGeometry() {
+    if (bookGeo) return bookGeo;
+    var parts = [];
+    /* two leaves lying open, tilted the way the rest is tilted */
+    for (var k = -1; k <= 1; k += 2) {
+      var leaf = new T.BoxGeometry(0.30, 0.028, 0.26);
+      leaf.rotateX(k * 0.52);
+      leaf.translate(k * 0.155, 0.845, k * 0.10);
+      parts.push(boxUV(leaf, 0.30, 0.028, 0.26));
+    }
+    /* the spine standing between them */
+    var spine = new T.BoxGeometry(0.035, 0.05, 0.24);
+    spine.translate(0, 0.856, 0);
+    parts.push(boxUV(spine, 0.035, 0.05, 0.24));
+    bookGeo = mergeGeos(parts);
+    return bookGeo;
+  }
+
+  W.placeBook = function (slug, x, y, z) {
+    if (!M || !M.wood) return null;
+    /* THE SPOT MAY ALREADY BE TAKEN. The first library book was stood in a
+       heap of rocks, because a place published by the world is a place, not an
+       empty place. If the given spot is occupied, walk a short spiral outward
+       and take the first clear one; the book stays within a couple of metres
+       of where it belongs, which is all that matters. */
+    if (!clearGround(x, z, 0.9)) {
+      var found = false;
+      /* Four rings of 85 cm reached under three metres, which is not far
+         enough beside a mosque: its wall, its piers and its dressing filled
+         all of it, and the book was stood in the wall anyway. Seven rings of
+         twelve directions reaches eight metres, which is still "beside the
+         mosque" to anyone standing there. */
+      for (var ring = 1; ring <= 7 && !found; ring++) {
+        for (var a2 = 0; a2 < 12; a2++) {
+          var th = a2 * Math.PI / 6;
+          var tx = x + Math.cos(th) * ring * 1.15;
+          var tz = z + Math.sin(th) * ring * 1.15;
+          if (clearGround(tx, tz, 0.9)) {
+            x = tx; z = tz; y = W.heightAt(tx, tz); found = true; break;
+          }
+        }
+      }
+      if (!found && W.diag) W.diag('no clear ground for the ' + slug + ' book');
+    }
+    var g = new T.Group();
+    var stand = new T.Mesh(lecternGeometry(), M.wood);
+    g.add(stand);
+    var leaves = new T.Mesh(bookGeometry(), M.parch || M.wood);
+    g.add(leaves);
+    g.position.set(x, y, z);
+    g.rotation.y = hashU(((x * 31.1 + z * 71.3) * 1000) | 0) * 6.283;
+    W.scene.add(g);
+    /* IT HAS TO BE FINDABLE IN THE DARK, and the light has to be BESIDE it.
+       Put at the lectern's own x and z it came out hanging directly over the
+       page - and worse, the lamp then found the book's own collider as the
+       floor beneath it and sat down on top of the book. It stands off to one
+       side, on the ground, the way a lamp is set down next to something you
+       are reading.
+       And it is raised BEFORE the collider, so nothing about the book is in
+       the way when the lamp asks what is under it. */
+    var lo = 0.72, c2 = Math.cos(g.rotation.y), s4 = Math.sin(g.rotation.y);
+    lamp(x + lo * c2, y + 1.15, z - lo * s4, 0.7, true, 9.5);
+    /* something has to be able to walk into it */
+    W.addBox(x, y + 0.45, z, 0.32, 0.45, 0.28, 0);
+    PLACED_LOG.push({ k: 'book:' + slug, p: [+x.toFixed(2), +y.toFixed(2),
+                      +z.toFixed(2)], r: 0, s: 1 });
+    return g;
+  };
+
   /* ------------------------------------------------------- interaction */
-  W.interact = function (W) {
+  /* WHAT IS WITHIN REACH, AND WHICH OF THE TWO IS NEARER.
+     E used to mean "open the nearest door" and nothing else. With books
+     standing in the world it has to mean whichever of the two she is actually
+     next to, or she will swing a door open while standing at a lectern. The
+     nearer thing wins, and a book wins a tie, because a person walks up to a
+     book on purpose and walks past a door by accident. */
+  W.reachable = function () {
     var p = W.getPos();
-    var best = null, bd = 3.4;
+    var bk = W.bookNear ? W.bookNear(p, 2.9) : null;
+    var bkD = bk ? Math.hypot(p.x - bk.x, p.z - bk.z) : 1e9;
+    var dr = null, drD = 3.4;
     for (var i = 0; i < doors.length; i++) {
       var d = doors[i];
       var dist = Math.hypot(p.x - d.x, p.z - d.z);
-      if (dist < bd) { bd = dist; best = d; }
+      if (dist < drD) { drD = dist; dr = d; }
     }
-    if (best) {
-      best.open = !best.open;
-      if (best.open) { best.col.y1 = best.col.y0; } else { best.col.y1 = best.y1; }
-    }
+    if (bk && bkD <= drD + 0.6) return { kind: 'book', book: bk, d: bkD };
+    if (dr) return { kind: 'door', door: dr, d: drD };
+    return null;
   };
+
+  W.interact = function (W) {
+    var r = W.reachable();
+    if (!r) return;
+    if (r.kind === 'book') {
+      if (W.openBook) W.openBook(r.book.slug);
+      return;
+    }
+    var best = r.door;
+    best.open = !best.open;
+    if (best.open) { best.col.y1 = best.col.y0; } else { best.col.y1 = best.y1; }
+  };
+
+  /* THE PROMPT NOBODY WAS SHOWING.
+     index.html has carried an action chip since the beginning - "Open . E" -
+     and not one line of code has ever turned it on, so a player has never once
+     been told that a door opens or that a book can be read. It follows what is
+     within reach, and says what that thing is rather than always saying the
+     same word. Checked eight times a second, not every frame: it is a caption,
+     and the reach test walks the door list. */
+  var actEl = null, actArEl = null, actEnEl = null, actWas = '';
+  function showAction() {
+    if (actEl === null) {
+      actEl = document.getElementById('act') || false;
+      actArEl = document.getElementById('actAr');
+      actEnEl = document.getElementById('actEn');
+    }
+    if (!actEl) return;
+    var r = W.reachable ? W.reachable() : null;
+    var key = r ? (r.kind + ':' + (r.kind === 'book' ? r.book.slug
+                   : (r.door.open ? 'shut' : 'open'))) : '';
+    if (key === actWas) return;
+    actWas = key;
+    if (!r) { actEl.classList.remove('on'); return; }
+    if (r.kind === 'book') {
+      if (actArEl) actArEl.textContent = 'اقرئي';
+      if (actEnEl) actEnEl.textContent = 'Read · E';
+    } else {
+      if (actArEl) actArEl.textContent = r.door.open ? 'أغلقي' : 'افتحي';
+      if (actEnEl) actEnEl.textContent = (r.door.open ? 'Close' : 'Open') + ' · E';
+    }
+    actEl.classList.add('on');
+  }
 
   var smallTick = 0;
   W.tick = function (W, dt, t) {
+    if ((smallTick & 7) === 0) showAction();
     for (var i = 0; i < winds.length; i++) winds[i].value = t;
     var cp = W.cam.position;
     driveLights(t, dt);
@@ -4277,6 +4452,7 @@
         buildSculptedHouses();
         buildSouk();
         lightTheLanes();
+        publishSquares();
         dressSquares();
         /* the friday mosque, made in Blender: hall, dome, minaret, courtyard */
         if (MODELS.m_mosque) {
