@@ -759,10 +759,16 @@ WOODY = {"barrel", "barrels", "crates", "cart", "bench", "stall", "table",
 CLAYY = {"pot", "jars", "waterjug", "oillamp", "bowl", "plantpot", "bread"}
 CLOTHY = {"awning", "carpet", "cushions", "sacks"}
 # every surface wears something: a flat colour is what made these read as toys
-STONEY = {"stones", "well", "brazier"}
+# A WELL IS DRESSED MASONRY AND A BRAZIER IS IRON. Both were wearing
+# g_rock_d.jpg, which is a photograph of rocky GROUND - loose stones lying in
+# dirt, shot from above. On a heap of rocks that is exactly right; wrapped
+# round a built cylinder at one repeat for the whole object it reads as gravel
+# smeared on a drum, which is why the well came out a black-and-white block.
+STONEY = {"stones"}
+ASHLAR = {"well"}
 FIBRE = {"basket", "ropecoil"}
 PAPERY = {"scrolls", "books", "inkset"}
-IRONY = {"torch"}
+IRONY = {"torch", "brazier"}
 
 tex_file = None
 gain = 2.4
@@ -774,6 +780,8 @@ elif KIND in CLOTHY:
     tex_file = "t_cloth_d.jpg"
 elif KIND in STONEY:
     tex_file = "g_rock_d.jpg"
+elif KIND in ASHLAR:
+    tex_file = "t_ashlar_d.jpg"
 elif KIND in FIBRE:
     tex_file = "t_canvas.jpg"
 elif KIND in PAPERY:
