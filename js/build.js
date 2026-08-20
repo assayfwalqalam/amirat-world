@@ -3979,49 +3979,87 @@
   function lecternGeometry() {
     if (lecternGeo) return lecternGeo;
     var parts = [];
-    /* the two crossed legs */
+    /* THE X-FRAME (rihal), and it has to be seen from across a square.
+       The first one was thin sticks at 5.5 cm and it read as a stool. A real
+       reading stand is heavy - it holds a book that weighs as much as a child
+       - so the members are 8 cm, the feet spread, and there is a stretcher
+       between them at the bottom where a joiner would put one. */
+    var LEG = 0.082, SPREAD = 0.30, H = 1.02;
     for (var s3 = -1; s3 <= 1; s3 += 2) {
-      var leg = new T.BoxGeometry(0.055, 0.92, 0.055);
-      leg.rotateX(s3 * 0.42);
-      leg.translate(0.24, 0.44, 0);
-      parts.push(boxUV(leg, 0.055, 0.92, 0.055));
-      var leg2 = new T.BoxGeometry(0.055, 0.92, 0.055);
-      leg2.rotateX(s3 * 0.42);
-      leg2.translate(-0.24, 0.44, 0);
-      parts.push(boxUV(leg2, 0.055, 0.92, 0.055));
+      for (var s4 = -1; s4 <= 1; s4 += 2) {
+        var leg = new T.BoxGeometry(LEG, H, LEG);
+        leg.rotateX(s3 * 0.40);
+        leg.translate(s4 * SPREAD, H * 0.5, 0);
+        parts.push(boxUV(leg, LEG, H, LEG));
+      }
+      /* the foot each pair stands on, so it does not end in a point */
+      var foot = new T.BoxGeometry(0.72, 0.055, 0.075);
+      foot.translate(0, 0.028, s3 * 0.20);
+      parts.push(boxUV(foot, 0.72, 0.055, 0.075));
     }
-    /* the pin they turn on, and the rest the book lies against */
-    var pin = new T.CylinderGeometry(0.022, 0.022, 0.56, 8);
+    /* the pin the two halves turn on */
+    var pin = new T.CylinderGeometry(0.026, 0.026, 0.70, 10);
     pin.rotateZ(Math.PI / 2);
-    pin.translate(0, 0.52, 0);
+    pin.translate(0, 0.60, 0);
     parts.push(pin);
+    /* the stretcher low down between the pairs */
+    var str = new T.BoxGeometry(0.055, 0.055, 0.44);
+    str.translate(0, 0.20, 0);
+    parts.push(boxUV(str, 0.055, 0.055, 0.44));
+    /* the two boards the book lies against, and the ledge that stops it
+       sliding off the bottom of them */
     for (var k = -1; k <= 1; k += 2) {
-      var rest = new T.BoxGeometry(0.52, 0.045, 0.30);
-      rest.rotateX(k * 0.52);
-      rest.translate(0, 0.80, k * 0.11);
-      parts.push(boxUV(rest, 0.52, 0.045, 0.30));
+      var rest = new T.BoxGeometry(0.68, 0.05, 0.36);
+      rest.rotateX(k * 0.50);
+      rest.translate(0, 0.885, k * 0.145);
+      parts.push(boxUV(rest, 0.68, 0.05, 0.36));
+      var lip = new T.BoxGeometry(0.68, 0.055, 0.035);
+      lip.rotateX(k * 0.50);
+      lip.translate(0, 0.815, k * 0.30);
+      parts.push(boxUV(lip, 0.68, 0.055, 0.035));
     }
     lecternGeo = mergeGeos(parts);
     return lecternGeo;
   }
 
-  var bookGeo = null;
+  var bookGeo = null, bookPageGeo = null;
   function bookGeometry() {
     if (bookGeo) return bookGeo;
     var parts = [];
-    /* two leaves lying open, tilted the way the rest is tilted */
+    /* THE COVER, which overhangs the block of pages on three sides - that
+       overhang is most of what makes a shape read as a bound book rather than
+       as a folded card. */
     for (var k = -1; k <= 1; k += 2) {
-      var leaf = new T.BoxGeometry(0.30, 0.028, 0.26);
-      leaf.rotateX(k * 0.52);
-      leaf.translate(k * 0.155, 0.845, k * 0.10);
-      parts.push(boxUV(leaf, 0.30, 0.028, 0.26));
+      var cov = new T.BoxGeometry(0.34, 0.022, 0.40);
+      cov.rotateX(k * 0.50);
+      cov.translate(k * 0.175, 0.905, k * 0.155);
+      parts.push(boxUV(cov, 0.34, 0.022, 0.40));
     }
-    /* the spine standing between them */
-    var spine = new T.BoxGeometry(0.035, 0.05, 0.24);
-    spine.translate(0, 0.856, 0);
-    parts.push(boxUV(spine, 0.035, 0.05, 0.24));
+    /* the spine standing between the two halves */
+    var spine = new T.BoxGeometry(0.045, 0.075, 0.36);
+    spine.translate(0, 0.925, 0);
+    parts.push(boxUV(spine, 0.045, 0.075, 0.36));
     bookGeo = mergeGeos(parts);
     return bookGeo;
+  }
+
+  function bookPages() {
+    if (bookPageGeo) return bookPageGeo;
+    var parts = [];
+    /* THE PAGES, as three thin layers rather than one slab. The edge of a
+       block of paper is the other half of reading as a book: one flat plane
+       is a sheet, three stepped ones are a quire. */
+    for (var k = -1; k <= 1; k += 2) {
+      for (var q = 0; q < 3; q++) {
+        var w = 0.315 - q * 0.014, d = 0.375 - q * 0.016;
+        var pg = new T.BoxGeometry(w, 0.010, d);
+        pg.rotateX(k * 0.50);
+        pg.translate(k * 0.168, 0.921 + q * 0.011, k * 0.150);
+        parts.push(boxUV(pg, w, 0.010, d));
+      }
+    }
+    bookPageGeo = mergeGeos(parts);
+    return bookPageGeo;
   }
 
   W.placeBook = function (slug, x, y, z) {
@@ -4053,8 +4091,12 @@
     var g = new T.Group();
     var stand = new T.Mesh(lecternGeometry(), M.wood);
     g.add(stand);
-    var leaves = new T.Mesh(bookGeometry(), M.parch || M.wood);
-    g.add(leaves);
+    /* the cover is leather over board; the pages are parchment. Two
+       materials, because one material is what made it read as a slab. */
+    var cover = new T.Mesh(bookGeometry(), M.dark || M.wood);
+    g.add(cover);
+    var pages = new T.Mesh(bookPages(), M.parch || M.wood);
+    g.add(pages);
     g.position.set(x, y, z);
     g.rotation.y = hashU(((x * 31.1 + z * 71.3) * 1000) | 0) * 6.283;
     W.scene.add(g);
