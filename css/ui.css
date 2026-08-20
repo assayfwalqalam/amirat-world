@@ -12,13 +12,36 @@
    and when one is open the world stops taking input. Two things listening to
    the same key is how a menu ends up moving the player. */
 
+/* THE FACES HAVE TO BE DECLARED OR THEY ARE NOT THERE.
+   The panels asked for 'EB Garamond' and got the browser's default serif in
+   silence - measured, the string rendered to exactly the same width under
+   "EB Garamond" as under a font name that does not exist, which is what a
+   silent fallback looks like from the outside. Nothing warns you; the page
+   just quietly stops being the thing you designed. These are the same two
+   files the As-Sayf wal-Qalam site serves, so both wear the same type. */
+@font-face {
+  font-family: 'EB Garamond';
+  src: url('../assets/fonts/EBGaramond.ttf') format('truetype');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Amiri';
+  src: url('../assets/fonts/Amiri-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   --bg: #0d0b08;
   --bg2: #15110b;
   --panel: rgba(17, 13, 8, 0.94);
   --ink: #e9dcc1;
   --muted: #b3a482;
-  --faint: #7e7257;
+  /* 4.08:1 on the panel ground, which is under AA for body text. This is
+     the one colour that carried captions rather than decoration, so it is
+     lifted until it passes rather than left because it looked right. */
+  --faint: #9a8d6c;
   --gold: #c8a96e;
   --gold-bright: #ecdfae;
   --sage: #8a9a73;

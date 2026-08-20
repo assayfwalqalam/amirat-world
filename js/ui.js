@@ -71,6 +71,10 @@
     try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) {}
     if (W.setIdle) W.setIdle(1e9);          /* do not let the world sleep */
     if (W.releaseKeys) W.releaseKeys();
+    /* and on a phone the joystick has to be let go of too, or she keeps
+       walking behind the sheet she is reading - the stick is a pointer that
+       is already down and no keyup is ever coming for it */
+    if (W.dropStick) W.dropStick();
     var x = sheets[id].querySelector('.x');
     if (x) x.focus();
   }
