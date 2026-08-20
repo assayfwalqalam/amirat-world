@@ -785,9 +785,53 @@
                        p3: hashU((i * 1543) | 0) * 6.283 });
     }
   }
+  /* EVERY MODEL THE TOWN STANDS UP IS WRITTEN DOWN HERE, in exactly the shape
+     the editor saves and the game reads back: {k, p:[x,y,z], r, s}. That is
+     what makes the built town importable - the procedural pass and the editor
+     speak the same language, so the town can be handed from one to the other
+     without anything being rebuilt or guessed. */
+  var PLACED_LOG = [];
+  W.PLACED_LOG = PLACED_LOG;
+  /* THE GROUND IS PART OF THE TOWN. It was levelled for it (addFlat) and the
+     streets were painted into it (addRoad); neither is a model, so neither
+     lands in the piece list. They are recorded separately and replayed when
+     the layout is loaded, or the imported town stands on raw grass with no
+     streets under it. */
+  /* THE TWO BUILDINGS THAT ARE NOT MODELS. The domed hall and the library are
+     built out of boxes and spheres in this file, not made in Blender, so they
+     can never ride in a piece list - the editor would not know what to do with
+     the name and would quietly drop them, and the first time he saved they
+     would be gone for good. They travel here instead, in a store the editor
+     never touches, and are rebuilt when the layout loads.
+     (The right fix in the end is to make them real models like the mosque.) */
+  var GROUND_LOG = { flats: [], roads: [], structs: [] };
+  W.GROUND_LOG = GROUND_LOG;
+  (function () {
+    var rawFlat = W.addFlat, rawRoad = W.addRoad;
+    W.addFlat = function (x, z, r, y, blend) {
+      GROUND_LOG.flats.push([+x.toFixed(1), +z.toFixed(1), +r.toFixed(1),
+                             +y.toFixed(2), +(blend || 40).toFixed(1)]);
+      return rawFlat.apply(W, arguments);
+    };
+    W.addRoad = function (x0, z0, x1, z1, half) {
+      GROUND_LOG.roads.push([+x0.toFixed(1), +z0.toFixed(1), +x1.toFixed(1),
+                             +z1.toFixed(1), +(half || 7).toFixed(2)]);
+      return rawRoad.apply(W, arguments);
+    };
+  })();
+  /* THE ONE THING THE LIST MUST NOT CONTAIN is the props a building dresses
+     ITSELF with. Those come out of the model's own spots, and the loader runs
+     that same dressing again for every piece it places - so logging them puts
+     every cushion and water jug in the town down twice. Measured: the town
+     welded 3,870 meshes, and reloading its own export welded 5,654. */
+  var dressing = 0;
   function placeBuilt(name, x, y, z, rot, scale) {
     var g = place(name, x, y, z, null, rot, false, 'raw', scale);
     if (!g) return null;
+    if (!dressing) {
+      PLACED_LOG.push({ k: name, p: [+x.toFixed(2), +y.toFixed(2), +z.toFixed(2)],
+                        r: +(rot || 0).toFixed(4), s: +(scale || 1).toFixed(3) });
+    }
     var boxes = COLJSON[name];
     if (!boxes) return g;
     var c = Math.cos(rot || 0), s2 = Math.sin(rot || 0);
@@ -960,10 +1004,19 @@
           W.LOAD_MS = Math.round(performance.now());
           if (W.diag) W.diag('world up in ' + (W.LOAD_MS / 1000).toFixed(1) + 's');
         }
-        /* SECOND WAVE. The blossom giants stand half a kilometre south of the
-           spawn and weigh thirty megabytes. Fetching them before showing
-           anything is what kept the screen dark. They arrive after the world
-           does, and plant themselves when they land. */
+        /* ?export=1 - hand the built town to the editor and stop. It waits a
+           moment for the second wave so the trees and rocks come with it. */
+        try {
+          if (new URLSearchParams(location.search).get('export') && !W.__exported) {
+            W.__exported = true;
+            setTimeout(function () { W.sendTownToEditor(true); }, 4200);
+          }
+        } catch (e) {}
+        /* SECOND WAVE. What the world can stand up without: the plants, the
+           rocks, the ordinary trees. They arrive after the world does and sow
+           themselves when they land, so nobody waits in the dark for them.
+           (This used to carry fifteen blossom giants at about thirty
+           megabytes as well. They are out of the world now.) */
         if (!W.__wave2) {
           W.__wave2 = true;
           setTimeout(function () {
@@ -984,7 +1037,6 @@
             Promise.all(late.map(loadCollision)).then(function () {
               loadModels(late, function () {
                 try { pigmentFlowers(); } catch (e) {}
-                try { buildBlossomRow(); } catch (e) { if (W.diag) W.diag('blossoms: ' + e.message); }
                 try { if (W.refreshVeg) W.refreshVeg(); } catch (e) {}
               });
             });
@@ -1115,6 +1167,11 @@
   function dressBuilding(name, bx, by, bz, brot, scale, seedBase) {
     var spots = SPOTJSON[name];
     if (!spots) return;
+    dressing++;
+    try { dressBuildingInner(name, bx, by, bz, brot, scale, seedBase, spots); }
+    finally { dressing--; }
+  }
+  function dressBuildingInner(name, bx, by, bz, brot, scale, seedBase, spots) {
     var c = Math.cos(brot), s2 = Math.sin(brot);
     for (var i = 0; i < spots.length; i++) {
       var sp = spots[i];
@@ -2276,15 +2333,15 @@
   }
   W.lushField = lushField;
 
-  /* ------------------------------------------------------- the blossom row
-     His order: the blossom giants are NOT sown anywhere in the world. One of
-     each stands in a row near the town, so they can be walked along and
-     judged side by side. Spacing follows each tree's own crown, widest last,
-     and every one sits on its own ground height. */
+  /* ------------------------------------------------------ the blossom row
+     GONE, by his order (2026-08-20): "remove the blossom trees wherever they
+     are, the line we made". The row of fifteen giants that stood south of the
+     town for judging is not built and its models are not fetched - which also
+     takes about thirty megabytes out of the second wave. The list stays as an
+     empty array because other code still asks for it.
+     (The Qasr's own garden still plants blossom; that is a different place
+     and a different decision.) */
   var BLOSSOM_ROW = [];
-  ['2x', '3x', '4x'].forEach(function (t) {
-    for (var i = 1; i <= 5; i++) BLOSSOM_ROW.push('tree/blossom_' + t + '_' + i);
-  });
   W.BLOSSOM_ROW = BLOSSOM_ROW;
   /* the flowers wear the land's deeper pigment: darker albedo, and they
      light up under any lamp like everything else does. Called when the
@@ -2303,34 +2360,6 @@
           c.multiplyScalar(isLeaf ? 0.72 : 0.94);
         }
       });
-    });
-  }
-
-  function buildBlossomRow() {
-    /* south of the town, well clear of the gate and the spawn: a walk to
-       reach, not a wall of giants looming over the first step */
-    var z0 = 470, x = -420;
-    BLOSSOM_ROW.forEach(function (key) {
-      var mdl = MODELS[key];
-      if (!mdl) return;
-      var bb = new T.Box3().setFromObject(mdl);
-      var wide = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) || 20;
-      x += wide * 0.62;
-      var zz = z0 + (W.hash2 ? 0 : 0);
-      var gy = W.heightAt(x, zz);
-      if (gy < W.WATER_Y + 1.5) { x += wide * 0.62; return; }
-      var g = place(key, x, gy - 0.35, zz, null, 0, false, 'raw', 1.0);
-      if (g) {
-        var boxes = COLJSON[key];
-        if (boxes) {
-          boxes.forEach(function (b) {
-            W.addBox(x + b.c[0], gy + b.c[1], zz + b.c[2], b.h[0], b.h[1], b.h[2], 0);
-          });
-        } else {
-          W.addBox(x, gy + 6, zz, 1.6, 6, 1.6, 0);
-        }
-      }
-      x += wide * 0.62 + 6;
     });
   }
 
@@ -2721,8 +2750,8 @@
       /* The old normalised trees are OUT of the world by his order: tree_anc
          was being stood up at twenty-four to thirty-eight metres, tree_big_a
          and _b at eleven to nineteen, scattered across the whole map. Nothing
-         huge grows in the open country any more. The only giants anywhere are
-         the blossom row in front of the city. */
+         huge grows in the open country any more, and since 2026-08-20 there
+         are no blossom giants anywhere in the world either. */
       if (!key || !MODELS[key]) continue;
       /* Trees used to be placed one clone at a time, which is two draw calls
          each. Seven hundred and forty trees was fourteen hundred and eighty
@@ -3069,6 +3098,22 @@
      {k, p, r, s}; every entry is placed with its own collision, so what was
      put down there is what is solid here. */
   function buildLayout(list) {
+    /* the levelling and the streets first: everything else is placed at an
+       absolute height, but the ground has to be under it */
+    try {
+      var g = JSON.parse(localStorage.getItem('amirat.layout.ground') || 'null');
+      if (g) {
+        (g.flats || []).forEach(function (f) { W.addFlat(f[0], f[1], f[2], f[3], f[4]); });
+        (g.roads || []).forEach(function (r) { W.addRoad(r[0], r[1], r[2], r[3], r[4]); });
+        (g.structs || []).forEach(function (st) {
+          try {
+            if (st.f === 'palace') buildPalace(st.x, st.z);
+            else if (st.f === 'library') buildLibrary(st.x, st.z);
+          } catch (e) { if (W.diag) W.diag('rebuild ' + st.f + ': ' + e.message); }
+        });
+        if (W.touchTerrain) { try { W.touchTerrain(0, 0, 4000); } catch (e) {} }
+      }
+    } catch (e) {}
     var keys = [];
     list.forEach(function (o) { if (keys.indexOf(o.k) < 0) keys.push(o.k); });
     /* The side files come FIRST now, because a model may bring a garden with
@@ -3109,6 +3154,48 @@
     W.SPAWN = { x: 0, z: minZ - 40 };
     W.SPAWN_YAW = 0;
   }
+
+  /* ------------------------------------------------ the town, to the editor
+     Open index.html?export=1 . The world builds as usual, and when it is
+     standing every piece of it is written into the editor's own store, so
+     opening editor.html shows the whole town ready to be moved about.
+
+     IT NEVER OVERWRITES WITHOUT KEEPING A COPY: whatever was in the editor
+     before is put aside under its own dated key first, and the key is printed.
+     A layout is hours of somebody's work and this is one keypress. */
+  W.exportTown = function () {
+    return PLACED_LOG.slice();
+  };
+  W.sendTownToEditor = function (download) {
+    var list = W.exportTown();
+    if (!list.length) { W.diag('nothing to export - the town has not built'); return null; }
+    var backup = null;
+    try {
+      var had = localStorage.getItem('amirat.layout');
+      if (had && had.length > 2) {
+        backup = 'amirat.layout.before-import';
+        localStorage.setItem(backup, had);
+      }
+      localStorage.setItem('amirat.layout', JSON.stringify(list));
+      localStorage.setItem('amirat.layout.ground', JSON.stringify(W.GROUND_LOG));
+    } catch (e) {
+      W.diag('could not write the editor store: ' + e.message);
+      return null;
+    }
+    if (download !== false) {
+      try {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(list)],
+                 { type: 'application/json' }));
+        a.download = 'town-layout.json';
+        document.body.appendChild(a); a.click(); a.remove();
+      } catch (e) {}
+    }
+    W.diag('exported ' + list.length + ' pieces (and ' + W.GROUND_LOG.roads.length +
+           ' streets) to the editor' +
+           (backup ? ' (your old layout is kept under ' + backup + ')' : ''));
+    return { count: list.length, backup: backup };
+  };
 
   W.buildAll = function (W) {
     if (W.MAPPREVIEW) {
@@ -3201,6 +3288,8 @@
     buildPalace(36, -34);
     buildLibrary(34, 36);
     buildHouses();
+    W.GROUND_LOG.structs.push({ f: 'palace', x: 36, z: -34 },
+                              { f: 'library', x: 34, z: 36 });
 
     W.FETCH_MS = Math.round(performance.now());
     Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
