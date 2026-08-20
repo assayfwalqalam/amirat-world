@@ -81,7 +81,56 @@ def tri_count(path):
     return total
 
 
+# A MODEL THAT IS ALREADY LEAN MUST BE LEFT ALONE. Decimating a 500 triangle
+# carpet down to 300 saved nothing and smeared its UVs, so the whole pattern -
+# which is the only reason the object exists - came out as a pale sheet. The
+# same danger applies to any flat panel whose value is its texture. Below this
+# many triangles there is nothing worth taking and everything to lose.
+WORTH_SLIMMING = 1300
+
+# AND NOTHING MAY LOSE MORE THAN THIS SHARE OF ITSELF. A solid shape - a bowl,
+# a pot - collapses beautifully and still reads at 8% of its triangles. A shape
+# made of thin twisted strands does not: stall/mat_rope went from 3,152 to 420
+# and came out as a scatter of loose shards with the coils gone. There is no
+# reliable way to tell the two apart from the outside, so every model keeps at
+# least this much of itself and the saving is taken where it is safe.
+KEEP_AT_LEAST = 0.45
+
+
+def restore(key):
+    """put the original back from the copy kept beside it"""
+    src = os.path.join(MODELS, key.replace("/", os.sep) + ".glb")
+    hi = src[:-4] + ".hi.glb"
+    if os.path.exists(hi):
+        open(src, "wb").write(open(hi, "rb").read())
+        os.remove(hi)
+        return True
+    return False
+
+
 def main():
+    if "--restore-all" in sys.argv:
+        n = 0
+        for key in sorted(BUDGET):
+            if restore(key):
+                print("  restored %s" % key)
+                n += 1
+        print("\n%d models put back" % n)
+        return
+    if "--restore-lean" in sys.argv:
+        n = 0
+        for key in sorted(BUDGET):
+            src = os.path.join(MODELS, key.replace("/", os.sep) + ".glb")
+            hi = src[:-4] + ".hi.glb"
+            if not os.path.exists(hi):
+                continue
+            if tri_count(hi) < WORTH_SLIMMING:
+                if restore(key):
+                    print("  restored %-22s (%d tris - never worth cutting)"
+                          % (key, tri_count(src)))
+                    n += 1
+        print("\n%d models put back" % n)
+        return
     done = saved = 0
     for key in sorted(BUDGET):
         src = os.path.join(MODELS, key.replace("/", os.sep) + ".glb")
@@ -90,6 +139,10 @@ def main():
             continue
         have = tri_count(src)
         want = BUDGET[key]
+        if have < WORTH_SLIMMING:
+            print("  %-22s %6d tris - too lean to touch" % (key, have))
+            continue
+        want = max(want, int(have * KEEP_AT_LEAST))
         if have <= want * 1.25:
             print("  %-22s %6d tris - already lean" % (key, have))
             continue

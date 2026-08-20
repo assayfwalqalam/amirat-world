@@ -1195,9 +1195,27 @@
   var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
                       'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
-  var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET,
+  /* A HOUSE IS NOT A STOREROOM. The first cut was chests and crates against
+     every wall, because those were half the list. What actually lines the wall
+     of a room somebody lives in is the water jar, the baskets, the pots, the
+     bedding rolled up, the books - and one chest. */
+  var ROOM_WALL = ['p_waterjug', 'p_jars', 'p_basket', 'p_basket', 'p_pot',
+                   'p_cushions', 'p_books', 'p_scrolls', 'p_stool', 'p_broom',
+                   'p_chest', 'p_sacks'];
+  var ROOM_MID = ['p_table', 'p_cushions', 'p_stool', 'p_inkset', 'p_bowl',
+                  'p_oillamp'];
+
+  /* PROPS_ROOM WAS NEVER IN THIS LIST. Every piece of furniture a house was
+     supposed to be furnished with - the carpet, the cushions, the books, the
+     stool, the chest - was never fetched, so propOn looked it up, found no
+     model, and quietly returned null. Measured in the built town: 152 houses
+     and ZERO carpets. The few things that did appear in rooms only appeared
+     because they were also on the roof or street lists. */
+  var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET, PROPS_ROOM,
+                                    ROOM_WALL, ROOM_MID,
                                     ['p_brazier', 'p_well', 'p_torch', 'p_torchpost',
-                                     'p_bread']);
+                                     'p_bread'])
+    .filter(function (k, i, a) { return a.indexOf(k) === i; });
 
   /* Props are drawn out to a distance that matches their size. Anything that
      shows in a silhouette from across the square keeps its range; a bowl or an
@@ -1217,6 +1235,79 @@
     var g = placeBuilt(key, x, y, z, rot, scale || 1);
     if (g) { g.userData.far = BIG_PROP[key] ? 19600 : 2500; SMALL.push(g); }
     return g;
+  }
+
+  /* what stands against a wall, and what belongs in the middle */
+  /* is this spot free at THIS height? the room rectangle covers the internal
+     walls as well as the floor, so every piece of furniture has to ask */
+  function clearAt(x, y, z, r) {
+    if (!W.nearBoxes) return true;
+    var bs = W.nearBoxes(x, z);
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (b.y1 < y + 0.15 || b.y0 > y + 1.5) continue;
+      if (Math.abs(x - b.x) < b.hx + r && Math.abs(z - b.z) < b.hz + r) return false;
+    }
+    return true;
+  }
+
+  function dressRoom(sp, bx, by, bz, brot, scale, seedBase, si) {
+    var c = Math.cos(brot), s2 = Math.sin(brot);
+    var rx = sp.r[0] * scale, rz = sp.r[1] * scale;
+    var ly = sp.c[1] * scale;
+    function world(lx, lz) {
+      return [bx + lx * c + lz * s2, bz - lx * s2 + lz * c];
+    }
+    var seed0 = (seedBase * 2654435761) ^ (si * 40503);
+
+    /* the carpet, in the middle, turned with the room */
+    var mid = world(sp.c[0] * scale, sp.c[2] * scale);
+    /* the carpet asks for less room than the check first demanded: it lies
+       flat, so it only has to clear what stands ON the floor */
+    if (clearAt(mid[0], by + ly, mid[1], 0.7) && MODELS.p_carpet) {
+      placeBuilt('p_carpet', mid[0], by + ly, mid[1], brot, Math.min(1.5, scale * 1.1));
+    }
+    /* and what sits on it */
+    for (var m = 0; m < 2; m++) {
+      var ms = (seed0 ^ (m * 7919)) | 0;
+      var mx = sp.c[0] * scale + (hashU(ms) - 0.5) * rx * 0.7;
+      var mz = sp.c[2] * scale + (hashU(ms ^ 0x51) - 0.5) * rz * 0.7;
+      var w2 = world(mx, mz);
+      if (!clearAt(w2[0], by + ly, w2[1], 0.36)) continue;
+      propOn(ROOM_MID, ms, w2[0], by + ly, w2[1], hashU(ms ^ 0x77) * 6.283, 1);
+    }
+
+    /* THE WALLS. Walk the inside of the rectangle and set things down facing
+       into the room, skipping whatever is solid. */
+    var placed = 0;
+    for (var e = 0; e < 4; e++) {
+      var along = (e % 2 === 0) ? rx : rz;
+      var stepN = Math.max(2, Math.round(along / 1.5));
+      for (var k = 0; k < stepN; k++) {
+        var sd = (seed0 ^ (e * 104729 + k * 40503)) | 0;
+        if (hashU(sd) < 0.26) continue;
+        var t = (k + 0.5) / stepN * 2 - 1;          /* -1 .. 1 along the wall */
+        var lx, lz, face;
+        if (e === 0) { lx = t * rx * 0.86; lz = -rz * 0.84; face = 0; }
+        else if (e === 1) { lx = rx * 0.84; lz = t * rz * 0.86; face = -Math.PI / 2; }
+        else if (e === 2) { lx = t * rx * 0.86; lz = rz * 0.84; face = Math.PI; }
+        else { lx = -rx * 0.84; lz = t * rz * 0.86; face = Math.PI / 2; }
+        lx += sp.c[0] * scale; lz += sp.c[2] * scale;
+        var w3 = world(lx, lz);
+        if (!clearAt(w3[0], by + ly, w3[1], 0.32)) continue;
+        propOn(ROOM_WALL, sd, w3[0], by + ly, w3[1], brot + face, 1);
+        placed++;
+        if (placed > 9) break;
+      }
+      if (placed > 9) break;
+    }
+
+    /* the light of the room, so a window reads as a window and not a hole.
+       Short reach on purpose: a point light is not stopped by a wall, and a
+       room lamp that carries thirty metres lights the street through it. */
+    if (hashU(seed0 ^ 0x2b1d) > 0.24) {
+      lamp(mid[0], by + ly + 1.5, mid[1], 0.55, false, 6.5);
+    }
   }
 
   /* fill one building's flat places with a different set each time */
@@ -1250,7 +1341,17 @@
              sp.r[0] * scale * 0.97, sp.r[1] * scale * 0.97, face);
         continue;
       }
-      var n = sp.k === 'room' ? 3 : (sp.k === 'balcony' ? 2 : 4);
+      /* A ROOM IS FURNISHED ROUND ITS WALLS. Three props scattered at random
+         over the whole ground floor gave every house three things standing in
+         the middle of the floor with nothing against the walls - which is not
+         how anybody has ever lived. A room in a house like this is a carpet in
+         the middle and everything else pushed to the edges: the chest against
+         one wall, the water jar by the door, the lamp on a shelf, the bedding
+         rolled in a corner.
+         Nothing is placed without asking the world whether that spot is free,
+         because the room rectangle covers the internal walls too. */
+      if (sp.k === 'room') { dressRoom(sp, bx, by, bz, brot, scale, seedBase, i); continue; }
+      var n = (sp.k === 'balcony' ? 2 : 4);
       for (var j = 0; j < n; j++) {
         var sd = (seedBase * 2654435761) ^ ((i * 40503 + j * 7919) | 0);
         var u = (hashU(sd) - 0.5) * 2, v = (hashU(sd ^ 0x51ab) - 0.5) * 2;
