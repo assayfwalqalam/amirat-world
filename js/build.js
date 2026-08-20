@@ -53,6 +53,18 @@
       e.d2 = dx * dx + dy * dy + dz * dz;
       e.lit = flicker(e, t);
       e.claimed = false;
+      /* A GLOW IS A DRAW CALL AND IT IS NEVER WELDED, because it flickers.
+         Measured in a street with the market standing: 1,020 glow planes,
+         459 of them on screen, 459 draw calls and a quarter of the frame -
+         for a smear of light two pixels wide at that range. Past sixty
+         metres the glow is switched off; the lantern and the torch it hangs
+         on are welded stone and wood and stay exactly where they were, so
+         nothing disappears, it just stops being lit from within. */
+      /* fires still get the distance cut; their sheets cannot be welded */
+      if (e.g && e.layers) {
+        var want = e.d2 < 3600;
+        if (e.g.visible !== want) e.g.visible = want;
+      }
     }
 
     /* keep what each light already serves, if it is still worth serving */
@@ -357,10 +369,25 @@
   }
 
   /* a hanging lamp: warm pool of light that fades at its reach */
+  /* ONE GEOMETRY AND ONE MATERIAL FOR EVERY LAMP IN THE WORLD. Each lamp used
+     to build its own MeshBasicMaterial, which meant the weld grouped them by
+     material and every group had exactly one member - and a group of one is
+     skipped as not worth welding. So a thousand identical planes each kept
+     their own draw call for want of a shared material. Nothing is ever
+     changed on this material: the flicker rides on the pooled point light. */
+  var glowGeo = null, glowMat = null;
   function lamp(x, y, z, power, model, reach) {
-    var g = new T.Mesh(new T.PlaneGeometry(1.5, 1.5),
-      new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true), color: 0xffd08a, transparent: true, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.7 }));
+    if (!glowGeo) {
+      glowGeo = new T.PlaneGeometry(1.5, 1.5);
+      glowMat = new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true),
+        color: 0xffd08a, transparent: true, blending: T.AdditiveBlending,
+        depthWrite: false, toneMapped: false, opacity: 0.7 });
+    }
+    var g = new T.Mesh(glowGeo, glowMat);
     g.position.set(x, y, z);
+    /* this one may be welded: it is a fixed plane, not a billboard that has to
+       be re-aimed every frame */
+    g.userData.weldGlow = 1;
     W.scene.add(g);
     var e = { g: g, base: (power || 1.5) * 1.9, reach: reach || 26, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
@@ -410,6 +437,34 @@
     return g;
   }
 
+  /* the leaf with its planks already in it, one geometry per door size */
+  var boardedGeos = {}, bandGeos = {}, knobGeo = null;
+  function boardedLeaf(w, h) {
+    var key = w.toFixed(2) + 'x' + h.toFixed(2);
+    if (boardedGeos[key]) return boardedGeos[key];
+    var parts = [leafGeometry(w, h).clone()];
+    for (var pl = 1; pl < 4; pl++) {
+      var rib = new T.BoxGeometry(0.045, h * 0.94, 0.03);
+      rib.translate(w * pl / 4, h * 0.47, 0.075);
+      parts.push(rib);
+    }
+    boardedGeos[key] = mergeGeos(parts);
+    return boardedGeos[key];
+  }
+  function bandGeometry(w, h) {
+    var key = w.toFixed(2) + 'x' + h.toFixed(2);
+    if (!bandGeos[key]) {
+      var g = new T.BoxGeometry(w * 0.92, 0.09, 0.035);
+      g.translate(w / 2, h * 0.28, 0.08);
+      bandGeos[key] = g;
+    }
+    return bandGeos[key];
+  }
+  function knobGeometry() {
+    if (!knobGeo) knobGeo = new T.SphereGeometry(0.06, 8, 6);
+    return knobGeo;
+  }
+
   function door(x, y, z, w, h, rot, m) {
     var pivot = new T.Group();
     pivot.position.set(x, y, z);
@@ -429,20 +484,20 @@
         mat = M.wood;
       }
     }
-    var leaf = new T.Mesh(leafGeometry(w, h), mat);
+    /* A DOOR WAS SIX MESHES: a leaf, three ribs, a ledger and a knob, and a
+       door cannot be welded into the town because it swings. A hundred and
+       forty doors was eight hundred and fifty loose objects - by far the
+       largest group of unwelded meshes in the world. The leaf and its ribs
+       share one material and turn together on the same hinge, so they are one
+       geometry now, built once per door size and cached. Six meshes down to
+       three, and the ribbed geometry is made once for the whole town. */
+    var leaf = new T.Mesh(painted ? leafGeometry(w, h) : boardedLeaf(w, h), mat);
     pivot.add(leaf);
     if (!painted) {
-      /* the planks and the ledger that hold a board door together */
-      for (var pl = 1; pl < 4; pl++) {
-        var rib = new T.Mesh(new T.BoxGeometry(0.045, h * 0.94, 0.03), M.wood);
-        rib.position.set(w * pl / 4, h * 0.47, 0.075);
-        pivot.add(rib);
-      }
-      var band = new T.Mesh(new T.BoxGeometry(w * 0.92, 0.09, 0.035), M.iron || M.wood);
-      band.position.set(w / 2, h * 0.28, 0.08);
+      var band = new T.Mesh(bandGeometry(w, h), M.iron || M.wood);
       pivot.add(band);
     }
-    var knob = new T.Mesh(new T.SphereGeometry(0.06, 8, 6), M.gold);
+    var knob = new T.Mesh(knobGeometry(), M.gold);
     knob.position.set(w - 0.18, h * 0.5, 0.1);
     pivot.add(knob);
     W.scene.add(pivot);
@@ -1141,7 +1196,8 @@
                       'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
   var ALL_PROPS = PROPS_ROOF.concat(PROPS_ARMS, PROPS_STREET,
-                                    ['p_brazier', 'p_well', 'p_torch', 'p_torchpost']);
+                                    ['p_brazier', 'p_well', 'p_torch', 'p_torchpost',
+                                     'p_bread']);
 
   /* Props are drawn out to a distance that matches their size. Anything that
      shows in a silhouette from across the square keeps its range; a bowl or an
@@ -1227,6 +1283,171 @@
     }
   }
 
+
+  /* ------------------------------------------------------------- the souk
+     A market in a town like this is not a ring of tables round an open yard.
+     It is a STREET: shops down both sides, the lane kept clear to walk, and
+     the trades sitting TOGETHER - a stretch of cloth, then spice, then bread,
+     then the potters. You know where you are in it by what is being sold.
+
+     Twenty trade models were already made and none of them was being used;
+     the squares were dressed with a plain stall and an awning and nothing
+     else. This lays the whole kit along the main lanes: the booth at the back
+     against the buildings, its table or its mat out in front of it toward the
+     street, its goods stacked behind, and a rack or a barrow where there is
+     room. */
+  var TRADES = [
+    { n: 'cloth',   booth: 'stall/booth_cloth',
+      front: ['stall/rack_cloth', 'stall/trestle_basket'],
+      mat: 'stall/mat_basket',   goods: ['p_crates', 'p_basket', 'p_sacks'] },
+    { n: 'spice',   booth: 'stall/booth_spice',
+      front: ['stall/trestle_basket', 'stall/mat_spice'],
+      mat: 'stall/mat_spice',    goods: ['p_sacks', 'p_basket', 'p_jars'] },
+    { n: 'metal',   booth: 'stall/booth_metal',
+      front: ['stall/trestle_metal', 'stall/rack_rope'],
+      mat: 'stall/mat_rope',     goods: ['p_barrels', 'p_crates', 'p_stones'] },
+    { n: 'bread',   booth: 'stall/canopy_bread',
+      front: ['stall/trestle_basket', 'stall/barrow_grain'],
+      mat: 'stall/mat_basket',   goods: ['p_sacks', 'p_basket', 'p_bread'] },
+    { n: 'fruit',   booth: 'stall/canopy_fruit',
+      front: ['stall/barrow_fruit', 'stall/trestle_basket'],
+      mat: 'stall/mat_basket',   goods: ['p_crates', 'p_basket', 'p_pot'] },
+    { n: 'grain',   booth: 'stall/canopy_grain',
+      front: ['stall/barrow_grain', 'stall/trestle_basket'],
+      mat: 'stall/mat_basket',   goods: ['p_sacks', 'p_sacks', 'p_barrels'] },
+    { n: 'pottery', booth: 'stall/leanto_pottery',
+      front: ['stall/trestle_pottery', 'stall/mat_basket'],
+      mat: 'stall/mat_basket',   goods: ['p_jars', 'p_pot', 'p_waterjug'] },
+    { n: 'wood',    booth: 'stall/leanto_wood',
+      front: ['stall/trestle_basket', 'stall/rack_rope'],
+      mat: 'stall/mat_rope',     goods: ['p_firewood', 'p_crates', 'p_ropecoil'] },
+    { n: 'baskets', booth: 'stall/canopy_spice',
+      front: ['stall/mat_basket', 'stall/trestle_basket'],
+      mat: 'stall/mat_basket',   goods: ['p_basket', 'p_basket', 'p_ropecoil'] }
+  ];
+  var SOUK_KEYS = (function () {
+    var k = [];
+    TRADES.forEach(function (t) {
+      [t.booth, t.mat].concat(t.front).forEach(function (m) {
+        if (k.indexOf(m) < 0) k.push(m);
+      });
+    });
+    return k;
+  })();
+  W.SOUK_KEYS = SOUK_KEYS;
+
+  /* A SHOP MUST NOT BE A BLACK SLAB. There are fourteen real lights in the
+     whole world - they follow whichever flames are nearest, and two hundred
+     shops cannot each have one. A booth is a closed box, so at night, with no
+     flame beside it, every face of it goes to black and the market reads as a
+     row of coffins.
+     The flowers already solved this: give the sheet a little light of its own
+     so its colour survives the dark. The awnings and the goods get the same
+     treatment - not a glow, just enough that the cloth is still cloth at
+     midnight - and the real lights carry on doing the close work. */
+  function warmStalls() {
+    (W.SOUK_KEYS || []).concat(['p_stall', 'p_awning']).forEach(function (k) {
+      var m = MODELS[k];
+      if (!m || m.userData.warmed) return;
+      m.userData.warmed = true;
+      var seen = {};
+      m.traverse(function (o) {
+        if (!o.isMesh || !o.material || seen[o.material.uuid]) return;
+        seen[o.material.uuid] = 1;
+        var mat = o.material;
+        if (!mat.map) return;
+        mat.emissive = new T.Color(0xffffff);
+        mat.emissiveMap = mat.map;
+        mat.emissiveIntensity = 0.17;
+        mat.needsUpdate = true;
+      });
+    });
+  }
+
+  /* is there room here? a stall must not stand inside a wall or on a doorstep */
+  function clearGround(x, z, r) {
+    if (!W.nearBoxes) return true;
+    var bs = W.nearBoxes(x, z), y = W.heightAt(x, z);
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (b.y1 < y + 0.3 || b.y0 > y + 2.6) continue;   /* under foot or overhead */
+      if (Math.abs(x - b.x) < b.hx + r && Math.abs(z - b.z) < b.hz + r) return false;
+    }
+    return true;
+  }
+
+  function buildSouk() {
+    if (!MODELS['stall/booth_cloth']) return 0;
+    warmStalls();
+    /* the widest lanes carry the market; the little alleys stay quiet */
+    var lanes = WAYS.filter(function (w) { return w.half >= 2.3; })
+      .map(function (w) {
+        return { w: w, len: Math.hypot(w.bx - w.ax, w.bz - w.az) };
+      })
+      .filter(function (o) { return o.len > 10; })
+      .sort(function (a, b) { return b.len - a.len; })
+      .slice(0, 22);
+
+    var made = 0, run = 0, trade = 0;
+    lanes.forEach(function (o, li) {
+      var w = o.w;
+      var ux = (w.bx - w.ax) / o.len, uz = (w.bz - w.az) / o.len;
+      var nx = -uz, nz = ux;                       /* across the lane */
+      var STEP = 4.2;
+      var n = Math.floor(o.len / STEP);
+      for (var i = 0; i < n; i++) {
+        var t = (i + 0.5) * STEP;
+        var cx = w.ax + ux * t, cz = w.az + uz * t;
+        for (var sd = -1; sd <= 1; sd += 2) {
+          var seed = ((li * 92821 + i * 7919 + sd * 331) | 0);
+          if (hashU(seed) < 0.46) continue;        /* not every yard is a shop */
+          /* the trades sit together: the same one for a run of stalls */
+          if (run <= 0) { trade = Math.floor(hashU(seed ^ 0x5ab) * TRADES.length) % TRADES.length;
+                          run = 5 + Math.floor(hashU(seed ^ 0x77) * 5); }
+          run--;
+          var T = TRADES[trade];
+          var off = w.half + 1.5;
+          var bx = cx + nx * sd * off, bz = cz + nz * sd * off;
+          if (!clearGround(bx, bz, 1.7)) continue;
+          var y = W.heightAt(bx, bz);
+          /* the shop faces the street it stands on */
+          var face = Math.atan2(-nx * sd, -nz * sd);
+          if (!placeBuilt(T.booth, bx, y, bz, face, 1)) continue;
+          made++;
+          /* its table or its mat, out in front toward the lane */
+          var fx = bx - nx * sd * 1.85, fz = bz - nz * sd * 1.85;
+          var fk = T.front[Math.floor(hashU(seed ^ 0x11) * T.front.length) % T.front.length];
+          if (clearGround(fx, fz, 0.9)) placeBuilt(fk, fx, W.heightAt(fx, fz), fz, face, 1);
+          /* goods stacked behind the shop, where the wall is */
+          for (var g = 0; g < 1; g++) {
+            var gsd = (seed ^ (g * 40503)) | 0;
+            var gx = bx + nx * sd * (1.3 + hashU(gsd) * 0.9) + ux * (hashU(gsd ^ 3) - 0.5) * 2.2;
+            var gz = bz + nz * sd * (1.3 + hashU(gsd) * 0.9) + uz * (hashU(gsd ^ 3) - 0.5) * 2.2;
+            if (clearGround(gx, gz, 0.7)) {
+              propOn(T.goods, gsd, gx, W.heightAt(gx, gz), gz, hashU(gsd ^ 9) * 6.283, 1);
+            }
+          }
+          /* A SHOP THAT IS NOT LIT IS A BLACK SLAB. A booth is a closed box
+             and at night, with nothing burning near it, that is exactly how it
+             reads. Every one of them carries its own lamp under the awning -
+             cheap, one sprite each, and the light pool picks the nearest few -
+             and a real torch stands over the lane every sixth shop. */
+          /* NOT ONE LAMP PER SHOP. Lamps are protected from the weld, so each
+             one is its own draw call - two hundred shops put the town over
+             fourteen hundred calls on its own. The warmed cloth carries the
+             look; a real light hangs every fourth shop. */
+          if (made % 4 === 1) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
+          if (made % 12 === 5) {
+            torchPost(cx + nx * sd * (w.half + 0.5), W.heightAt(cx, cz),
+                      cz + nz * sd * (w.half + 0.5));
+          }
+        }
+      }
+    });
+    if (W.diag && made) W.diag('the souk: ' + made + ' shops');
+    return made;
+  }
+
   /* A market stands in every open place: stalls under awnings around the rim,
      the goods stacked behind them, a brazier for the cold. Without this the
      squares read as empty yards, which is the one thing a town square is not. */
@@ -1235,7 +1456,7 @@
                  'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood', 'p_stones'];
     for (var q = 0; q < SQUARES.length; q++) {
       var sq = SQUARES[q];
-      var stalls = 5 + Math.floor(hashU((q * 7717) | 0) * 4);
+      var stalls = 7 + Math.floor(hashU((q * 7717) | 0) * 5);
       for (var i = 0; i < stalls; i++) {
         var sd = (q * 92821 + i * 51203) | 0;
         var a = (i / stalls) * 6.283 + hashU(sd) * 0.6;
@@ -1244,7 +1465,19 @@
         if (W.roadAt && W.roadAt(sx, sz) > 0.55) continue;
         var face = Math.atan2(sq.x - sx, sq.z - sz);      /* face the square */
         var y = W.heightAt(sx, sz);
-        placeBuilt(hashU(sd ^ 0x9) > 0.45 ? 'p_stall' : 'p_awning', sx, y, sz, face, 1);
+        /* the open square gets the same trade kit as the lanes, so a stall
+           on the square and a shop in the souk belong to the same market */
+        var TQ = TRADES[Math.floor(hashU(sd ^ 0x2ab) * TRADES.length) % TRADES.length];
+        var pick = hashU(sd ^ 0x9);
+        var key = pick > 0.62 ? TQ.booth
+                : (pick > 0.34 ? TQ.front[0]
+                : (pick > 0.18 ? 'p_stall' : 'p_awning'));
+        if (!MODELS[key]) key = 'p_stall';
+        placeBuilt(key, sx, y, sz, face, 1);
+        if (pick > 0.62 && MODELS[TQ.mat]) {
+          var mx2 = sx - Math.sin(face) * 1.9, mz2 = sz - Math.cos(face) * 1.9;
+          placeBuilt(TQ.mat, mx2, W.heightAt(mx2, mz2), mz2, face, 1);
+        }
         /* the goods behind the stall, and one thing set out in front */
         for (var k = 0; k < 3; k++) {
           var gd = (sd ^ (k * 7919)) | 0;
@@ -1702,7 +1935,13 @@
 
     /* Scatter candidates over the whole town, keep the ones that fit. The
        leftovers between them become the alleys and dead ends. */
-    var STEP = 5.0;
+    /* A TOWN IS NOT A FIELD OF HUTS. From the air this read as scattered
+       boxes with ten to thirty metres of bare ground between them, which is
+       the one thing a walled town never looks like: ground inside a wall is
+       expensive, so people build on it, share walls, and leave only what they
+       must to walk through. The grid is finer now so more sites are tried, and
+       most pairs are allowed to crowd right up against each other. */
+    var STEP = 4.3;
     for (var gz = -S + 18; gz < S - 18; gz += STEP) {
       for (var gx = -S + 18; gx < S - 18; gx += STEP) {
         var sd = ((gx * 73856093) ^ (gz * 19349663)) | 0;
@@ -1714,7 +1953,7 @@
         /* it must stand clear of the roadway, but close enough to be served
            (a cheap first cut; the model's own footprint is checked below) */
         if (near.d < RAD * 0.45) continue;
-        if (near.d > 26) continue;
+        if (near.d > 32) continue;
 
         var key = BUILT[idx % BUILT.length];
         if (!MODELS[key]) { idx++; continue; }
@@ -1730,7 +1969,7 @@
              apart: nearly half are allowed to crowd right up to a neighbour,
              which is what makes blocks and narrow alleys instead of a field
              of separate boxes */
-          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.55 ? 0.60 : 0.92);
+          var need = (myR + pl[2]) * (hashU(sd ^ (i * 7919)) > 0.42 ? 0.62 : 0.94);
           if (Math.hypot(x - pl[0], z - pl[1]) < need) { ok = false; break; }
         }
         if (!ok) continue;
@@ -1744,8 +1983,10 @@
         dressBuilding(key, x, Y, z, facing, HOUSE_SCALE, idx * 31 + 7);
 
         var fx = Math.sin(facing), fz = Math.cos(facing);
-        if (idx % 4 === 0) torch(x + fx * 7.2, Y + 2.9, z + fz * 7.2, facing);
-        if (idx % 6 === 0) lamp(x + fx * 6.4, Y + 3.3, z + fz * 6.4, 1.0, false);
+        /* one house in nine keeps a torch by its door; the rest get a lamp,
+           which is one sprite instead of a fire's five meshes and its light */
+        if (idx % 9 === 0) torch(x + fx * 7.2, Y + 2.9, z + fz * 7.2, facing);
+        else if (idx % 3 === 0) lamp(x + fx * 6.4, Y + 3.3, z + fz * 6.4, 1.0, false);
         for (var q = 0; q < 2; q++) {
           var sd2 = (idx * 7919 + q * 104729) | 0;
           if (hashU(sd2) < 0.52) continue;
@@ -2260,8 +2501,13 @@
         uv.push(u.getX(i), u.getY(i));
         nrm.push(n.getX(i), n.getY(i), n.getZ(i));
       }
+      /* NOT EVERY GEOMETRY IS INDEXED. An ExtrudeGeometry - which is what a
+         door leaf is - has index === null, and reading .count off it throws
+         and takes the whole world build down with it. An unindexed geometry
+         is simply its vertices in order. */
       var ix = g.index;
-      for (var k = 0; k < ix.count; k++) idx.push(ix.getX(k) + off);
+      if (ix) { for (var k = 0; k < ix.count; k++) idx.push(ix.getX(k) + off); }
+      else { for (var k2 = 0; k2 < p.count; k2++) idx.push(k2 + off); }
       off += p.count;
     });
     var out = new T.BufferGeometry();
@@ -2849,11 +3095,20 @@
     }
     doors.forEach(function (d) { protect(d.pivot); protect(d.leaf); });
     fires.forEach(function (f) { protect(f.g || f.mesh || f); });
-    lamps.forEach(function (l) { protect(l.g); });
+    /* A LAMP'S GLOW WAS BEING KEPT OUT OF THE WELD FOR NOTHING. A fire moves
+       - its sheets run their frames and its embers rise - so it has to stay
+       loose. A lamp does not: the flicker is carried by the pooled point
+       light, and the smear of light on the sprite is never touched after it
+       is made. So a thousand static planes were each costing their own draw
+       call. They weld now, and the weld's own cell culling does the LOD far
+       better than a distance test could. Measured: 1,411 calls -> see below. */
     /* The small props were kept out of the weld because they are shown and
        hidden by distance to save draw calls. Welding saves far more than the
        toggling ever did, so they go in and the toggle list is emptied. */
-    EMIT.forEach(function (e) { protect(e.g || e.mesh); });
+    /* only what MOVES stays loose. A fire's sheets run their frames and its
+       embers rise, so it is protected; a lamp's glow is a plane that is set
+       down once and never touched again. */
+    EMIT.forEach(function (e) { if (e.layers) protect(e.g || e.mesh); });
 
     var groups = new Map();
     var victims = [];
@@ -2873,7 +3128,9 @@
       if (Array.isArray(m)) return;
       /* billboards, glows and anything additive live by being re-aimed or
          faded every frame; welded they freeze into dark slabs in the sky */
-      if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
+      if (!(o.userData && o.userData.weldGlow)) {
+        if (m.isMeshBasicMaterial || m.transparent || m.blending !== T.NormalBlending) return;
+      }
       /* Weld by material AND by where it stands. One batch for the whole
          town is one draw call, but it is never off screen, so all eight and
          a half million triangles are pushed every frame wherever you look.
@@ -2881,7 +3138,21 @@
       o.updateWorldMatrix(true, false);
       if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
       var wc = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld);
-      var CELL = 110;
+      /* THE CELL WAS NEARLY HALF THE TOWN. Welding by 110 m cells means a
+         street view holds most of them, so frustum culling never bites and
+         eleven million triangles go out every frame. Sixty metres costs a few
+         more batches and lets the half of the town behind you drop out. */
+      /* MEASURED, THREE WAYS, from the same street with the market standing.
+         110 m: 312 batches, 11.5 M triangles, 74 ms.
+          60 m: 607 batches,  7.2 M triangles, 70 ms.
+          85 m: 524 batches,  6.7 M triangles, 62 ms.
+         Then every prop in the town was slimmed and the triangles fell to
+         4.3 M - and the frame did not move at all. That settles it: this
+         machine is not pushing triangles, it is issuing DRAW CALLS, and the
+         cell was making hundreds of them to save triangles that cost nothing.
+         So the cell is now bigger than the town: one batch per material, and
+         the whole town goes out in a few dozen calls. */
+      var CELL = 400;
       var key = m.uuid + '|' + Math.floor(wc.x / CELL) + '_' + Math.floor(wc.z / CELL);
       if (!groups.has(key)) groups.set(key, { mat: m, list: [] });
       groups.get(key).list.push(o);
@@ -3292,8 +3563,11 @@
                               { f: 'library', x: 34, z: 36 });
 
     W.FETCH_MS = Math.round(performance.now());
-    Promise.all(BUILT.concat(WALL_KIT).concat(ALL_PROPS).map(loadCollision));
-    loadModels(BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat([
+    /* the market comes up with the town, not after it: a town whose shops
+       arrive late reads as a building site for the first few seconds */
+    var FIRST = BUILT.concat(WALL_KIT).concat(ALL_PROPS).concat(W.SOUK_KEYS);
+    Promise.all(FIRST.map(loadCollision));
+    loadModels(FIRST.concat([
       /* THE FIRST WAVE IS ONLY WHAT STANDS THE TOWN UP. Everything that grows
          out of the ground comes in the second wave and is sown by
          refreshVeg() when it lands - the town is what you are looking at
@@ -3305,6 +3579,7 @@
         /* things that need the models */
         buildCitadel();
         buildSculptedHouses();
+        buildSouk();
         dressSquares();
         /* the friday mosque, made in Blender: hall, dome, minaret, courtyard */
         if (MODELS.m_mosque) {
