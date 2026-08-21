@@ -79,9 +79,13 @@
     var rp = new T.RenderPass(scene, cam);
     composer = new T.EffectComposer(renderer);
     composer.addPass(rp);
-    /* threshold high enough that only what is meant to burn burns - at 0.16
-       the gold fittings bloomed as hard as the fuller did */
-    var bloom = new T.UnrealBloomPass(new T.Vector2(vw(), vh()), 1.05, 0.70, 0.34);
+    /* THE HALO WAS EATING THE THING IT CAME OFF.
+       Proved by turning it off: with strength at zero the carpet's flowers
+       are visibly pink and in relief, and with it at 1.05 every one of them
+       was a white blob. A wide bloom does not make a small bright thing look
+       brighter - it replaces it. Tight radius, higher threshold: only what is
+       genuinely burning gets a halo, and the halo stays near it. */
+    var bloom = new T.UnrealBloomPass(new T.Vector2(vw(), vh()), 0.72, 0.42, 0.55);
     composer.addPass(bloom);
 
     clock = new T.Clock();

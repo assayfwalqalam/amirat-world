@@ -423,10 +423,15 @@
       var out = ms.map(function (m) {
         var b = burnFor(m.name);
         if (!b) {
-          /* not a glow slot: keep it, but make sure it is not shiny-black in
-             a dark room - a relic seen by its own light needs a floor of
-             ambient response */
-          m.envMapIntensity = 2.6;
+          /* NOT A GLOW SLOT. The environment was turned up hard on everything
+             so that the gold and the steel would have something to reflect -
+             and a rough non-metal reflects it too, as flat white light over
+             the whole surface. Every petal on the carpet's border and every
+             feather in the wings came out white however carefully it had been
+             coloured. Only metal gets the bright room; matte things get the
+             ordinary one. */
+          m.envMapIntensity = (m.metalness !== undefined && m.metalness > 0.5)
+            ? 2.6 : 0.85;
           return m;
         }
         var e = new T.MeshStandardMaterial({

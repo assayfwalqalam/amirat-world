@@ -371,6 +371,68 @@ def build_carpet():
             bpy.ops.object.transform_apply(location=True)
             b.select_set(False)
             slot(b, "glow_core" if (i + j) % 2 == 0 else "glow_gem")
+    # ------------------------------------------------- flowers on the border
+    # THE PATTERN IS WOVEN, SO IT IS FLAT. A carpet's design is dye in wool
+    # and it lies in the plane however good the drawing is - which is why the
+    # border read as printed. These are the same flowers the staff carries,
+    # laid round the frame in RELIEF, so the light rakes across them and the
+    # border has a thickness the eye can find. Fifty-two of them, close
+    # enough to touch, because a border with a flower every foot is a fence.
+    def blossom(bx2, by2, bz2, sc2, face2, tilt2, gems2):
+        """one five-petal flower lying on the mat, opened toward the eye"""
+        for pi2 in range(5):
+            pa2 = face2 + pi2 * math.pi * 2 / 5 + random.uniform(-0.14, 0.14)
+            z2 = random.uniform(0.88, 1.12) * sc2
+            pl2 = lathe([(0.0, 0.0), (0.010, 0.002), (0.017, 0.007),
+                         (0.019, 0.014), (0.011, 0.019), (0.0, 0.020)],
+                        segments=8, name="rpetal")
+            pl2.scale = (z2, z2 * 1.7, z2 * 0.62)
+            pl2.rotation_euler = (tilt2, 0, pa2)
+            pl2.location = (bx2 + math.cos(pa2) * 0.016 * sc2,
+                            by2 + math.sin(pa2) * 0.016 * sc2, bz2)
+            bpy.context.view_layer.objects.active = pl2
+            pl2.select_set(True)
+            bpy.ops.object.transform_apply(location=True, rotation=True,
+                                           scale=True)
+            pl2.select_set(False)
+            slot(pl2, "petal")
+        # the heart of it, lit - and SMALL, because the bloom round a lit
+        # centre is what took the petals off the first set
+        slot(sphere(0.0028 * sc2, (bx2, by2, bz2 + 0.005 * sc2), seg=6, ring=5),
+             "glow_gem")
+
+    # walk the border and set one down every so often, alternating which side
+    # of the band it sits on so the run is a garland and not a queue
+    BW, BD = W - 0.150, D - 0.150          # the middle of the main border
+    per_x, per_y = 16, 10
+    ring_pts = []
+    for i in range(per_x):
+        t2 = (i + 0.5) / per_x - 0.5
+        ring_pts.append((t2 * BW, +BD / 2))
+        ring_pts.append((t2 * BW, -BD / 2))
+    for j in range(per_y):
+        t2 = (j + 0.5) / per_y - 0.5
+        ring_pts.append((+BW / 2, t2 * BD))
+        ring_pts.append((-BW / 2, t2 * BD))
+    for (k2, (fx2, fy2)) in enumerate(ring_pts):
+        # a little in or out of the band, and never twice the same size
+        off = 0.020 if (k2 % 2 == 0) else -0.020
+        nx2 = 1.0 if abs(fx2) > abs(fy2) else 0.0
+        fx3 = fx2 + off * nx2 * (1 if fx2 > 0 else -1)
+        fy3 = fy2 + off * (1 - nx2) * (1 if fy2 > 0 else -1)
+        blossom(fx3, fy3, 0.033,
+                random.uniform(0.86, 1.20),
+                random.uniform(0, 6.283),
+                random.uniform(0.10, 0.30), 0)
+
+    # and a smaller run of them inside the guard stripe, so the field is not
+    # cut off from the border by a hard line
+    for k2 in range(20):
+        a2 = k2 * math.pi * 2 / 20 + 0.3
+        blossom(math.cos(a2) * (W * 0.315), math.sin(a2) * (D * 0.300), 0.033,
+                random.uniform(0.55, 0.78), random.uniform(0, 6.283),
+                random.uniform(0.08, 0.24), 0)
+
     # the central medallion, in relief over the one that is woven into it
     med = lathe([(0.0, 0.0), (0.07, 0.004), (0.115, 0.010), (0.140, 0.017),
                  (0.095, 0.023), (0.040, 0.026), (0.0, 0.027)], segments=20,
@@ -380,14 +442,22 @@ def build_carpet():
     med.select_set(True)
     bpy.ops.object.transform_apply(location=True)
     med.select_set(False)
-    slot(med, "glow_core")
+    # on the quieter glow: at full strength this one dome burned out the
+    # whole centre of the carpet, medallion, field and all
+    slot(med, "glow_edge")
 
     # The light was directly overhead at 55 cm with a reach of seven metres,
     # which lit the rug's own face harder than anything else in the room. It
     # sits lower and reaches less: what it is for is the FLOOR round the rug,
     # so the carpet is seen to be spilling light rather than emitting it.
-    return {"lights": [{"x": 0, "y": 0.28, "z": 0, "c": "#e07fd8", "p": 0.55,
-                        "r": 3.4}],
+    # A POINT LIGHT 25 CM OVER A FLAT RUG BLOWS THE MIDDLE OF IT OUT. Falloff
+    # is inverse-square, so at that range the irradiance on the pile is about
+    # nine - every flower on the border rendered white however carefully its
+    # petals had been coloured, and the medallion with them. It hangs well
+    # clear now: the same amount of light reaching the carpet, spread evenly
+    # over it rather than dumped on its centre.
+    return {"lights": [{"x": 0, "y": 1.45, "z": 0, "c": "#e07fd8", "p": 0.85,
+                        "r": 5.2}],
             "motes": {"n": 46, "r": 1.05, "h": 0.85, "y": 0.06, "flat": 1},
             "up": 0.0}
 
@@ -831,7 +901,10 @@ SLOT_LOOK = {
     # on it; feathers are not paper anyway.
     "feather":   (0.80, 0.79, 0.83),
     "feather_in": (0.92, 0.44, 0.66),
-    "petal":     (0.98, 0.80, 0.90),
+    # BLOSSOM IS PINK. At almost white the petals had nothing left to be
+    # bloomed with, so every flower on the carpet's border and on the staff
+    # came out as a white blob and the shape of the petals went with it.
+    "petal":     (0.92, 0.30, 0.55),
     "glow_core": (1.00, 0.36, 0.70),
     "glow_edge": (1.00, 0.50, 0.80),
     "glow_gem":  (1.00, 0.72, 0.92),
