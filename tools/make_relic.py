@@ -305,6 +305,9 @@ def smooth(a, b, x):
 
 # =========================================================== THE CARPET
 def build_carpet():
+    GEMS = []
+    KINDS = ("rose", "diamond", "sapphire", "ruby", "amethyst")
+
     """A carpet is a plane, and a plane is the hardest thing to make look like
     anything. This one is given a real pile - it sags between where it touches
     and lifts at the corners the way a rug that has been walked on does - a
@@ -366,6 +369,8 @@ def build_carpet():
                        (r * 0.6, 0.020), (0.0, 0.024)], segments=12,
                       name="boss")
             b.location = (x, y, 0.031)
+            GEMS.append([round(x, 4), 0.049, round(-y, 4),
+                         KINDS[(i + j) % len(KINDS)]])
             bpy.context.view_layer.objects.active = b
             b.select_set(True)
             bpy.ops.object.transform_apply(location=True)
@@ -396,10 +401,13 @@ def build_carpet():
                                            scale=True)
             pl2.select_set(False)
             slot(pl2, "petal")
-        # the heart of it, lit - and SMALL, because the bloom round a lit
-        # centre is what took the petals off the first set
-        slot(sphere(0.0028 * sc2, (bx2, by2, bz2 + 0.005 * sc2), seg=6, ring=5),
-             "glow_gem")
+        # THE HEART OF IT IS A STAR. It was a small lit ball, which is a bead
+        # - and a border of beads is exactly what "bland" means. The engine
+        # sets a twinkling star here instead, on its own clock like every
+        # other stone in the set, so the border catches the light the way the
+        # wings do. Nothing is modelled: only the point is written down.
+        GEMS.append([round(bx2, 4), round(bz2 + 0.006 * sc2, 4),
+                     round(-by2, 4), KINDS[gems2 % len(KINDS)]])
 
     # walk the border and set one down every so often, alternating which side
     # of the band it sits on so the run is a garland and not a queue
@@ -414,6 +422,7 @@ def build_carpet():
         t2 = (j + 0.5) / per_y - 0.5
         ring_pts.append((+BW / 2, t2 * BD))
         ring_pts.append((-BW / 2, t2 * BD))
+    gi2 = 0
     for (k2, (fx2, fy2)) in enumerate(ring_pts):
         # a little in or out of the band, and never twice the same size
         off = 0.020 if (k2 % 2 == 0) else -0.020
@@ -423,7 +432,8 @@ def build_carpet():
         blossom(fx3, fy3, 0.033,
                 random.uniform(0.86, 1.20),
                 random.uniform(0, 6.283),
-                random.uniform(0.10, 0.30), 0)
+                random.uniform(0.10, 0.30), gi2)
+        gi2 += 1
 
     # and a smaller run of them inside the guard stripe, so the field is not
     # cut off from the border by a hard line
@@ -431,7 +441,8 @@ def build_carpet():
         a2 = k2 * math.pi * 2 / 20 + 0.3
         blossom(math.cos(a2) * (W * 0.315), math.sin(a2) * (D * 0.300), 0.033,
                 random.uniform(0.55, 0.78), random.uniform(0, 6.283),
-                random.uniform(0.08, 0.24), 0)
+                random.uniform(0.08, 0.24), gi2)
+        gi2 += 1
 
     # the central medallion, in relief over the one that is woven into it
     med = lathe([(0.0, 0.0), (0.07, 0.004), (0.115, 0.010), (0.140, 0.017),
@@ -456,9 +467,11 @@ def build_carpet():
     # petals had been coloured, and the medallion with them. It hangs well
     # clear now: the same amount of light reaching the carpet, spread evenly
     # over it rather than dumped on its centre.
-    return {"lights": [{"x": 0, "y": 1.45, "z": 0, "c": "#e07fd8", "p": 0.85,
+    return {"lights": [{"x": 0, "y": 1.45, "z": 0, "c": "#ffa8d4", "p": 0.85,
                         "r": 5.2}],
             "motes": {"n": 46, "r": 1.05, "h": 0.85, "y": 0.06, "flat": 1},
+            "gems": GEMS,
+            "gemScale": 0.42,
             "up": 0.0}
 
 
@@ -485,20 +498,28 @@ def build_wings():
     however wide it was made."""
 
     GEMS = []           # (x, y, z, kind) - handed to the engine
-    KINDS = ("sapphire", "ruby", "diamond")
+    KINDS = ("rose", "sapphire", "diamond", "ruby", "amethyst")
 
     # Each wing: how far it reaches, how high it sets off, its pitch in the
     # fan, and how many feathers it carries. The middle pair are the longest,
     # which is what makes a fan read as wings and not as a wheel.
+    # HOW MANY FEATHERS A WING NEEDS.
+    # Eleven to a wing left daylight between every one of them, and what you
+    # saw through the gaps was the arm they are set into - so the wings read
+    # as twigs with leaves tied to them rather than as wings. A real one is
+    # SOLID: the flight feathers overlap by more than half their width, and
+    # behind them lie two more ranks of coverts that exist for no other reason
+    # than to close the gaps. These carry two and a half times as many, in
+    # three ranks instead of two, and the arm is never visible through them.
     WINGS = [
-        # span, lift,  pitch, feathers, row2
-        (1.55, 0.10, -0.62, 11, 7),
-        (2.05, 0.22, -0.30, 13, 9),
-        (2.42, 0.38,  0.02, 14, 9),
-        (2.55, 0.58,  0.34, 14, 9),
-        (2.30, 0.80,  0.66, 13, 8),
-        (1.86, 0.98,  0.96, 11, 7),
-        (1.38, 1.10,  1.24, 9, 5),
+        # span, lift,  pitch, row1, row2, row3
+        (1.55, 0.10, -0.62, 22, 17, 12),
+        (2.05, 0.22, -0.30, 26, 20, 14),
+        (2.42, 0.38,  0.02, 29, 22, 15),
+        (2.55, 0.58,  0.34, 30, 23, 16),
+        (2.30, 0.80,  0.66, 27, 21, 14),
+        (1.86, 0.98,  0.96, 23, 18, 12),
+        (1.38, 1.10,  1.24, 19, 14, 10),
     ]
 
     def vane(length, width, lead, thick):
@@ -535,7 +556,7 @@ def build_wings():
 
     gi = 0
     for side in (-1, 1):
-        for (wi, (span, lift, pitch, nf, nf2)) in enumerate(WINGS):
+        for (wi, (span, lift, pitch, nf, nf2, nf3)) in enumerate(WINGS):
 
             def edge_at(u):
                 """a point on this wing's leading edge. The edge is an arc,
@@ -546,7 +567,8 @@ def build_wings():
                 return (math.cos(a) * r, lift + math.sin(a) * r)
 
             for (row, n, lmul, wmul, back) in ((0, nf, 1.00, 1.00, 0.0),
-                                               (1, nf2, 0.55, 0.84, 0.085)):
+                                               (1, nf2, 0.62, 0.88, 0.075),
+                                               (2, nf3, 0.38, 0.78, 0.135)):
                 for i in range(n):
                     t = i / max(n - 1.0, 1.0)
                     ex, ez = edge_at(t)
@@ -556,7 +578,10 @@ def build_wings():
                     # out at the tip
                     ang = pitch + 1.24 - t * 1.10
                     ln = (0.34 + 0.62 * t ** 0.85) * lmul * (0.72 + span * 0.24)
-                    wd = (0.175 - 0.030 * t) * wmul * (0.80 + span * 0.10)
+                    # WIDE ENOUGH TO OVERLAP ITS NEIGHBOUR. With this many to
+                    # a wing the spacing is small, and a feather narrower than
+                    # the gap it has to cover leaves the gap.
+                    wd = (0.205 - 0.032 * t) * wmul * (0.80 + span * 0.10)
 
                     fo = loft(vane(ln, wd, 0.38, 0.0068), name="vane")
                     place(fo, ex, ez, ang, side)
@@ -576,7 +601,11 @@ def build_wings():
                     # outer row, one on the inner, out along the vane where
                     # the white actually is.
                     for (gt, gs) in ((0.42, 0.30), (0.68, -0.26)):
-                        if row == 1 and gt > 0.5:
+                        if row > 0 and gt > 0.5:
+                            continue
+                        if row == 2 or (row == 1 and i % 2):
+                            continue
+                        if row == 0 and i % 2:
                             continue
                         gx = ex + math.cos(ang) * ln * gt
                         gz = ez - math.sin(ang) * ln * gt
@@ -589,8 +618,12 @@ def build_wings():
                         # engine as (x, height, thickness) - which put four
                         # hundred and fifty stones in a flat grid on the floor
                         # under the wings instead of in the feathers.
+                        # CLEAR OF THE VANE. At 1 cm the stone sat inside the
+                        # thickness of the feathers, and with three ranks of
+                        # them overlapping it was behind one of its own wings
+                        # half the time.
                         GEMS.append([round(side * gx, 4), round(gz, 4),
-                                     -0.010, KINDS[gi % 3]])
+                                     -0.035, KINDS[gi % 5]])
                         gi += 1
 
             # the arm the feathers are set into
@@ -612,11 +645,11 @@ def build_wings():
     slot(lathe([(0.0, -0.16), (0.075, -0.135), (0.105, -0.03), (0.098, 0.08),
                 (0.062, 0.155), (0.0, 0.185)], segments=20, name="clasp"),
          "gold")
-    GEMS.append([0.0, 0.075, -0.052, "diamond"])
+    GEMS.append([0.0, 0.075, -0.090, "diamond"])
 
-    return {"lights": [{"x": 0, "y": 0.95, "z": 0, "c": "#ff7ec0", "p": 1.0,
-                        "r": 6.5}],
-            "motes": {"n": 44, "r": 1.30, "h": 1.70, "y": 0.20},
+    return {"lights": [{"x": 0, "y": 0.95, "z": 0, "c": "#ffb6d4", "p": 1.1,
+                        "r": 7.0}],
+            "motes": {"n": 52, "r": 1.55, "h": 1.90, "y": 0.20},
             "gems": GEMS,
             "flap": {"span": 2.6, "amp": 0.30, "rate": 0.42},
             "up": 0.34}
@@ -657,7 +690,7 @@ def build_wand():
                 z, 0.0215 * (1.0 - 0.34 * t))
 
     GEMS = []
-    KINDS = ("sapphire", "ruby", "diamond")
+    KINDS = ("rose", "sapphire", "diamond", "ruby", "amethyst")
     gi = 0
 
     # THE BLOSSOM, WHERE IT WOULD ACTUALLY BE.
@@ -1067,32 +1100,39 @@ except AttributeError:
 # --------------------------------------------------- what each slot is made of
 # Base colour only. The engine turns every glow_* slot into an emissive
 # material at load, because that is where the bloom and the light live.
+# BABY PINK IS THE HOUSE COLOUR. Not a tint on top of something else - it
+# is what these things are MADE of, and every other colour here is chosen to
+# sit under it: the metals go rose, the wood goes warm rather than cold, the
+# feathers go from white to the palest pink, and the deep colours are only
+# there to give the pink an edge to be pink against. A set of objects that
+# share one dominant colour reads as a set; five objects each with their own
+# idea of what they are reads as a shelf.
 SLOT_LOOK = {
-    # A LITTLE PINK IN EVERYTHING, not a lot. Watered steel already goes warm
-    # grey; this leans it rose so the blade belongs to the light coming out of
-    # its own fuller instead of sitting cold beside it.
-    "steel":     (0.80, 0.70, 0.76),
-    "gold":      (0.80, 0.56, 0.30),
-    "wood":      (0.22, 0.14, 0.09),
-    "grip":      (0.38, 0.12, 0.24),
-    "cloth":     (0.42, 0.16, 0.34),
-    # A LITTLE OFF WHITE. At 0.95 the vanes were as bright as the stones set
-    # in them and the wing came out as one white sheet with nothing readable
-    # on it; feathers are not paper anyway.
-    "feather":   (0.80, 0.79, 0.83),
-    "feather_in": (0.92, 0.44, 0.66),
+    # rose-tinted watered steel: pale, warm, and never grey
+    "steel":     (0.94, 0.76, 0.82),
+    # rose gold rather than yellow gold, or the fittings fight the pink
+    "gold":      (0.92, 0.62, 0.58),
+    "wood":      (0.30, 0.17, 0.15),
+    "grip":      (0.68, 0.30, 0.45),
+    "cloth":     (0.90, 0.62, 0.76),
+    # THE PALEST PINK, not white. At 0.95 white the vanes were as bright as
+    # the stones set in them and the wing came out as one sheet with nothing
+    # readable on it; and a white feather beside a rose-gold clasp and a pink
+    # shaft looks like a feather from somewhere else.
+    "feather":   (0.96, 0.84, 0.88),
+    "feather_in": (0.95, 0.55, 0.72),
     # BLOSSOM IS PINK. At almost white the petals had nothing left to be
     # bloomed with, so every flower on the carpet's border and on the staff
     # came out as a white blob and the shape of the petals went with it.
-    "petal":     (0.92, 0.30, 0.55),
+    "petal":     (0.96, 0.62, 0.76),
     # the rete is the pierced sky and the rule is the straight edge over it -
     # brass, but each a shade off the mater so the three read apart as they
     # turn across one another
-    "rete":      (0.86, 0.66, 0.30),
-    "rule":      (0.70, 0.72, 0.76),
-    "glow_core": (1.00, 0.36, 0.70),
-    "glow_edge": (1.00, 0.50, 0.80),
-    "glow_gem":  (1.00, 0.72, 0.92),
+    "rete":      (0.94, 0.68, 0.62),
+    "rule":      (0.90, 0.74, 0.78),
+    "glow_core": (1.00, 0.62, 0.80),
+    "glow_edge": (1.00, 0.72, 0.86),
+    "glow_gem":  (1.00, 0.84, 0.92),
 }
 # some slots wear a photograph rather than a colour. Which one depends on
 # the relic: 'cloth' is a rug on the carpet and would be something else on

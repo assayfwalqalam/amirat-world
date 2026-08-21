@@ -1640,7 +1640,14 @@
       pumpChunks(pos.y > 120 ? 4 : 3);
       return;
     }
-    var sp = fly ? 42 : (keys['ShiftLeft'] || keys['ShiftRight'] ? 17 : 9.2);
+    /* A CARPET IS NOT A JET. Forty-two metres a second crossed the whole town
+       in five, which is not flying so much as being fired - and nothing she
+       has been given a carpet to look at can be looked at from it. Fifteen is
+       a fast walk over the rooftops: quick enough to be worth having, slow
+       enough that the town goes past rather than blurs. Shift still hurries
+       it along for crossing open country. */
+    var sp = fly ? ((keys['ShiftLeft'] || keys['ShiftRight']) ? 26 : 15)
+                 : (keys['ShiftLeft'] || keys['ShiftRight'] ? 17 : 9.2);
     var f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(-1);
     if (fly) { f.y = Math.sin(pitch); f.normalize(); }
     var r = new THREE.Vector3(-f.z, 0, f.x).normalize();
@@ -1655,8 +1662,8 @@
 
     if (fly) {
       vel.x = wish.x; vel.z = wish.z; vel.y = wish.y;
-      if (keys['Space']) vel.y += 22;
-      if (keys['ShiftLeft']) vel.y -= 22;
+      if (keys['Space']) vel.y += 9.5;
+      if (keys['ControlLeft'] || keys['ControlRight']) vel.y -= 9.5;
       pos.addScaledVector(vel, dt);
       var fl = W.heightAt(pos.x, pos.z) + 1.4;
       if (pos.y < fl) pos.y = fl;

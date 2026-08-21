@@ -29,10 +29,23 @@
      frame rather than parented, so it can lag behind the look and swing
      without fighting the camera's own rotation. */
   var RELICS = [
+    /* HELD IN FRONT, and swung down the front. Held out to the side with a
+       rotation that turned it edge-on, all you saw of the stroke was the
+       narrow face of the blade going past - the least interesting view of a
+       sword there is. It rests across the body now, canted so its flat is
+       toward the eye, and the stroke comes over and down through the middle
+       of the screen where the blade is widest. */
+    /* ROTATION ABOUT Y IS WHAT TURNS A BLADE EDGE-ON, and edge-on is the
+       least interesting view of a sword there is - a line. Every relic here
+       is built with its flat facing the model's own +Z, and the group takes
+       the camera's rotation, so with NO yaw of its own the flat comes
+       straight to the eye. The tip and the lean are done with X and Z alone,
+       which move it about without ever turning it away. */
     { k: 'sabre', ar: 'السَّيْف', en: 'Sabre', scale: 1.0,
-      hold: [0.34, -0.30, -0.62], rot: [-0.30, 0.42, 0.18],
-      act: 'swing', swing: 0.42,
-      trail: { kind: 'mote', n: 3, life: 6.0, size: 0.030, col: 0xff5fb4 } },
+      hold: [0.26, -0.52, -0.78], rot: [-0.12, 0, 0.34],
+      act: 'swing', swing: 0.46, arc: 'front',
+      sound: 'sparkle',
+      trail: { kind: 'gem', n: 4, life: 6.5, size: 0.055 } },
 
     { k: 'carpet', ar: 'البِسَاط', en: 'Carpet', scale: 1.0,
       hold: [0.0, -1.15, 0.10], rot: [0, 0, 0], carry: 'under',
@@ -44,12 +57,13 @@
       act: 'flap' },
 
     { k: 'wand', ar: 'العَصَا', en: 'Staff', scale: 1.0,
-      hold: [0.30, -0.85, -0.50], rot: [-0.16, 0.30, 0.10],
-      act: 'swing', swing: 0.52,
-      trail: { kind: 'petal', n: 4, life: 6.0, size: 0.030 } },
+      hold: [0.30, -0.95, -0.72], rot: [-0.10, 0, 0.26],
+      act: 'swing', swing: 0.56, arc: 'front',
+      sound: 'sparkle',
+      trail: { kind: 'petal', n: 5, life: 6.0, size: 0.034 } },
 
     { k: 'astrolabe', ar: 'الأَسْطُرْلَاب', en: 'Astrolabe', scale: 0.62,
-      hold: [0.26, -0.24, -0.48], rot: [0.10, 0.30, 0],
+      hold: [0.24, -0.26, -0.52], rot: [0.06, 0, 0.05],
       act: 'read' }
   ];
 
@@ -209,6 +223,10 @@
       if (held.swing > 0) return;            /* already mid-stroke */
       held.swing = 1;
       held.swingT = 0;
+      /* the stones catching the light as the blade comes through */
+      if (R.sound === 'sparkle' && W.sfxSparkle) {
+        W.sfxSparkle({ n: 7, base: 1560, spread: 0.16, len: 0.9 });
+      }
     } else if (R.act === 'read') {
       if (W.uiOpen) W.uiOpen('shelf');
     }
@@ -221,11 +239,22 @@
     trails = {};
     /* a mote: a soft round grain of light */
     var moteGeo = new T.PlaneGeometry(1, 1);
+    var ones0 = new Float32Array(moteGeo.attributes.position.count * 3);
+    for (var q0 = 0; q0 < ones0.length; q0++) ones0[q0] = 1;
+    moteGeo.setAttribute('color', new T.BufferAttribute(ones0, 3));
     trails.mote = W.makeFall(moteGeo, new T.MeshBasicMaterial({
       map: W.moteTexture ? W.moteTexture() : null,
       transparent: true, depthWrite: false, blending: T.AdditiveBlending,
       toneMapped: false, vertexColors: true
     }), 140);
+    /* A GEM: the same four-pointed star that is set in the wings, falling.
+       What comes off a swung blade should be the thing the blade is made of,
+       not a different kind of light. */
+    trails.gem = W.makeFall(W.gemGeometry(), new T.MeshBasicMaterial({
+      map: W.starTexture(), transparent: true, depthWrite: false,
+      blending: T.AdditiveBlending, toneMapped: false, vertexColors: true
+    }), 160);
+    trails.gem.billboard = 1;
     /* a petal: a small curved sliver, and a leaf beside it */
     var petGeo = new T.CircleGeometry(1, 6);
     petGeo.scale(1, 1.7, 1);
@@ -237,6 +266,7 @@
       transparent: true, depthWrite: false, vertexColors: true
     }), 120);
     W.scene.add(trails.mote.mesh);
+    W.scene.add(trails.gem.mesh);
     W.scene.add(trails.petal.mesh);
     return trails;
   }
@@ -247,7 +277,7 @@
 
   function drop(kind, x, y, z, opt) {
     var Tr = makeTrails();
-    var F = Tr[kind === 'petal' ? 'petal' : 'mote'];
+    var F = Tr[kind] || Tr.mote;
     if (!F) return;
     W.fallEmit(F, x, y, z, opt);
   }
@@ -258,7 +288,11 @@
 
   W.tickHotbar = function (dt, t) {
     if (trails) {
+      /* the stars have to keep facing the eye all the way down, or a falling
+         stone turns edge-on and blinks out halfway */
+      trails.gem.camLocal = W.cam.position;
       W.fallDrive(trails.mote, dt, t);
+      W.fallDrive(trails.gem, dt, t);
       W.fallDrive(trails.petal, dt, t);
     }
     if (!held) return;
@@ -292,7 +326,7 @@
         .addScaledVector(camDir, -h[2]);
     }
 
-    var sw = 0;
+    var sw = 0, swPitch = 0;
     if (held.swing > 0) {
       held.swingT += dt;
       var d = R.swing || 0.42;
@@ -300,9 +334,16 @@
       if (u >= 1) { held.swing = 0; held.swingT = 0; u = 1; }
       /* THE STROKE. It winds up slowly, comes through fast, and recovers -
          which is what makes it read as weight being moved rather than as a
-         thing being rotated. */
-      sw = u < 0.22 ? -(u / 0.22) * 0.45
-                    : Math.sin((u - 0.22) / 0.78 * Math.PI) * 2.5 - 0.45 * (1 - (u - 0.22) / 0.78);
+         thing being rotated.
+         A FRONT STROKE IS TWO ROTATIONS, not one. The blade goes UP and back
+         over the shoulder, then comes down and across through the middle of
+         the view: the pitch does most of the work and the roll only carries
+         it across. One axis alone gives you a windscreen wiper. */
+      var wind = u < 0.26 ? (u / 0.26) : 1.0;
+      var cut = u < 0.26 ? 0 : (u - 0.26) / 0.74;
+      var ease = Math.sin(cut * Math.PI * 0.5);
+      swPitch = -1.05 * wind * (1 - cut) + 1.85 * ease * (1 - cut * 0.45);
+      sw = -0.35 * wind * (1 - cut) + 1.15 * ease * (1 - cut * 0.35);
     }
 
     g.position.copy(tmp);
@@ -311,7 +352,7 @@
       g.rotation.set(R.rot[0], yaw + R.rot[1], R.rot[2]);
     } else {
       g.quaternion.copy(cam.quaternion);
-      g.rotateX(R.rot[0]);
+      g.rotateX(R.rot[0] + swPitch);
       g.rotateY(R.rot[1]);
       g.rotateZ(R.rot[2] + sw);
     }
@@ -353,13 +394,20 @@
             drop('petal', px, py, pz,
                  { life: R.trail.life, size: R.trail.size * (leaf ? 0.8 : 1),
                    spread: spread, rise: rise, col: TMP });
+          } else if (R.trail.kind === 'gem') {
+            /* stars of various colours, weighted toward the pink they all
+               live beside */
+            TMP.setHex([0xffb6d9, 0xffb6d9, 0xff6fa8, 0xffe4f0,
+                        0x7f9cff, 0xc89aff][(Math.random() * 6) | 0]);
+            drop('gem', px, py, pz,
+                 { life: R.trail.life, size: R.trail.size,
+                   spread: spread, rise: rise, col: TMP });
           } else {
             if (R.trail.multi) {
-              /* the carpet's five colours, not one */
-              TMP.setHex([0xff77c8, 0xc98bff, 0x8ab6ff, 0xffffff,
-                          0xffd98a][(Math.random() * 5) | 0]);
+              TMP.setHex([0xffb6d9, 0xd8a6ff, 0x9fc4ff, 0xffffff,
+                          0xffd9a6][(Math.random() * 5) | 0]);
             } else {
-              TMP.setHex(R.trail.col || 0xff5fb4);
+              TMP.setHex(R.trail.col || 0xffb6d9);
             }
             drop('mote', px, py, pz,
                  { life: R.trail.life, size: R.trail.size,
@@ -389,7 +437,8 @@
   W.trailsNow = function () {
     if (!trails) return null;
     function live(F) { return F.pool.filter(function (p) { return p.live; }).length; }
-    return { mote: live(trails.mote), petal: live(trails.petal) };
+    return { mote: live(trails.mote), gem: live(trails.gem),
+             petal: live(trails.petal) };
   };
   W.heldNow = function () {
     return held ? { k: held.spec.k, vis: held.dressed.group.visible,

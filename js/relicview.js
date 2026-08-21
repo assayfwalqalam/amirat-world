@@ -13,6 +13,7 @@
   var T = window.THREE;
   var W = window.W = window.W || {};
 
+  /* the viewer wants the sound too, so a stone can be heard as well as seen */
   var RELICS = [
     { k: 'sabre', ar: 'السَّيْف', en: 'The Sabre',
       note: 'A curved saif, its fuller lit from within, on a bound grip and a round pommel.',

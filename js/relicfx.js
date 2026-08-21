@@ -33,13 +33,13 @@
      radiating. That is also the honest division: a glowing thing is not a
      bright thing, it is a thing that puts light into the air around it. */
   var BURN = {
-    glow_core: { col: 0xc4407e, emi: 0xff2f8c, str: 1.15, rough: 0.35 },
-    glow_edge: { col: 0xd84a90, emi: 0xff4d9e, str: 0.62, rough: 0.28 },
-    glow_gem:  { col: 0xe89ac8, emi: 0xff7ec4, str: 1.70, rough: 0.12 }
+    glow_core: { col: 0xf59ac0, emi: 0xff8cc0, str: 1.05, rough: 0.35 },
+    glow_edge: { col: 0xf7b3d2, emi: 0xffa6d0, str: 0.58, rough: 0.28 },
+    glow_gem:  { col: 0xffd4e6, emi: 0xffc0e0, str: 1.55, rough: 0.12 }
   };
 
   /* the palette the carpet's motes are drawn from - his five colours */
-  var CARPET_COLS = [0xff77c8, 0xc98bff, 0x8ab6ff, 0xffffff, 0xffd98a];
+  var CARPET_COLS = [0xffb6d9, 0xd8a6ff, 0x9fc4ff, 0xffffff, 0xffd9a6];
 
   /* THE NAME THAT COMES OUT OF THE FILE IS NOT THE NAME THAT WENT IN.
      The slots are called glow_core and glow_edge in the generator, but the
@@ -177,24 +177,95 @@
 
      Each has its own period and its own phase, because a field of lights all
      breathing together is a string of fairy lights and not a field of stars. */
-  /* Deep, because the bloom washes everything toward white and a stone that
-     starts near white has nothing left to lose. */
+  /* STARS OF VARIOUS COLOURS, all of them living beside baby pink. They stay
+     saturated, because the bloom washes everything toward white and a stone
+     that starts near white has nothing left to lose - but the family they sit
+     in is a pink one, so the blue is a warm blue and the white is a rose
+     white rather than a cold one. */
   var GEM_COL = {
-    sapphire: 0x2a5cff,
-    ruby:     0xff1440,
-    diamond:  0xeaf4ff
+    sapphire: 0x5a7cff,
+    ruby:     0xff2f6a,
+    diamond:  0xffe4f0,
+    rose:     0xff9ecb,
+    amethyst: 0xb478ff
   };
+  var GEM_KINDS = ['sapphire', 'ruby', 'diamond', 'rose', 'amethyst'];
+
+  /* --------------------------------------------------------- a star, not
+     a stone. An octahedron is a CUT SOLID: at any size where you can make out
+     its silhouette it is a little square, and turning it only gives you a
+     little square at a different angle. What reads as a gem catching the
+     light is not the solid at all - it is the FLARE it throws: a small hot
+     centre with four long points drawn out of it, longer than they are wide
+     by a factor of ten or more, and a soft bloom underneath holding them
+     together. That is drawn, not modelled, and it is always facing you.
+     Four long points on the axes, four short ones on the diagonals, which is
+     the shape a real facet throws and the shape everyone recognises. */
+  var starTex = null;
+  function starTexture() {
+    if (starTex) return starTex;
+    var S = 256, c = document.createElement('canvas');
+    c.width = c.height = S;
+    var x = c.getContext('2d');
+    var M = S / 2;
+    x.fillStyle = '#000';
+    x.fillRect(0, 0, S, S);
+    x.globalCompositeOperation = 'lighter';
+
+    /* the bloom the points sit in */
+    var g0 = x.createRadialGradient(M, M, 0, M, M, M * 0.44);
+    g0.addColorStop(0.00, 'rgba(255,255,255,0.95)');
+    g0.addColorStop(0.18, 'rgba(255,255,255,0.34)');
+    g0.addColorStop(0.55, 'rgba(255,255,255,0.07)');
+    g0.addColorStop(1.00, 'rgba(255,255,255,0)');
+    x.fillStyle = g0;
+    x.fillRect(0, 0, S, S);
+
+    /* THE POINTS. Each is a needle: a triangle so long and so thin that it
+       reads as a line of light rather than as a shape, with its brightness
+       falling off along its length. */
+    function spike(ang, len, wide, str) {
+      x.save();
+      x.translate(M, M);
+      x.rotate(ang);
+      var g = x.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0.00, 'rgba(255,255,255,' + str + ')');
+      g.addColorStop(0.10, 'rgba(255,255,255,' + (str * 0.75) + ')');
+      g.addColorStop(0.42, 'rgba(255,255,255,' + (str * 0.22) + ')');
+      g.addColorStop(1.00, 'rgba(255,255,255,0)');
+      x.fillStyle = g;
+      x.beginPath();
+      x.moveTo(0, -wide);
+      x.lineTo(len, 0);
+      x.lineTo(0, wide);
+      x.closePath();
+      x.fill();
+      x.restore();
+    }
+    for (var k = 0; k < 4; k++) {
+      spike(k * Math.PI / 2, M * 0.98, M * 0.052, 1.0);          /* the long four */
+      spike(k * Math.PI / 2 + Math.PI / 4, M * 0.40, M * 0.030, 0.55);
+    }
+    /* the hot centre, put on last so nothing dulls it */
+    var g1 = x.createRadialGradient(M, M, 0, M, M, M * 0.10);
+    g1.addColorStop(0.00, 'rgba(255,255,255,1)');
+    g1.addColorStop(1.00, 'rgba(255,255,255,0)');
+    x.fillStyle = g1;
+    x.fillRect(0, 0, S, S);
+
+    starTex = new T.CanvasTexture(c);
+    starTex.needsUpdate = true;
+    return starTex;
+  }
+  W.starTexture = starTexture;
 
   var gemGeo = null;
   function gemGeometry() {
     if (gemGeo) return gemGeo;
-    /* an octahedron reads as a cut stone from any angle and costs 8 faces */
-    gemGeo = new T.OctahedronGeometry(1, 0);
-    /* AND IT NEEDS A COLOUR ATTRIBUTE OF ITS OWN. A material with
-       vertexColors on defines USE_COLOR, and the shader then reads a `color`
-       attribute the geometry does not have - so vColor comes out flat and the
-       per-instance colour it is supposed to be multiplied by never shows.
-       Every stone was white: no sapphire, no ruby. */
+    gemGeo = new T.PlaneGeometry(1, 1);
+    /* A MATERIAL WITH vertexColors ON READS A `color` ATTRIBUTE the geometry
+       may not have - and then vColor comes out flat and the per-instance
+       colour it is meant to be multiplied by never shows at all. */
     var n = gemGeo.attributes.position.count;
     var ones = new Float32Array(n * 3);
     for (var i = 0; i < n * 3; i++) ones[i] = 1;
@@ -207,21 +278,32 @@
     var n = list.length;
     /* AN EMISSIVE IS NOT MULTIPLIED BY THE INSTANCE COLOUR. Only the diffuse
        is - so a standard material with a white emissive bright enough to glow
-       made every stone white however carefully each one had been tinted: no
-       sapphire, no ruby, four hundred and fifty identical diamonds. A basic
-       material's colour IS its output, and vColor and the instance colour
-       both land on it, so the stone's own hue is what burns. */
+       made every stone white however carefully each one had been tinted. A
+       basic material's colour IS its output, and vColor and the instance
+       colour both land on it, so the stone's own hue is what burns.
+       Additive, because a star is light arriving and not a surface. */
+    /* A SET STONE IS SEEN THROUGH WHAT IT IS SET IN. With three ranks of
+       feathers lapped over each other, a star sitting on a vane is behind the
+       rank in front of it for most of the sweep - so it was there and could
+       not be seen, and pushing it further out only lifted it off the wing.
+       Depth testing is turned off for the set stones: what you are looking at
+       is the LIGHT coming off a facet, and light does not queue behind the
+       feather in front of it. The falling ones keep their depth test, because
+       those are objects moving through the world. */
     var mat = new T.MeshBasicMaterial({
-      color: 0xffffff, vertexColors: true, toneMapped: false
+      map: starTexture(), color: 0xffffff, vertexColors: true,
+      transparent: true, depthWrite: false, depthTest: false,
+      blending: T.AdditiveBlending, toneMapped: false
     });
     var mesh = new T.InstancedMesh(gemGeometry(), mat, n);
     mesh.frustumCulled = false;
+    mesh.renderOrder = 8;              /* after the thing they are set in */
     var cols = new Float32Array(n * 3);
     var c = new T.Color();
     var st = [];
     for (var i = 0; i < n; i++) {
       var g = list[i];
-      c.setHex(GEM_COL[g[3]] || 0xffffff);
+      c.setHex(GEM_COL[g[3]] || GEM_COL[GEM_KINDS[i % GEM_KINDS.length]]);
       /* pushed past 1 on purpose: that is what the bloom threshold is looking
          for, and it is how a facet catches the light rather than merely being
          a coloured shape */
@@ -231,10 +313,14 @@
       cols[i * 3 + 2] = c.b * 1.22;
       st.push({
         x: g[0], y: g[1], z: g[2],
-        /* SET STONES, NOT CONFETTI - and the size is per relic, because a
-           stone that reads correctly set in a wing two and a half metres
+        /* A STAR IS MOSTLY EMPTY. A cut solid at 24 mm was a readable little
+           shape; a four-pointed flare at 24 mm is a dot, because nearly all of
+           its span is the faint tapering points and only the very middle is
+           bright. It needs to be three times the size of the solid it
+           replaced to read as the same object.
+           Still per relic: what is right set in a wing two and a half metres
            across is a boulder hanging off a three-centimetre ring. */
-        sc: (0.024 + (i % 7) * 0.0038) * scale,
+        sc: (0.075 + (i % 7) * 0.012) * scale,
         ph: (i * 2.39996) % 6.283,          /* the golden angle: no two align */
         sp: 1.1 + ((i * 37) % 100) / 100 * 2.4,
         spin: 0.4 + ((i * 53) % 100) / 100 * 1.1
@@ -260,19 +346,28 @@
   }
   W.flapAngle = flapAngle;
 
-  function driveGems(G, t) {
+  var GTMP = new T.Vector3(), GQ = new T.Quaternion();
+  function driveGems(G, t, camPos, worldOf) {
     var d = G.dummy, st = G.st;
     for (var i = 0; i < st.length; i++) {
       var s = st[i];
       var a = flapAngle(s.x, t, G.flap);
       var ca = Math.cos(a), sa = Math.sin(a);
       d.position.set(s.x * ca - s.y * sa, s.x * sa + s.y * ca, s.z);
-      d.rotation.set(t * s.spin, t * s.spin * 0.7, a);
-      /* THE TWINKLE. A stone catches the light and loses it; the sharp peaks
-         are what makes it read as a facet turning rather than as a bulb being
-         dimmed, so the curve is pushed toward its top end. */
+      /* A STAR ALWAYS FACES YOU. It is a flare, not a solid: turned edge-on
+         it would vanish, and a stone that vanishes as you walk round it is
+         worse than a square one. The camera is given in the mesh's own frame,
+         so a relic that is itself turned or carried still gets this right.
+         It also spins slowly about the line of sight, which is what makes a
+         twinkle read as a facet catching rather than a lamp dimming. */
+      if (camPos) {
+        d.lookAt(camPos);
+        d.rotateZ(t * s.spin * 0.55 + s.ph);
+      } else {
+        d.rotation.set(0, 0, t * s.spin + s.ph);
+      }
       var tw = 0.5 + 0.5 * Math.sin(t * s.sp + s.ph);
-      d.scale.setScalar(s.sc * (0.42 + 1.05 * tw * tw));
+      d.scale.setScalar(s.sc * (0.34 + 1.15 * tw * tw));
       d.updateMatrix();
       G.mesh.setMatrixAt(i, d.matrix);
     }
@@ -396,7 +491,12 @@
       p.z += (p.vz + Math.cos(t * 1.1 + p.ph * 1.7) * 0.09) * dt;
       p.y += p.vy * dt;
       d.position.set(p.x, p.y, p.z);
-      d.rotation.set(t * p.spin, t * p.spin * 0.8, p.ph);
+      if (F.billboard && F.camLocal) {
+        d.lookAt(F.camLocal);
+        d.rotateZ(t * p.spin * 0.6 + p.ph);
+      } else {
+        d.rotation.set(t * p.spin, t * p.spin * 0.8, p.ph);
+      }
       /* it comes up quickly, holds, and goes out slowly */
       var fade = Math.min(1, u * 8) * (1 - u) * (1 - u);
       var tw = 0.65 + 0.35 * Math.sin(t * 6.0 + p.ph * 3.0);
@@ -473,9 +573,11 @@
     var shed = null;
     if (meta.gems && meta.gems.length) {
       shed = makeFall(gemGeometry(), new T.MeshBasicMaterial({
-        color: 0xffffff, vertexColors: true, toneMapped: false,
-        transparent: true, depthWrite: false
+        map: starTexture(), color: 0xffffff, vertexColors: true,
+        toneMapped: false, transparent: true, depthWrite: false,
+        blending: T.AdditiveBlending
       }), 64);
+      shed.billboard = 1;
       root.add(shed.mesh);
     }
 
@@ -508,7 +610,13 @@
       tick: function (t, camPos, dt) {
         dt = dt || 0.016;
         if (motes) driveMotes(motes, t, camPos, group.position);
-        if (gems) driveGems(gems, t);
+        if (gems) {
+          /* the camera, brought into the gems' own frame - they hang off the
+             model, and the model may be turned, carried or flying */
+          GTMP.copy(camPos);
+          gems.mesh.parent.worldToLocal(GTMP);
+          driveGems(gems, t, GTMP);
+        }
         if (flapMats.length && meta.flap) {
           var a = 0;
           var beat = Math.sin(t * (meta.flap.rate || 0.42) * 6.283);
@@ -539,7 +647,12 @@
             this.__last = phase;
           }
         }
-        if (shed) driveFall(shed, dt, t);
+        if (shed) {
+          GTMP.copy(camPos);
+          shed.mesh.parent.worldToLocal(GTMP);
+          shed.camLocal = GTMP.clone();
+          driveFall(shed, dt, t);
+        }
         /* the light breathes, slowly and by a little - a relic that pulses
            hard reads as a machine with a fault */
         var b = 0.90 + 0.10 * Math.sin(t * 0.9) + 0.04 * Math.sin(t * 2.3);

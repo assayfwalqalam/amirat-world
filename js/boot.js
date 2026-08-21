@@ -23,6 +23,7 @@
     /* relicfx gives the glow, the stones and everything that falls; hotbar
        is the seven slots and what each relic does in her hand. Both come
        after build.js because both hang off things the engine defines. */
+    'js/sfx.js',
     'js/relicfx.js',
     'js/hotbar.js'
   ];
