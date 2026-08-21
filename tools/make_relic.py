@@ -444,18 +444,12 @@ def build_carpet():
                 random.uniform(0.08, 0.24), gi2)
         gi2 += 1
 
-    # the central medallion, in relief over the one that is woven into it
-    med = lathe([(0.0, 0.0), (0.07, 0.004), (0.115, 0.010), (0.140, 0.017),
-                 (0.095, 0.023), (0.040, 0.026), (0.0, 0.027)], segments=20,
-                name="medallion")
-    med.location = (0, 0, 0.030)
-    bpy.context.view_layer.objects.active = med
-    med.select_set(True)
-    bpy.ops.object.transform_apply(location=True)
-    med.select_set(False)
-    # on the quieter glow: at full strength this one dome burned out the
-    # whole centre of the carpet, medallion, field and all
-    slot(med, "glow_edge")
+    # NO RAISED MEDALLION. There was a dome here, over the medallion that is
+    # already woven into the carpet, and it was wrong either way it was tried:
+    # lit, it burned out the whole centre - design, field and all; unlit, it
+    # is a flat dark disc laid over the best part of the drawing. The woven
+    # one was always the better medallion. The relief on this carpet is the
+    # flowers and the guard stripes, and the middle is left to be read.
 
     # The light was directly overhead at 55 cm with a reach of seven metres,
     # which lit the rug's own face harder than anything else in the room. It
@@ -471,7 +465,9 @@ def build_carpet():
                         "r": 5.2}],
             "motes": {"n": 46, "r": 1.05, "h": 0.85, "y": 0.06, "flat": 1},
             "gems": GEMS,
-            "gemScale": 0.42,
+            # smaller than the wings' by a long way: a star has to be read
+            # against the flower it is the heart OF, not instead of it
+            "gemScale": 0.16,
             "up": 0.0}
 
 
@@ -1124,7 +1120,7 @@ SLOT_LOOK = {
     # BLOSSOM IS PINK. At almost white the petals had nothing left to be
     # bloomed with, so every flower on the carpet's border and on the staff
     # came out as a white blob and the shape of the petals went with it.
-    "petal":     (0.96, 0.62, 0.76),
+    "petal":     (0.93, 0.52, 0.68),
     # the rete is the pierced sky and the rule is the straight edge over it -
     # brass, but each a shade off the mater so the three read apart as they
     # turn across one another
