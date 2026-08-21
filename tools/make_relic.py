@@ -822,8 +822,175 @@ def build_wand():
             "up": 0.0}
 
 
+# ======================================================== THE ASTROLABE
+def build_astrolabe():
+    """The one relic that is knowledge rather than power.
+
+    An astrolabe is a flat brass disc - the MATER - hollowed into a well that
+    holds a stack of engraved plates, one per latitude. Over them turns the
+    RETE: a pierced openwork map of the sky, cut away to almost nothing so
+    that the plate can be read through it, with a pointer for every named star
+    and a broad off-centre ring for the ecliptic. Over that a straight RULE,
+    and through the whole stack a pin with a horse-headed wedge through it -
+    which is why the pin is called the horse.
+
+    Everything on it turns. That is the whole point of the instrument and it
+    is what the engine is given: the rete, the rule and the alidade on the
+    back are separate slots so they can be driven, and the star-pointers are
+    written out as gem anchors so each one can be lit as a star.
+
+    Hung by its throne, as it is used: the ring at the top is what you hold it
+    by, and the instrument hangs plumb from it."""
+
+    GEMS = []
+    R = 0.30                       # the mater's radius - a big, courtly one
+    T0 = 0.030                     # how thick the body is
+
+    # ------------------------------------------------------------ the mater
+    # a disc with a raised rim, hollowed into a well
+    slot(lathe([(0.0, -T0 * 0.5), (R * 0.94, -T0 * 0.5), (R, -T0 * 0.34),
+                (R, T0 * 0.5), (R * 0.90, T0 * 0.5), (R * 0.90, -T0 * 0.16),
+                (0.0, -T0 * 0.16)], segments=64, name="mater"), "gold")
+
+    # THE LIMB: the outer rim is graduated, and a graduation you cannot count
+    # is a decoration. Three hundred and sixty is too many to read at this
+    # size and too many to build; it is marked every five degrees, with a
+    # longer mark at every thirty, which is how it is actually engraved.
+    for d in range(72):
+        a = d * math.pi * 2 / 72
+        lng = (d % 6 == 0)
+        h = 0.030 if lng else 0.016
+        w = 0.0075 if lng else 0.0040
+        b = box(w, h, 0.006,
+                (math.cos(a) * (R - h * 0.5 - 0.004),
+                 math.sin(a) * (R - h * 0.5 - 0.004), T0 * 0.5 + 0.001),
+                (0, 0, a + math.pi / 2))
+        slot(b, "steel")
+
+    # ------------------------------------------- the plate, under the rete
+    # the three circles every plate carries: Cancer, the equator, Capricorn,
+    # and the horizon cutting across them
+    slot(lathe([(0.0, -T0 * 0.14), (R * 0.88, -T0 * 0.14), (R * 0.88, -T0 * 0.10),
+                (0.0, -T0 * 0.10)], segments=48, name="plate"), "steel")
+    for rr in (R * 0.30, R * 0.55, R * 0.84):
+        slot(torus(rr, 0.0022, (0, 0, -T0 * 0.09), seg=56, minor=6), "gold")
+    # the almucantars: the arcs of equal altitude, crowded near the zenith
+    for k in range(7):
+        u = (k + 1) / 8.0
+        rr = R * 0.80 * (1.0 - u * 0.86)
+        oy = R * 0.30 * u
+        slot(torus(rr, 0.0016, (0, oy, -T0 * 0.075), seg=44, minor=5), "steel")
+
+    # ------------------------------------------------------------- the rete
+    # THE PIERCED SKY. It is cut away to almost nothing, because you have to
+    # read the plate through it.
+    RETE = []
+
+    def rete_part(ob):
+        RETE.append(ob)
+        return slot(ob, "rete")
+
+    rete_part(torus(R * 0.86, 0.0060, (0, 0, T0 * 0.28), seg=64, minor=8))
+    # the ecliptic: a broad band set off-centre, which is the thing that makes
+    # an astrolabe an astrolabe
+    ECC = R * 0.24
+    rete_part(torus(R * 0.58, 0.0075, (0, ECC, T0 * 0.28), seg=56, minor=8))
+    rete_part(torus(R * 0.50, 0.0045, (0, ECC, T0 * 0.28), seg=56, minor=6))
+    # the bar across the middle and the strut down it
+    rete_part(box(R * 1.70, 0.011, 0.010, (0, 0, T0 * 0.28)))
+    rete_part(box(0.011, R * 1.70, 0.010, (0, 0, T0 * 0.28)))
+
+    # THE STAR POINTERS. Each is a curved spike reaching in off the ecliptic
+    # or the outer ring to a point, and the point IS the star - so that is
+    # where the stone goes.
+    STARS = 14
+    for k in range(STARS):
+        a = k * math.pi * 2 / STARS + 0.22
+        # alternate between the outer ring and the ecliptic band
+        if k % 2 == 0:
+            bx0, by0, rr0 = 0.0, 0.0, R * 0.86
+        else:
+            bx0, by0, rr0 = 0.0, ECC, R * 0.54
+        sx0 = bx0 + math.cos(a) * rr0
+        sy0 = by0 + math.sin(a) * rr0
+        # it points inward and to one side, the way a real pointer is cut
+        ln = R * (0.18 + 0.14 * ((k * 7) % 5) / 4.0)
+        aa = a + math.pi + 0.42 * (1 if k % 2 else -1)
+        tipx = sx0 + math.cos(aa) * ln
+        tipy = sy0 + math.sin(aa) * ln
+        SN = 5
+        spike = []
+        for q in range(SN + 1):
+            u = q / SN
+            cx = sx0 + (tipx - sx0) * u
+            cy = sy0 + (tipy - sy0) * u
+            # it curves as it goes
+            cx += -math.sin(aa) * 0.030 * math.sin(u * math.pi)
+            cy += math.cos(aa) * 0.030 * math.sin(u * math.pi)
+            rw = 0.0080 * (1.0 - u) + 0.0011
+            ring = []
+            for q2 in range(6):
+                pq = q2 * math.pi * 2 / 6
+                ring.append((cx + math.cos(pq) * rw,
+                             cy + math.sin(pq) * rw,
+                             T0 * 0.28 + math.sin(pq) * 0.0045))
+            spike.append(ring)
+        rete_part(loft(spike, name="pointer"))
+        GEMS.append([round(tipx, 4), round(T0 * 0.30, 4), round(-tipy, 4),
+                     ("sapphire", "ruby", "diamond")[k % 3]])
+
+    # ------------------------------------------------------------- the rule
+    RULE = []
+    rl = box(R * 1.80, 0.016, 0.007, (0, 0, T0 * 0.42))
+    RULE.append(rl)
+    slot(rl, "rule")
+    for sgn in (-1, 1):
+        e = box(0.030, 0.026, 0.007, (sgn * R * 0.86, 0, T0 * 0.42))
+        RULE.append(e)
+        slot(e, "rule")
+
+    # ---------------------------------------------------- the pin and horse
+    slot(cyl(0.011, 0.011, T0 * 1.5, (0, 0, T0 * 0.2), verts=14), "steel")
+    slot(lathe([(0.0, T0 * 0.48), (0.020, T0 * 0.52), (0.024, T0 * 0.62),
+                (0.016, T0 * 0.70), (0.0, T0 * 0.72)], segments=16,
+               name="horsehead"), "gold")
+    GEMS.append([0.0, round(T0 * 0.66, 4), 0.0, "diamond"])
+
+    # ------------------------------------------------------------ the throne
+    # the shaped bracket at the top and the ring it hangs from
+    slot(box(0.085, 0.055, 0.020, (0, R + 0.020, 0)), "gold")
+    slot(lathe([(0.0, 0.0), (0.030, 0.006), (0.038, 0.024), (0.030, 0.040),
+                (0.0, 0.046)], segments=18, name="knop"), "gold")
+    kn = parts[-1]
+    kn.rotation_euler = (math.pi / 2, 0, 0)
+    kn.location = (0, R + 0.048, 0)
+    bpy.context.view_layer.objects.active = kn
+    kn.select_set(True)
+    bpy.ops.object.transform_apply(location=True, rotation=True)
+    kn.select_set(False)
+    rg = torus(0.042, 0.010, (0, R + 0.105, 0), seg=26, minor=9,
+               rot=(math.pi / 2, 0, 0))
+    slot(rg, "gold")
+    GEMS.append([0.0, 0.0, -(R + 0.105), "sapphire"])
+
+    # The anchors above were written in the flat frame, in the same
+    # (x, height, -y) convention the exporter uses. The instrument is then
+    # turned a quarter upright, so they are turned with it - or fourteen
+    # stars stay lying on the floor where the disc used to be.
+    TURNED = [[g[0], -g[2], g[1], g[3]] for g in GEMS]
+
+    return {"lights": [{"x": 0, "y": 0.0, "z": 0.10, "c": "#ffb45e", "p": 0.75,
+                        "r": 3.2}],
+            "motes": {"n": 26, "r": 0.42, "h": 0.60, "y": -0.28},
+            "gems": TURNED,
+            "gemScale": 0.34,
+            "turns": {"rete": 0.055, "rule": -0.13},
+            "up": 0.62}
+
+
 BUILDERS = {"sabre": build_sabre, "carpet": build_carpet,
-            "wings": build_wings, "wand": build_wand}
+            "wings": build_wings, "wand": build_wand,
+            "astrolabe": build_astrolabe}
 
 if KIND not in BUILDERS:
     raise SystemExit("no such relic: %s (have %s)"
@@ -838,6 +1005,19 @@ bpy.context.view_layer.objects.active = parts[0]
 bpy.ops.object.join()
 ob = bpy.context.active_object
 ob.name = KIND
+
+# AN ASTROLABE HANGS. It is built flat, in the plane it is drawn in, because
+# every circle and every pointer on it is easier to place that way - and then
+# it is stood upright, which is how the instrument is actually used: held up
+# by the ring of its throne, hanging plumb, and sighted along.
+# Blender is Z-up and the file is Y-up, so a disc left in the XY plane arrives
+# lying on the floor. Turned a quarter about X here, its face comes to the
+# viewer and its throne comes to the top.
+if KIND == "astrolabe":
+    ob.rotation_euler = (math.pi / 2, 0, 0)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.transform_apply(rotation=True)
 
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
@@ -905,6 +1085,11 @@ SLOT_LOOK = {
     # bloomed with, so every flower on the carpet's border and on the staff
     # came out as a white blob and the shape of the petals went with it.
     "petal":     (0.92, 0.30, 0.55),
+    # the rete is the pierced sky and the rule is the straight edge over it -
+    # brass, but each a shade off the mater so the three read apart as they
+    # turn across one another
+    "rete":      (0.86, 0.66, 0.30),
+    "rule":      (0.70, 0.72, 0.76),
     "glow_core": (1.00, 0.36, 0.70),
     "glow_edge": (1.00, 0.50, 0.80),
     "glow_gem":  (1.00, 0.72, 0.92),
@@ -924,8 +1109,9 @@ for name in SLOTS:
     b = nt2.nodes["Principled BSDF"]
     c = SLOT_LOOK.get(name, (0.6, 0.6, 0.6))
     b.inputs["Base Color"].default_value = (c[0], c[1], c[2], 1)
-    b.inputs["Roughness"].default_value = 0.22 if name in ("steel", "gold") else 0.8
-    if name in ("steel", "gold"):
+    METALS = ("steel", "gold", "rete", "rule")
+    b.inputs["Roughness"].default_value = 0.26 if name in METALS else 0.8
+    if name in METALS:
         b.inputs["Metallic"].default_value = 0.9
     tf = SLOT_TEX.get((KIND, name))
     if tf:

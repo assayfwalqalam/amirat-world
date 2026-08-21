@@ -25,7 +25,10 @@
       dist: 2.5, at: 0.05, spin: 0.16 },
     { k: 'wand', ar: 'العَصَا', en: 'The Staff',
       note: 'Dark wood that kept the shape it grew in, with blossom breaking out of the old scars.',
-      dist: 2.6, at: 0.05, spin: 0.18 }
+      dist: 3.0, at: 0.05, spin: 0.18 },
+    { k: 'astrolabe', ar: 'الأَسْطُرْلَاب', en: 'The Astrolabe',
+      note: 'A pierced sky turning over an engraved plate, with a star at the point of every one of its fourteen pointers.',
+      dist: 1.30, at: 0.05, spin: 0.14 }
   ];
 
   var scene, cam, renderer, composer, clock;
