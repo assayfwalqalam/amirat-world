@@ -186,8 +186,14 @@
      sat at the origin, the render pass drew nothing, and the whole frame was
      the single blit triangle at the end of the composer. A page that can only
      be driven by rAF cannot be checked. */
+  /* THE CLOCK ONLY MOVES WHEN getDelta IS CALLED. step() read
+     clock.elapsedTime, and a probe driving the page by calling step directly
+     never touched getDelta - so t was frozen and nothing animated at all:
+     no beat, no twinkle, no shed. Time is kept here instead. */
+  var tNow = 0;
   function step(dt) {
-    var t = clock.elapsedTime;
+    tNow += dt;
+    var t = tNow;
     yaw += spin * dt;
     dist += (want - dist) * Math.min(1, dt * 4);
     var cp = Math.cos(pitch);
@@ -195,7 +201,7 @@
                      target.y + Math.sin(pitch) * dist + 0.10,
                      target.z + Math.cos(yaw) * dist * cp);
     cam.lookAt(target);
-    if (dressed) dressed.tick(t, cam.position);
+    if (dressed) dressed.tick(t, cam.position, dt);
     composer.render();
   }
 
@@ -205,6 +211,7 @@
     lastRaf = performance.now();
     step(Math.min(clock.getDelta(), 0.05));
   }
+  W.relicTime = function () { return tNow; };
 
   /* the viewer is its own page, so it fetches its own build number */
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })

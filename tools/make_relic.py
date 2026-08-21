@@ -191,12 +191,21 @@ def build_sabre():
         return sx, sz, math.cos(ang), -math.sin(ang)
 
     def blade_ring(t, wid, thk):
+        """THE BLADE IS CENTRED ON THE GRIP'S AXIS. The section runs u = 0 at
+        the spine to u = 1 at the edge, and it was laid out from the axis
+        OUTWARD - so the whole blade sat on one side of the line the grip and
+        the pommel are on, and at the guard it looked bolted to the edge of
+        the hilt rather than growing out of the middle of it. Half a width is
+        taken off, which puts the spine on one side of the centre and the edge
+        on the other, where they belong."""
         sx, sz, ax, az = spine_at(t)
         pts = []
         for (u, hv) in SECT:
-            pts.append((sx + ax * u * wid, +hv * thk, sz + az * u * wid))
+            o = (u - 0.5) * wid
+            pts.append((sx + ax * o, +hv * thk, sz + az * o))
         for (u, hv) in reversed(SECT[1:-1]):
-            pts.append((sx + ax * u * wid, -hv * thk, sz + az * u * wid))
+            o = (u - 0.5) * wid
+            pts.append((sx + ax * o, -hv * thk, sz + az * o))
         return pts
 
     STEPS = 30
@@ -221,10 +230,11 @@ def build_sabre():
             sx, sz, ax, az = spine_at(t)
             ring = []
             for u in (0.34, 0.64):
+                o = (u - 0.5) * wid
                 for dv in (0.0018, -0.0018):
-                    ring.append((sx + ax * u * wid,
+                    ring.append((sx + ax * o,
                                  side * (0.235 * thk + 0.0011) + dv,
-                                 sz + az * u * wid))
+                                 sz + az * o))
             gr.append([ring[0], ring[1], ring[3], ring[2]])
         slot(loft(gr, name="fuller%d" % side), "glow_edge")
 
@@ -384,56 +394,55 @@ def build_carpet():
 
 # =========================================================== THE WINGS
 def build_wings():
-    """A pair, spread.
-
-    The first attempt was a sea urchin: the feathers were narrow tubes fanning
-    out of a small arc in every direction, and with a lit shaft in each of
-    fifty of them the whole thing bloomed into one white mass. Both faults come
-    from the same mistake - it was built as a spray of quills rather than as a
-    wing.
+    """SEVEN WINGS ON EACH SIDE, spread.
 
     A wing is a LEADING EDGE with feathers hanging behind it. The edge runs
     from the shoulder out and up; every feather roots on that edge and sweeps
     BACKWARD, more so the further out you go, so they lie almost parallel and
-    overlap like tiles. The long ones are at the far end (the primaries) and
-    they shorten toward the shoulder, with two shorter rows of coverts lapped
-    over the top of where they are set in.
+    overlap like tiles. Fourteen of those, fanned from one shoulder at seven
+    different pitches, is a seraph rather than a bird - and at this size the
+    fan is most of what you see, so no two wings get the same length or the
+    same curve.
 
-    And a feather is a flat vane, not a rod. Each is built from a flat lens
-    section carried along its own length, wider on the trailing side than the
-    leading side, the way a real one is.
+    THE GEMS ARE NOT IN THE MESH. They are written out as anchor points and
+    the engine makes them: one instanced mesh for all of them, which is what
+    lets each one twinkle on its own clock, follow the wings as they beat, and
+    be shed as a slow fall of light when they do. A gem baked into the model
+    can do none of that.
 
-    The pink is where he asked for it: a narrower vane laid over the middle of
-    the white one, and the shaft between them lit."""
+    A feather's width lies in Z and its thickness in Y, because the sweep is a
+    rotation about Y - anything laid out in Y would stay edge-on to the viewer
+    however wide it was made."""
 
-    SPAN = 1.02
+    GEMS = []           # (x, y, z, kind) - handed to the engine
+    KINDS = ("sapphire", "ruby", "diamond")
 
-    def edge_at(s2):
-        """a point on the leading edge, and how far along it is"""
-        ex = 0.12 + SPAN * s2
-        ez = 0.34 + 0.30 * math.sin(s2 * 1.30)
-        return ex, ez
+    # Each wing: how far it reaches, how high it sets off, its pitch in the
+    # fan, and how many feathers it carries. The middle pair are the longest,
+    # which is what makes a fan read as wings and not as a wheel.
+    WINGS = [
+        # span, lift,  pitch, feathers, row2
+        (1.55, 0.10, -0.62, 11, 7),
+        (2.05, 0.22, -0.30, 13, 9),
+        (2.42, 0.38,  0.02, 14, 9),
+        (2.55, 0.58,  0.34, 14, 9),
+        (2.30, 0.80,  0.66, 13, 8),
+        (1.86, 0.98,  0.96, 11, 7),
+        (1.38, 1.10,  1.24, 9, 5),
+    ]
 
-    def vane(length, width, lead, sweep, thick):
-        """One feather lying along +X. ITS WIDTH IS IN Z AND ITS THICKNESS IN
-        Y, which is the whole point: the feathers are swept by rotating about
-        Y, so anything laid out in Y stays perpendicular to the plane of the
-        wing. Built the other way round - width in Y - every vane in both
-        wings was edge-on to the viewer and the wing read as a spray of wires
-        however wide the feathers were made. Widening them did nothing at all,
-        which is what said the fault was not the width."""
+    def vane(length, width, lead, thick):
+        """one feather lying along +X, width in Z, thin in Y"""
         rings = []
-        N = 10
+        N = 7
         for i in range(N + 1):
             t = i / N
-            # widest at a third, tapering to a rounded tip
             w = width * math.sin(min(1.0, t * 1.06) ** 0.78 * math.pi) ** 0.62
-            if t < 0.06:
-                w *= t / 0.06
-            th = thick * (1.0 - 0.55 * t) + 0.0008
+            if t < 0.07:
+                w *= t / 0.07
+            th = thick * (1.0 - 0.55 * t) + 0.0010
             x = t * length
-            # a feather is not a ruler: the shaft bows a little as it goes
-            bow = -0.045 * t * t
+            bow = -0.075 * t * t * length / 0.6
             wl, wt = w * lead, w * (1.0 - lead)
             rings.append([
                 (x, 0.0, bow + wt),
@@ -445,103 +454,102 @@ def build_wings():
             ])
         return rings
 
-    def put(ob, sx, sz, ang, side):
-        """set a feather on the edge, swept back by ang"""
+    def place(ob, px, pz, ang, side, py=0.0):
         ob.rotation_euler = (0, ang, 0)
-        ob.location = (side * sx, 0, sz)
-        if side < 0:
-            ob.scale = (1, 1, 1)
+        ob.location = (side * px, py, pz)
         bpy.context.view_layer.objects.active = ob
         ob.select_set(True)
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        bpy.ops.object.transform_apply(location=True, rotation=True)
         ob.select_set(False)
         return ob
 
+    gi = 0
     for side in (-1, 1):
-        # THE THREE ROWS. The outermost is the flight feathers; the two behind
-        # are coverts, shorter, lapped over where the flight feathers are set
-        # into the arm.
-        for row, (n, lmul, wmul, back) in enumerate((
-                (13, 1.00, 1.00, 0.00),
-                (10, 0.58, 0.86, 0.055),
-                (8, 0.34, 0.74, 0.100))):
-            for i in range(n):
-                t = i / (n - 1.0)
+        for (wi, (span, lift, pitch, nf, nf2)) in enumerate(WINGS):
+
+            def edge_at(u):
+                """a point on this wing's leading edge. The edge is an arc,
+                not a line: it leaves the shoulder steeply and flattens as it
+                reaches, which is the curve every long wing has."""
+                r = 0.16 + span * u
+                a = pitch + 0.52 * math.sin(u * 1.25)
+                return (math.cos(a) * r, lift + math.sin(a) * r)
+
+            for (row, n, lmul, wmul, back) in ((0, nf, 1.00, 1.00, 0.0),
+                                               (1, nf2, 0.55, 0.84, 0.085)):
+                for i in range(n):
+                    t = i / max(n - 1.0, 1.0)
+                    ex, ez = edge_at(t)
+                    ex -= back * 0.95
+                    ez += back * 0.62
+                    # nearly straight down at the shoulder, nearly straight
+                    # out at the tip
+                    ang = pitch + 1.24 - t * 1.10
+                    ln = (0.34 + 0.62 * t ** 0.85) * lmul * (0.72 + span * 0.24)
+                    wd = (0.175 - 0.030 * t) * wmul * (0.80 + span * 0.10)
+
+                    fo = loft(vane(ln, wd, 0.38, 0.0068), name="vane")
+                    place(fo, ex, ez, ang, side)
+                    slot(fo, "feather")
+
+                    go = loft(vane(ln * 0.93, wd * 0.42, 0.38, 0.0076),
+                              name="inner")
+                    place(go, ex, ez, ang, side, 0.0)
+                    slot(go, "feather_in")
+
+                    qo = loft(vane(ln * 0.88, wd * 0.070, 0.5, 0.0084),
+                              name="shaft")
+                    place(qo, ex, ez, ang, side, 0.0)
+                    slot(qo, "glow_edge")
+
+                    # THE STONES SET IN THE WHITE. Two per feather on the
+                    # outer row, one on the inner, out along the vane where
+                    # the white actually is.
+                    for (gt, gs) in ((0.42, 0.30), (0.68, -0.26)):
+                        if row == 1 and gt > 0.5:
+                            continue
+                        gx = ex + math.cos(ang) * ln * gt
+                        gz = ez - math.sin(ang) * ln * gt
+                        # off the shaft, into the vane
+                        gx += -math.sin(ang) * wd * gs
+                        gz += -math.cos(ang) * wd * gs
+                        # WRITTEN IN THE FRAME THE FILE IS EXPORTED IN.
+                        # Blender is Z-up and the glTF is Y-up, so an anchor
+                        # stored as (x, thickness, height) here arrives in the
+                        # engine as (x, height, thickness) - which put four
+                        # hundred and fifty stones in a flat grid on the floor
+                        # under the wings instead of in the feathers.
+                        GEMS.append([round(side * gx, 4), round(gz, 4),
+                                     -0.010, KINDS[gi % 3]])
+                        gi += 1
+
+            # the arm the feathers are set into
+            arm = []
+            for i in range(13):
+                t = i / 12.0
                 ex, ez = edge_at(t)
-                # coverts sit a little inboard and above
-                ex -= back * 0.9
-                ez += back * 0.55
-                # THE SWEEP, and the sign of it matters more than anything
-                # else here. rotateY takes +X toward -Z, so a POSITIVE angle
-                # hangs a feather downward; the first version used a negative
-                # one and the whole wing stood up like a fan of spikes. At the
-                # shoulder they hang nearly straight down and by the tip they
-                # are nearly straight out, which is what makes them overlap
-                # like tiles instead of radiating.
-                ang = 1.28 - t * 1.06
-                # A PRIMARY IS ABOUT FIVE TIMES AS LONG AS IT IS WIDE. These
-                # were twelve, which is a blade of grass: at any distance the
-                # vane vanished and only the lit shaft down the middle of it
-                # was left, so the whole wing read as a spray of wires.
-                ln = (0.26 + 0.34 * t ** 0.85) * lmul
-                wd = (0.155 - 0.028 * t) * wmul
+                r = 0.040 * (1.0 - 0.62 * t) + 0.008
+                ring = []
+                for k in range(9):
+                    th = k * math.pi * 2 / 9
+                    ring.append((side * (ex + math.cos(th) * r * 0.55),
+                                 math.sin(th) * r,
+                                 ez + math.cos(th) * r * 0.9))
+                arm.append(ring)
+            slot(loft(arm, name="arm"), "feather")
 
-                f = vane(ln, wd, 0.38, ang, 0.0060)
-                fo = loft(f, name="vane")
-                put(fo, ex, ez, ang, side)
-                slot(fo, "feather")
-
-                # THE PINK INSIDE, a narrower vane laid over the middle of the
-                # white one and a hair proud of it
-                g = vane(ln * 0.94, wd * 0.44, 0.38, ang, 0.0068)
-                go = loft(g, name="inner")
-                put(go, ex, ez, ang, side)
-                slot(go, "feather_in")
-
-                # THE LIT SHAFT between them. Narrow, and on the quieter of
-                # the two glow slots: fifty of these at full strength summed
-                # in the bloom until the wing was one white mass and no
-                # feather could be told from its neighbour.
-                q = vane(ln * 0.88, wd * 0.075, 0.5, ang, 0.0078)
-                qo = loft(q, name="shaft")
-                put(qo, ex, ez, ang, side)
-                slot(qo, "glow_edge")
-
-                # A STONE SET IN THE WHITE, on the outer rows only, and not on
-                # every feather - fifty of them was part of what made it a
-                # white mass.
-                if row == 0 and i % 2 == 1:
-                    gd = ln * 0.50
-                    gx = ex + math.cos(ang) * gd
-                    gz = ez - math.sin(ang) * gd
-                    slot(sphere(0.0115, (side * gx, 0.0082, gz), seg=10,
-                                ring=7), "glow_gem")
-
-        # the arm the feathers are set into, from the shoulder outward
-        arm = []
-        for i in range(14):
-            t = i / 13.0
-            ex, ez = edge_at(t)
-            r = 0.030 * (1.0 - 0.62 * t) + 0.007
-            ring = []
-            for k in range(9):
-                th = k * math.pi * 2 / 9
-                ring.append((side * (ex + math.cos(th) * r * 0.55),
-                             math.sin(th) * r,
-                             ez + math.cos(th) * r * 0.9))
-            arm.append(ring)
-        slot(loft(arm, name="arm"), "feather")
-
-    # the two wings meet at a jewelled clasp rather than in mid air
-    slot(lathe([(0.0, -0.10), (0.055, -0.085), (0.075, -0.02), (0.070, 0.06),
-                (0.045, 0.115), (0.0, 0.135)], segments=18, name="clasp"),
+    # the fourteen wings meet at a clasp rather than in mid air
+    slot(lathe([(0.0, -0.16), (0.075, -0.135), (0.105, -0.03), (0.098, 0.08),
+                (0.062, 0.155), (0.0, 0.185)], segments=20, name="clasp"),
          "gold")
-    slot(sphere(0.030, (0, 0, 0.055), seg=18, ring=12), "glow_gem")
+    GEMS.append([0.0, 0.075, -0.052, "diamond"])
 
-    return {"lights": [{"x": 0, "y": 0.62, "z": 0, "c": "#ff7ec0", "p": 0.85,
-                        "r": 4.4}],
-            "motes": {"n": 34, "r": 0.72, "h": 1.05, "y": 0.30},
-            "up": 0.30}
+    return {"lights": [{"x": 0, "y": 0.95, "z": 0, "c": "#ff7ec0", "p": 1.0,
+                        "r": 6.5}],
+            "motes": {"n": 44, "r": 1.30, "h": 1.70, "y": 0.20},
+            "gems": GEMS,
+            "flap": {"span": 2.6, "amp": 0.30, "rate": 0.42},
+            "up": 0.34}
 
 
 # ============================================================ THE WAND
@@ -732,12 +740,18 @@ except AttributeError:
 # Base colour only. The engine turns every glow_* slot into an emissive
 # material at load, because that is where the bloom and the light live.
 SLOT_LOOK = {
-    "steel":     (0.74, 0.72, 0.78),
-    "gold":      (0.78, 0.58, 0.22),
+    # A LITTLE PINK IN EVERYTHING, not a lot. Watered steel already goes warm
+    # grey; this leans it rose so the blade belongs to the light coming out of
+    # its own fuller instead of sitting cold beside it.
+    "steel":     (0.80, 0.70, 0.76),
+    "gold":      (0.80, 0.56, 0.30),
     "wood":      (0.22, 0.14, 0.09),
-    "grip":      (0.30, 0.10, 0.20),
+    "grip":      (0.38, 0.12, 0.24),
     "cloth":     (0.42, 0.16, 0.34),
-    "feather":   (0.95, 0.94, 0.96),
+    # A LITTLE OFF WHITE. At 0.95 the vanes were as bright as the stones set
+    # in them and the wing came out as one white sheet with nothing readable
+    # on it; feathers are not paper anyway.
+    "feather":   (0.80, 0.79, 0.83),
     "feather_in": (0.92, 0.44, 0.66),
     "petal":     (0.98, 0.80, 0.90),
     "glow_core": (1.00, 0.36, 0.70),
