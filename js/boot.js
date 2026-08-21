@@ -19,7 +19,12 @@
        bar, the shelf, the reader and her page. Both come after build.js
        because both hang off things the engine defines. */
     'js/rawda.js',
-    'js/ui.js'
+    'js/ui.js',
+    /* relicfx gives the glow, the stones and everything that falls; hotbar
+       is the seven slots and what each relic does in her hand. Both come
+       after build.js because both hang off things the engine defines. */
+    'js/relicfx.js',
+    'js/hotbar.js'
   ];
 
   function load(list, ver, done) {
@@ -73,6 +78,11 @@
       /* The readings are fetched alongside the world rather than before it:
          they are 217 KB and the world is tens of megabytes, so waiting on them
          would be waiting on nothing. The shelf simply says so until they land. */
+      try {
+        if (W.hotbarBuild) { W.hotbarBuild(); W.hotbarRestore(); }
+      } catch (e) {
+        if (window.W && W.diag) W.diag('the hotbar did not build: ' + e.message);
+      }
       try {
         if (W.uiBuild) W.uiBuild();
         if (W.loadRawda) W.loadRawda().then(function () {

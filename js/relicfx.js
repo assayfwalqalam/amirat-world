@@ -408,6 +408,8 @@
     return any;
   }
 
+  W.moteTexture = moteTexture;
+  W.gemGeometry = gemGeometry;
   W.makeFall = makeFall;
   W.fallEmit = emit;
   W.fallDrive = driveFall;

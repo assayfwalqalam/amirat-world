@@ -1507,7 +1507,10 @@
          so nothing stays stuck down while the panel is up. */
       if (W.UI_OPEN) { W.releaseKeys(); return; }
       keys[e.code] = true; wake();
-      if (e.code === 'KeyF') { fly = !fly; setMode(); }
+      /* F NO LONGER FLIES. Flight belongs to the carpet and to nothing else,
+         so a key that grants it for free takes the point out of the relic.
+         The carpet calls W.setFly when it is taken out and again when it is
+         put away. */
       if (e.code === 'KeyE' && W.interact) W.interact(W);
       if (e.code === 'Space' && e.target === document.body) e.preventDefault();
     });
@@ -1518,9 +1521,36 @@
       if (a) a.classList.toggle('on', !fly);
       if (b) b.classList.toggle('on', fly);
     }
+    /* THE CARPET IS THE ONLY THING THAT FLIES, and this is declared HERE
+       rather than up with the other exports because setMode is a local of
+       this function - a copy defined at module scope compiles fine and then
+       throws the first time anything calls it. */
+    W.setFly = function (on) {
+      on = !!on;
+      if (fly === on) return;
+      fly = on;
+      setMode();
+      wake();
+    };
+    /* The Fly chip used to grant it outright. It asks for the carpet now: on
+       a phone there is no key to press, so tapping it takes the carpet out
+       and tapping it again puts it away - which is the same thing the number
+       keys do on a desk, said in the only way a touch screen can say it. */
     var cw = document.getElementById('cWalk'), cf = document.getElementById('cFly');
-    if (cw) cw.addEventListener('click', function () { fly = false; setMode(); wake(); });
-    if (cf) cf.addEventListener('click', function () { fly = true; setMode(); wake(); });
+    if (cw) cw.addEventListener('click', function () {
+      if (W.equip) W.equip(-1); else { fly = false; setMode(); }
+      wake();
+    });
+    if (cf) cf.addEventListener('click', function () {
+      if (W.equip && W.RELICS) {
+        var n = -1;
+        for (var i = 0; i < W.RELICS.length; i++) {
+          if (W.RELICS[i].act === 'fly') n = i;
+        }
+        W.equip(fly ? -1 : n);
+      }
+      wake();
+    });
     var cj = document.getElementById('cJump');
     if (cj) cj.addEventListener('click', function () { tryJump(); wake(); });
     var ca = document.getElementById('actChip');
@@ -1578,6 +1608,7 @@
     return { x: pos.x, y: pos.y, z: pos.z, yaw: yaw, pitch: pitch };
   };
   W.keyHeld = function (code) { return !!keys[code]; };
+  W.isFlying = function () { return fly; };
   /* let go of everything: called when a panel opens, so nothing is left held */
   W.releaseKeys = function () {
     for (var k in keys) if (keys[k]) keys[k] = false;
@@ -1770,6 +1801,7 @@
     if (W.tickWater) W.tickWater(clock.elapsedTime);
     if (W.tick) W.tick(W, dt, clock.elapsedTime);
     if (W.uiTick) W.uiTick();
+    if (W.tickHotbar) W.tickHotbar(dt, clock.elapsedTime);
     step(dt);
     if (composer) composer.render(); else renderer.render(scene, cam);
     qualityWatch(dt);

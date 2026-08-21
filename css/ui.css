@@ -276,3 +276,67 @@
 @media (prefers-reduced-motion: reduce) {
   #ui-note, .meter i, #ui-bar { transition: none; }
 }
+
+/* ---------------------------------------------------------------- the bar
+   Seven slots along the bottom. The two empty ones are not a mistake: a bar
+   with exactly as many slots as there are things in it says the collection
+   is finished, and it is not. */
+#hotbar {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 18; display: flex; gap: 6px;
+  pointer-events: none;
+}
+#hotbar .slot {
+  pointer-events: auto; cursor: pointer;
+  width: 72px; height: 68px; padding: 6px 4px 5px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; position: relative;
+  background: rgba(11, 9, 7, .74);
+  border: 1px solid var(--line); border-radius: 4px;
+  color: var(--muted);
+  transition: border-color .18s, background .18s, color .18s, transform .18s;
+}
+#hotbar .slot:hover { border-color: var(--line-strong); color: var(--gold-bright); }
+#hotbar .slot:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+#hotbar .slot[aria-selected="true"] {
+  border-color: var(--gold); background: rgba(40, 28, 12, .88);
+  color: var(--gold-bright); transform: translateY(-5px);
+  box-shadow: 0 0 0 1px rgba(200, 169, 110, .35), 0 10px 28px -10px rgba(0, 0, 0, .9);
+}
+#hotbar .num {
+  position: absolute; top: 3px; left: 6px;
+  font: 500 10px/1 'EB Garamond', Georgia, serif; color: var(--faint);
+}
+#hotbar .slot[aria-selected="true"] .num { color: var(--gold); }
+#hotbar .ar {
+  font-family: 'Sch', 'Amiri', 'Traditional Arabic', serif;
+  font-size: 19px; line-height: 1.25;
+}
+#hotbar .en {
+  font: 500 9px/1 'EB Garamond', Georgia, serif;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--faint);
+}
+#hotbar .slot[aria-selected="true"] .en { color: var(--muted); }
+#hotbar .empty {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px dashed var(--line);
+}
+
+#relichint {
+  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+  z-index: 18; pointer-events: none;
+  font: 400 13.5px/1.4 'EB Garamond', Georgia, serif; color: var(--muted);
+  background: rgba(11, 9, 7, .74); border: 1px solid var(--line);
+  border-radius: 3px; padding: 6px 13px;
+  opacity: 0; transition: opacity .35s;
+  max-width: min(420px, calc(100vw - 32px)); text-align: center;
+}
+#relichint.on { opacity: 1; }
+
+@media (max-width: 640px) {
+  #hotbar { bottom: 12px; gap: 4px; }
+  #hotbar .slot { width: 46px; height: 52px; }
+  #hotbar .ar { font-size: 15px; }
+  #hotbar .en { display: none; }
+  #relichint { bottom: 74px; font-size: 12.5px; }
+}
