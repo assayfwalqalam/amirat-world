@@ -586,63 +586,101 @@ def build_wand():
                 math.cos(t * 1.55) * 0.058 + math.sin(t * 7.3 + 1.1) * 0.016,
                 z, 0.0215 * (1.0 - 0.34 * t))
 
-    # THE BLOSSOM. Five sprays where the branch scars are, each a short spur
-    # with a cluster of flowers on it; every flower is five petals round a
-    # core the engine lights.
-    for (tk, n) in ((0.235, 3), (0.475, 4), (0.715, 3), (0.885, 5), (0.61, 2)):
-        bxx, byy, bz, br = at(tk)
-        base_th = random.uniform(0, 6.28)
-        for s in range(n):
-            th = base_th + s * (6.283 / max(n, 1)) + random.uniform(-0.3, 0.3)
-            out = random.uniform(0.055, 0.115)
-            up = random.uniform(0.02, 0.09)
-            px = bxx + math.cos(th) * (br + out)
-            py = byy + math.sin(th) * (br + out)
-            pz = bz + up
-            # the spur it grows on, so no flower floats off the staff
+    GEMS = []
+    KINDS = ("sapphire", "ruby", "diamond")
+    gi = 0
+
+    # THE BLOSSOM, WHERE IT WOULD ACTUALLY BE.
+    # Five even rings of flowers at five even heights is a lamp-post with
+    # decorations wired to it. Blossom breaks out where the wood was hurt -
+    # at the old branch scars - and it comes out in CLUSTERS, at whatever
+    # angle the light was, with the near ones open and the far ones still in
+    # bud. Every spray here starts at a scar, wanders a little up or down it,
+    # and leans out on its own spur; nothing sits at a round number.
+    SCARS = (0.215, 0.470, 0.615, 0.720, 0.885)
+    for (si, tk) in enumerate(SCARS):
+        # a scar throws out between two and six, and how many is not tidy
+        n = (4, 3, 2, 5, 6)[si]
+        # the whole spray leans one way, the way a branch does
+        lean = random.uniform(0, 6.283)
+        for sfl in range(n):
+            # scatter round the scar rather than dividing the circle by n
+            th = lean + random.gauss(0.0, 0.95) + sfl * 1.7
+            tt = tk + random.uniform(-0.035, 0.045)
+            bxx, byy, bz, br = at(tt)
+            out = random.uniform(0.045, 0.155)
+            up = random.uniform(-0.02, 0.13)
+            # the spur it grows on: it curves as it goes, and no flower is
+            # ever off the staff
+            SN = 6
             spr = []
-            SN = 5
             for k in range(SN + 1):
-                tt = k / SN
-                cx = bxx + math.cos(th) * (br * 0.6 + out * tt)
-                cy = byy + math.sin(th) * (br * 0.6 + out * tt)
-                cz = bz + up * tt
-                rr = 0.0055 * (1.0 - 0.5 * tt) + 0.0016
+                u2 = k / SN
+                # bends upward toward the light as it leaves the wood
+                curve = up * (u2 ** 1.6)
+                cx = bxx + math.cos(th) * (br * 0.55 + out * u2)
+                cy = byy + math.sin(th) * (br * 0.55 + out * u2)
+                cz = bz + curve
+                rr = 0.0060 * (1.0 - 0.55 * u2) + 0.0018
                 ring = []
                 for q in range(6):
-                    p = q * math.pi * 2 / 6
-                    ring.append((cx + math.cos(p) * rr, cy + math.sin(p) * rr,
-                                 cz + math.sin(p) * rr * 0.3))
+                    pq = q * math.pi * 2 / 6
+                    ring.append((cx + math.cos(pq) * rr,
+                                 cy + math.sin(pq) * rr,
+                                 cz + math.sin(pq) * rr * 0.3))
                 spr.append(ring)
             slot(loft(spr, name="spur"), "wood")
-            # five petals
-            for pi in range(5):
-                pa = pi * math.pi * 2 / 5 + random.uniform(-0.12, 0.12)
-                pl = lathe([(0.0, 0.0), (0.009, 0.002), (0.015, 0.006),
-                            (0.017, 0.012), (0.010, 0.016), (0.0, 0.017)],
-                           segments=8, name="petal")
-                pl.scale = (1.0, 1.7, 0.55)
-                pl.rotation_euler = (1.05, 0, pa)
-                pl.location = (px + math.cos(pa) * 0.017,
-                               py + math.sin(pa) * 0.017, pz)
-                bpy.context.view_layer.objects.active = pl
-                pl.select_set(True)
-                bpy.ops.object.transform_apply(location=True, rotation=True,
-                                               scale=True)
-                pl.select_set(False)
-                slot(pl, "petal")
-            # THE HEART OF THE FLOWER, and it has to be SMALL. At 9 mm on a
-            # 17 mm flower the bloom pass ate the petals and every blossom
-            # came out as a white blob - which is the opposite of the point,
-            # since the petals are the thing.
-            slot(sphere(0.0042, (px, py, pz + 0.006), seg=8, ring=6),
-                 "glow_gem")
 
-    # EVERY FITTING GOES WHERE THE STAFF ACTUALLY IS. The staff bends, and
-    # these were all built at x = 0 - so once it was given a real lean the
-    # ferrule sat beside the foot instead of on it and the head floated off
-    # the top. Nothing here is placed at a coordinate any more; it is placed
-    # at whatever at() says the wood is doing at that height.
+            px = bxx + math.cos(th) * (br * 0.55 + out)
+            py = byy + math.sin(th) * (br * 0.55 + out)
+            pz = bz + up
+
+            # OPEN, HALF OPEN, OR STILL A BUD. A tree in blossom is all three
+            # at once and that is most of what makes it read as alive.
+            state = random.random()
+            openness = 1.0 if state > 0.42 else (0.55 if state > 0.18 else 0.0)
+            tilt = random.uniform(0.75, 1.35)
+            face = random.uniform(0, 6.283)
+
+            if openness > 0.0:
+                npet = 5
+                for pi in range(npet):
+                    pa = face + pi * math.pi * 2 / npet + random.uniform(-0.16, 0.16)
+                    sz2 = random.uniform(0.88, 1.15) * (0.6 + 0.4 * openness)
+                    pl = lathe([(0.0, 0.0), (0.010, 0.002), (0.017, 0.007),
+                                (0.019, 0.014), (0.011, 0.019), (0.0, 0.020)],
+                               segments=8, name="petal")
+                    pl.scale = (sz2, sz2 * 1.75, sz2 * 0.5)
+                    pl.rotation_euler = (tilt * openness, 0, pa)
+                    pl.location = (px + math.cos(pa) * 0.017 * openness,
+                                   py + math.sin(pa) * 0.017 * openness,
+                                   pz + (1.0 - openness) * 0.008)
+                    bpy.context.view_layer.objects.active = pl
+                    pl.select_set(True)
+                    bpy.ops.object.transform_apply(location=True, rotation=True,
+                                                   scale=True)
+                    pl.select_set(False)
+                    slot(pl, "petal")
+                slot(sphere(0.0042, (px, py, pz + 0.006), seg=8, ring=6),
+                     "glow_gem")
+            else:
+                # a bud: the petals still wrapped round each other
+                bd = lathe([(0.0, 0.0), (0.008, 0.004), (0.011, 0.014),
+                            (0.008, 0.026), (0.0, 0.031)], segments=8,
+                           name="bud")
+                bd.location = (px, py, pz)
+                bpy.context.view_layer.objects.active = bd
+                bd.select_set(True)
+                bpy.ops.object.transform_apply(location=True)
+                bd.select_set(False)
+                slot(bd, "petal")
+
+    # ------------------------------------------------------------- the head
+    # EVERY FITTING GOES WHERE THE STAFF ACTUALLY IS. The staff bends, and a
+    # ring built at x = 0 does not have the wood through the middle of it -
+    # which is exactly what he saw. Nothing here is placed at a coordinate;
+    # it is placed at whatever at() says the wood is doing at that height, and
+    # every ring is made wider than the wood is thick at that point.
     def put_at(ob, t):
         bxx, byy, bz, _ = at(t)
         ob.location = (bxx, byy, 0.0)
@@ -652,25 +690,65 @@ def build_wand():
         ob.select_set(False)
         return ob
 
-    # the head: a knot of grain at the top with a gold band and a gem in it
-    put_at(slot(lathe([(0.0, L - 0.005), (0.020, L + 0.004), (0.028, L + 0.020),
-                       (0.024, L + 0.040), (0.013, L + 0.052), (0.0, L + 0.056)],
-                      segments=16, name="head"), "wood"), 1.0)
-    put_at(slot(torus(0.026, 0.0055, (0, 0, L + 0.016), seg=18, minor=8),
+    def ring_at(t, extra, minor, gems=3):
+        """a band round the staff, wider than the wood, with stones set in it"""
+        bxx, byy, bz, br = at(t)
+        rmaj = br + extra
+        put_at(slot(torus(rmaj, minor, (0, 0, bz), seg=22, minor=9), "gold"), t)
+        for g in range(gems):
+            ga = g * math.pi * 2 / gems + t * 3.1
+            GEMS.append([round(bxx + math.cos(ga) * rmaj, 4),
+                         round(bz, 4),
+                         round(-(byy + math.sin(ga) * rmaj), 4),
+                         KINDS[(g + int(t * 7)) % 3]])
+
+    # two bands down the shaft and one under the head
+    ring_at(0.335, 0.010, 0.0062, 3)
+    ring_at(0.660, 0.009, 0.0058, 3)
+    ring_at(0.955, 0.011, 0.0068, 4)
+
+    # the head proper: a swelling of grain, a socket, and the stone in it
+    put_at(slot(lathe([(0.0, L - 0.010), (0.021, L + 0.002), (0.030, L + 0.020),
+                       (0.026, L + 0.042), (0.017, L + 0.056), (0.0, L + 0.060)],
+                      segments=18, name="head"), "wood"), 1.0)
+    # THE SOCKET the pommel sits in - a cup with a lip, so the stone is HELD
+    # and not balanced on the end of a stick
+    put_at(slot(lathe([(0.0, L + 0.052), (0.026, L + 0.056), (0.034, L + 0.072),
+                       (0.038, L + 0.092), (0.030, L + 0.098),
+                       (0.021, L + 0.090), (0.019, L + 0.070),
+                       (0.0, L + 0.064)], segments=20, name="socket"),
                 "gold"), 1.0)
-    put_at(slot(torus(0.023, 0.0045, (0, 0, L - 0.030), seg=18, minor=8),
-                "gold"), (L - 0.030) / L)
-    put_at(slot(sphere(0.0135, (0, 0, L + 0.060), seg=16, ring=11),
-                "glow_gem"), 1.0)
+    # the claws that hold it
+    bxx0, byy0, _, _ = at(1.0)
+    for c in range(4):
+        ca = c * math.pi / 2 + 0.4
+        cl = box(0.010, 0.014, 0.046,
+                 (bxx0 + math.cos(ca) * 0.033, byy0 + math.sin(ca) * 0.033,
+                  L + 0.096), (0.30 * math.sin(ca), -0.30 * math.cos(ca), ca))
+        slot(cl, "gold")
+    # THE POMMEL
+    put_at(slot(lathe([(0.0, L + 0.086), (0.024, L + 0.098), (0.032, L + 0.118),
+                       (0.026, L + 0.140), (0.014, L + 0.152),
+                       (0.0, L + 0.156)], segments=20, name="pommel"),
+                "glow_core"), 1.0)
+    GEMS.append([round(bxx0, 4), round(L + 0.120, 4), round(-byy0, 4), "diamond"])
+    for c in range(3):
+        ca = c * math.pi * 2 / 3 + 0.9
+        GEMS.append([round(bxx0 + math.cos(ca) * 0.030, 4),
+                     round(L + 0.118, 4),
+                     round(-(byy0 + math.sin(ca) * 0.030), 4),
+                     KINDS[c % 3]])
 
     # a gold ferrule at the foot, so it does not end in raw end-grain
-    put_at(slot(lathe([(0.0, 0.0), (0.026, 0.0), (0.028, 0.020),
-                       (0.024, 0.048), (0.0235, 0.050)], segments=16,
+    put_at(slot(lathe([(0.0, 0.0), (0.027, 0.0), (0.029, 0.020),
+                       (0.025, 0.050), (0.0245, 0.052)], segments=16,
                       name="ferrule"), "gold"), 0.0)
 
-    return {"lights": [{"x": 0, "y": 1.10, "z": 0, "c": "#ff6fb2", "p": 1.3,
-                        "r": 6.5}],
+    return {"lights": [{"x": 0, "y": 1.10, "z": 0, "c": "#ff6fb2", "p": 1.1,
+                        "r": 5.5}],
             "motes": {"n": 30, "r": 0.20, "h": 1.55, "y": 0.30},
+            "gems": GEMS,
+            "gemScale": 0.30,
             "up": 0.0}
 
 

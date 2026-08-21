@@ -202,7 +202,8 @@
     return gemGeo;
   }
 
-  function makeGems(list, flap) {
+  function makeGems(list, flap, scale) {
+    scale = scale || 1.0;
     var n = list.length;
     /* AN EMISSIVE IS NOT MULTIPLIED BY THE INSTANCE COLOUR. Only the diffuse
        is - so a standard material with a white emissive bright enough to glow
@@ -230,9 +231,10 @@
       cols[i * 3 + 2] = c.b * 1.22;
       st.push({
         x: g[0], y: g[1], z: g[2],
-        /* SET STONES, NOT CONFETTI. At 46 mm four hundred and fifty of them
-           covered the feathers they were supposed to be set into. */
-        sc: 0.024 + (i % 7) * 0.0038,
+        /* SET STONES, NOT CONFETTI - and the size is per relic, because a
+           stone that reads correctly set in a wing two and a half metres
+           across is a boulder hanging off a three-centimetre ring. */
+        sc: (0.024 + (i % 7) * 0.0038) * scale,
         ph: (i * 2.39996) % 6.283,          /* the golden angle: no two align */
         sp: 1.1 + ((i * 37) % 100) / 100 * 2.4,
         spin: 0.4 + ((i * 53) % 100) / 100 * 1.1
@@ -444,7 +446,7 @@
     /* the stones, and the beat that carries them */
     var gems = null, flapMats = [];
     if (meta.gems && meta.gems.length) {
-      gems = makeGems(meta.gems, meta.flap);
+      gems = makeGems(meta.gems, meta.flap, meta.gemScale);
       /* ON THE MODEL, not beside it. The viewer and the world both shift the
          loaded root so the relic stands on the floor; anything added to the
          group instead of to the root does not get that shift and ends up
