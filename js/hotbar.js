@@ -268,12 +268,29 @@
     camRight.set(1, 0, 0).applyQuaternion(cam.quaternion);
     camUp.set(0, 1, 0).applyQuaternion(cam.quaternion);
 
-    /* where it sits: the hold point, in the camera's own frame */
+    /* A THING SHE IS CARRYING DOES NOT TILT WHEN SHE LOOKS DOWN.
+       A held sword lives in the camera's own frame, which is right: it is in
+       her hand and her hand goes where she looks. A carpet under her feet and
+       a pair of wings on her back do NOT - they belong to her body, not to
+       her head, so they use a frame built from the YAW alone. Given the full
+       camera frame, looking down at the ground swung the carpet out behind
+       her and off the screen entirely, which is exactly what happened. */
+    var body = !!R.carry;
+    var yaw = W.getYaw ? W.getYaw() : 0;
+    var fx = -Math.sin(yaw), fz = -Math.cos(yaw);      /* forward, flat */
+    var rx = Math.cos(yaw), rz = -Math.sin(yaw);       /* right, flat */
+
     var h = R.hold;
-    tmp.copy(cam.position)
-      .addScaledVector(camRight, h[0])
-      .addScaledVector(camUp, h[1])
-      .addScaledVector(camDir, -h[2]);
+    if (body) {
+      tmp.set(cam.position.x + rx * h[0] - fx * h[2],
+              cam.position.y + h[1],
+              cam.position.z + rz * h[0] - fz * h[2]);
+    } else {
+      tmp.copy(cam.position)
+        .addScaledVector(camRight, h[0])
+        .addScaledVector(camUp, h[1])
+        .addScaledVector(camDir, -h[2]);
+    }
 
     var sw = 0;
     if (held.swing > 0) {
@@ -289,10 +306,15 @@
     }
 
     g.position.copy(tmp);
-    g.quaternion.copy(cam.quaternion);
-    g.rotateX(R.rot[0]);
-    g.rotateY(R.rot[1]);
-    g.rotateZ(R.rot[2] + sw);
+    if (body) {
+      /* level, and turned to face the way she is going */
+      g.rotation.set(R.rot[0], yaw + R.rot[1], R.rot[2]);
+    } else {
+      g.quaternion.copy(cam.quaternion);
+      g.rotateX(R.rot[0]);
+      g.rotateY(R.rot[1]);
+      g.rotateZ(R.rot[2] + sw);
+    }
     g.scale.setScalar(R.scale || 1);
 
     /* WHAT IT LEAVES BEHIND.
