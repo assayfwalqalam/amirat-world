@@ -326,6 +326,9 @@
                     dx: (Math.random() - 0.5) * 0.5, dz: (Math.random() - 0.5) * 0.5 });
     }
 
+    for (var wl2 = 0; wl2 < layers.length; wl2++) {
+      layers[wl2].wy = y + specs[wl2].h * scale * 0.5;
+    }
     var f = { g: g, layers: layers, pool: pool, embers: embers, eState: eState,
               base: 2.9 * power, reach: 30 * Math.sqrt(power),
               x: x, y: y + 0.5 * scale, z: z, col: 0xff9a45,
@@ -359,7 +362,10 @@
         var ly = f.layers[L];
         var fr = Math.floor((t * ly.sp + ly.off) % FRAMES);
         ly.tex.offset.y = 1 - (fr + 1) / FRAMES;
-        ly.mesh.lookAt(cp.x, ly.mesh.getWorldPosition(new T.Vector3()).y, cp.z);
+        /* the layer's world height never changes after fire() builds it;
+           getWorldPosition allocated a vector and forced a matrix walk for
+           a number that was cached at birth */
+        ly.mesh.lookAt(cp.x, ly.wy, cp.z);
         var s = 0.93 + 0.14 * Math.sin(t * (5 + L * 2) + f.ph + L);
         ly.mesh.scale.set(s, 0.92 + 0.16 * f.lit, 1);
       }
@@ -1575,8 +1581,11 @@
   var PROPS_ARMS = ['p_spears', 'p_swordrack', 'p_bowarrows'];
   var PROPS_ROOM = ['p_carpet', 'p_cushions', 'p_table', 'p_stool', 'p_chest', 'p_books',
                     'p_scrolls', 'p_inkset', 'p_bowl', 'p_pot', 'p_waterjug', 'p_basket'];
+  /* NO STALLS OUTSIDE THE SOUK. Private houses used to sprout p_stall and
+     p_awning at random, muddying the market's trade clustering - the souk
+     owns the market kit. */
   var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
-                      'p_stall', 'p_awning', 'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
+                      'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
   /* A HOUSE IS NOT A STOREROOM. The first cut was chests and crates against
      every wall, because those were half the list. What actually lines the wall
@@ -1709,43 +1718,102 @@
     }
     var seed0 = (seedBase * 2654435761) ^ (si * 40503);
 
-    /* the carpet, in the middle, turned with the room */
-    var mid = world(sp.c[0] * scale, sp.c[2] * scale);
-    /* the carpet asks for less room than the check first demanded: it lies
-       flat, so it only has to clear what stands ON the floor */
+    /* the carpet: never dead-centre and never dead-square - a hundred and
+       fifty rooms with perfectly centred carpets is a furniture showroom */
+    var mid = world(sp.c[0] * scale + (hashU(seed0 ^ 0xca) - 0.5) * 0.5,
+                    sp.c[2] * scale + (hashU(seed0 ^ 0xcb) - 0.5) * 0.5);
     if (clearAt(mid[0], by + ly, mid[1], 0.7) && MODELS.p_carpet) {
-      placeBuilt('p_carpet', mid[0], by + ly, mid[1], brot, Math.min(1.5, scale * 1.1));
+      placeBuilt('p_carpet', mid[0], by + ly, mid[1],
+                 brot + (hashU(seed0 ^ 0xcc) - 0.5) * 0.14,
+                 Math.min(1.5, scale * 1.1));
     }
-    /* and what sits on it */
-    for (var m = 0; m < 2; m++) {
-      var ms = (seed0 ^ (m * 7919)) | 0;
-      var mx = sp.c[0] * scale + (hashU(ms) - 0.5) * rx * 0.7;
-      var mz = sp.c[2] * scale + (hashU(ms ^ 0x51) - 0.5) * rz * 0.7;
-      var w2 = world(mx, mz);
-      if (!clearAt(w2[0], by + ly, w2[1], 0.36)) continue;
-      propOn(ROOM_MID, ms, w2[0], by + ly, w2[1], hashU(ms ^ 0x77) * 6.283, 1);
+    /* WHAT SITS ON IT RELATES. Two props at independent random spots were a
+       table and a stool that had never met. If the first is a table, its
+       companion sits 0.6-0.9m away FACING it, pushed back the way a person
+       leaves a seat - and the small things go ON the table, not beside it
+       on the floor. */
+    var ms0 = (seed0 ^ 0x1ee7) | 0;
+    var tx0 = sp.c[0] * scale + (hashU(ms0) - 0.5) * rx * 0.6;
+    var tz0 = sp.c[2] * scale + (hashU(ms0 ^ 0x51) - 0.5) * rz * 0.6;
+    var wt0 = world(tx0, tz0);
+    if (clearAt(wt0[0], by + ly, wt0[1], 0.5) && MODELS.p_table) {
+      placeBuilt('p_table', wt0[0], sitOn('p_table', by + ly, 1), wt0[1],
+                 brot + hashU(ms0 ^ 0x77) * 6.283, 1);
+      markContact('p_table', wt0[0], by + ly, wt0[1], 1);
+      /* something on the table */
+      if (hashU(ms0 ^ 0x91) > 0.35) {
+        var onk = hashU(ms0 ^ 0x93) > 0.5 ? 'p_bowl' : 'p_oillamp';
+        if (MODELS[onk]) {
+          placeBuilt(onk, wt0[0] + (hashU(ms0 ^ 0x95) - 0.5) * 0.4,
+                     by + ly + 0.47,
+                     wt0[1] + (hashU(ms0 ^ 0x97) - 0.5) * 0.4,
+                     hashU(ms0 ^ 0x99) * 6.283, 0.8);
+        }
+      }
+      /* the companion seat, pushed back from it */
+      var ca0 = hashU(ms0 ^ 0xa1) * 6.283;
+      var cd0 = 0.6 + hashU(ms0 ^ 0xa3) * 0.35;
+      var wc0 = world(tx0 + Math.cos(ca0) * cd0, tz0 + Math.sin(ca0) * cd0);
+      if (clearAt(wc0[0], by + ly, wc0[1], 0.34)) {
+        var seatk = hashU(ms0 ^ 0xa5) > 0.5 ? 'p_stool' : 'p_cushions';
+        if (MODELS[seatk]) {
+          placeBuilt(seatk, wc0[0], sitOn(seatk, by + ly, 1), wc0[1],
+                     brot + ca0 + Math.PI + (hashU(ms0 ^ 0xa7) - 0.5) * 0.5, 1);
+          markContact(seatk, wc0[0], by + ly, wc0[1], 1);
+        }
+      }
+    } else {
+      var w2f = world(tx0, tz0);
+      if (clearAt(w2f[0], by + ly, w2f[1], 0.36)) {
+        propOn(ROOM_MID, ms0, w2f[0], by + ly, w2f[1],
+               hashU(ms0 ^ 0x77) * 6.283, 1);
+      }
     }
 
-    /* THE WALLS. Walk the inside of the rectangle and set things down facing
-       into the room, skipping whatever is solid. */
+    /* THE WALLS - and not as a grid. Evenly divided slots at one inset,
+       every item square to its wall, was the lived-in law's named failure:
+       tidy is dead. Slots jitter along the wall and in from it, items sit a
+       few degrees off square, a filled slot raises its neighbour's chances
+       (jars pair up, as put-down things do), the walls fill from a hashed
+       starting wall so big rooms don't always bare the same two - and ONE
+       thing per room stands away from its wall at an angle: used, and never
+       pushed back. */
     var placed = 0;
-    for (var e = 0; e < 4; e++) {
+    var eStart = Math.floor(hashU(seed0 ^ 0x9d) * 4) % 4;
+    var pulled = false;
+    var lastFilled = false;
+    for (var e0 = 0; e0 < 4; e0++) {
+      var e = (eStart + e0) % 4;
       var along = (e % 2 === 0) ? rx : rz;
       var stepN = Math.max(2, Math.round(along / 1.5));
       for (var k = 0; k < stepN; k++) {
         var sd = (seed0 ^ (e * 104729 + k * 40503)) | 0;
-        if (hashU(sd) < 0.26) continue;
-        var t = (k + 0.5) / stepN * 2 - 1;          /* -1 .. 1 along the wall */
+        var chance = lastFilled ? 0.16 : 0.30;
+        if (hashU(sd) < chance) { lastFilled = false; continue; }
+        var t = (k + 0.5) / stepN * 2 - 1;
+        t += (hashU(sd ^ 0x63) - 0.5) * (0.7 / stepN);
+        var inset = 0.70 + hashU(sd ^ 0x65) * 0.22;
         var lx, lz, face;
-        if (e === 0) { lx = t * rx * 0.86; lz = -rz * 0.84; face = 0; }
-        else if (e === 1) { lx = rx * 0.84; lz = t * rz * 0.86; face = -Math.PI / 2; }
-        else if (e === 2) { lx = t * rx * 0.86; lz = rz * 0.84; face = Math.PI; }
-        else { lx = -rx * 0.84; lz = t * rz * 0.86; face = Math.PI / 2; }
+        if (e === 0) { lx = t * rx * 0.86; lz = -rz * inset; face = 0; }
+        else if (e === 1) { lx = rx * inset; lz = t * rz * 0.86; face = -Math.PI / 2; }
+        else if (e === 2) { lx = t * rx * 0.86; lz = rz * inset; face = Math.PI; }
+        else { lx = -rx * inset; lz = t * rz * 0.86; face = Math.PI / 2; }
+        /* the one pulled-out thing: dragged toward the room, turned */
+        var yank = 0;
+        if (!pulled && hashU(sd ^ 0x6b) > 0.8) {
+          pulled = true;
+          yank = 0.35 + hashU(sd ^ 0x6d) * 0.2;
+          face += (hashU(sd ^ 0x6f) - 0.5) * 0.9;
+        }
+        if (e === 0) lz += yank; else if (e === 1) lx -= yank;
+        else if (e === 2) lz -= yank; else lx += yank;
         lx += sp.c[0] * scale; lz += sp.c[2] * scale;
         var w3 = world(lx, lz);
-        if (!clearAt(w3[0], by + ly, w3[1], 0.32)) continue;
-        propOn(ROOM_WALL, sd, w3[0], by + ly, w3[1], brot + face, 1);
+        if (!clearAt(w3[0], by + ly, w3[1], 0.32)) { lastFilled = false; continue; }
+        propOn(ROOM_WALL, sd, w3[0], by + ly, w3[1],
+               brot + face + (hashU(sd ^ 0x71) - 0.5) * 0.3, 1);
         placed++;
+        lastFilled = true;
         if (placed > 9) break;
       }
       if (placed > 9) break;
@@ -1827,6 +1895,11 @@
       for (var j = 0; j < n; j++) {
         var sd = (seedBase * 2654435761) ^ ((i * 40503 + j * 7919) | 0);
         var u = (hashU(sd) - 0.5) * 2, v = (hashU(sd ^ 0x51ab) - 0.5) * 2;
+        /* ROOF CLUTTER HUGS THE PARAPET. Uniform scatter put jars in the
+           middle of every terrace, where nobody leaves anything - the middle
+           is where you walk. The square-root pull crowds samples outward. */
+        u = (u < 0 ? -1 : 1) * Math.sqrt(Math.abs(u));
+        v = (v < 0 ? -1 : 1) * Math.sqrt(Math.abs(v));
         /* the middle of a court belongs to its fountain */
         if (sp.k === 'court' && Math.abs(u * sp.r[0]) < 4.6 && Math.abs(v * sp.r[1]) < 4.6) continue;
         var lx = (sp.c[0] + u * sp.r[0]) * scale;
@@ -1834,8 +1907,8 @@
         var ly = sp.c[1] * scale;
         var wx = bx + lx * c + lz * s2;
         var wz = bz - lx * s2 + lz * c;
-        var list = sp.k === 'room' ? PROPS_ROOM
-                 : (hashU(sd ^ 0x99) > 0.86 ? PROPS_ARMS : PROPS_ROOF);
+        /* (rooms went to dressRoom above; this list never saw one) */
+        var list = hashU(sd ^ 0x99) > 0.86 ? PROPS_ARMS : PROPS_ROOF;
         propOn(list, sd, wx, by + ly, wz, hashU(sd ^ 0x77) * 6.283, 1);
         /* a lamp burning on some terraces */
         /* A LAMP IS A DRAW CALL THAT CANNOT BE WELDED, because it is turned to
@@ -1971,14 +2044,32 @@
                                       merge into one continuous glare */
     WAYS.forEach(function (w, wi) {
       var len = Math.hypot(w.bx - w.ax, w.bz - w.az);
-      if (len < 9 || w.half < 1.6) return;
+      /* alleys get sparse light too - the player walks them - just at twice
+         the spacing of a street */
+      var alley = w.half < 1.6;
+      if (len < 9 || w.half < 1.2) return;
+      var step2 = alley ? STEP * 2 : STEP;
       var ux = (w.bx - w.ax) / len, uz = (w.bz - w.az) / len;
       var nx = -uz, nz = ux;
-      var n = Math.max(1, Math.floor(len / STEP));
+      var n = Math.max(1, Math.floor(len / step2));
       for (var i = 0; i < n; i++) {
-        var t = (i + 0.5) * (len / n);
+        /* pools at uneven intervals - a perfectly rhythmic string of light
+           reads as an airport runway */
+        var t = (i + 0.5) * (len / n)
+              + (hashU((wi * 733 + i * 149) | 0) - 0.5) * step2 * 0.4;
+        if (t < 1 || t > len - 1) continue;
         var cx = w.ax + ux * t, cz = w.az + uz * t;
         var y = W.heightAt(cx, cz) + 2.75;
+        /* if something already burns within seven metres, this pool is paid
+           for - a lane lamp beside a shop lamp is two draw calls for one
+           light */
+        var near2 = false;
+        for (var e9 = 0; e9 < EMIT.length && !near2; e9++) {
+          var em = EMIT[e9];
+          var edx = em.x - cx, edy = (em.y || y) - y, edz = em.z - cz;
+          if (edx * edx + edz * edz < 49 && Math.abs(edy) < 4) near2 = true;
+        }
+        if (near2) continue;
         side++;
         for (var k = 0; k < 2; k++) {
           var sd = ((side + k) % 2) ? 1 : -1;
@@ -2024,47 +2115,103 @@
       })
       .slice(0, 30);
 
-    var made = 0, run = 0, trade = 0;
+    var made = 0;
     lanes.forEach(function (o, li) {
       var w = o.w;
       var ux = (w.bx - w.ax) / o.len, uz = (w.bz - w.az) / o.len;
       var nx = -uz, nz = ux;                       /* across the lane */
       var STEP = 4.2;
       var n = Math.floor(o.len / STEP);
+      /* THE TRADES OWN A SIDE OF A STREET. One global run counter was shared
+         across both sides and across lane boundaries, so a "run" of spice
+         was really two or three booths interleaved with the metal opposite,
+         and the tail of one street's run started the next street. Each side
+         of each lane keeps its own. */
+      var runs = { '-1': { run: 0, trade: 0 }, '1': { run: 0, trade: 0 } };
+      /* the light ledger: how far each side has gone since something burned */
+      var dark = { '-1': 99, '1': 99 };
       for (var i = 0; i < n; i++) {
-        var t = (i + 0.5) * STEP;
+        /* THE PITCHES BREATHE. A fixed 4.2m step with a fixed setback and an
+           exact perpendicular facing is a machine's market. Every pitch
+           slides up to 1.2m along the lane, sits 1.1-1.9m off it, and faces
+           the street a few degrees off square - the way a stall pitched by
+           hand does. */
+        var seedT = ((li * 92821 + i * 7919) | 0);
+        var t = (i + 0.5) * STEP + (hashU(seedT ^ 0x6d) - 0.5) * 2.4;
+        if (t < 1 || t > o.len - 1) continue;
         var cx = w.ax + ux * t, cz = w.az + uz * t;
         for (var sd = -1; sd <= 1; sd += 2) {
           var seed = ((li * 92821 + i * 7919 + sd * 331) | 0);
-          if (hashU(seed) < 0.46) continue;        /* not every yard is a shop */
-          /* the trades sit together: the same one for a run of stalls */
-          if (run <= 0) { trade = Math.floor(hashU(seed ^ 0x5ab) * TRADES.length) % TRADES.length;
-                          run = 5 + Math.floor(hashU(seed ^ 0x77) * 5); }
-          run--;
-          var T = TRADES[trade];
-          var off = w.half + 1.5;
+          dark[String(sd)] += STEP;
+          /* THE MARKET HAS A HEART. The fill was a flat 54% everywhere, so
+             every wide street in town was equally a market. It packs near
+             the well and thins toward the walls. */
+          var dwell = Math.hypot(cx - 6, cz - 8);
+          var skip = 0.22 + 0.5 * Math.min(1, Math.max(0, (dwell - 40) / 50));
+          if (hashU(seed) < skip) continue;
+          var R = runs[String(sd)];
+          if (R.run <= 0) {
+            R.trade = Math.floor(hashU(seed ^ 0x5ab) * TRADES.length) % TRADES.length;
+            R.run = 4 + Math.floor(hashU(seed ^ 0x77) * 4);
+            /* a gap where one trade ends and the next begins - lanes breathe */
+            if (hashU(seed ^ 0xf1) < 0.6) continue;
+          }
+          R.run--;
+          var tr = TRADES[R.trade];
+          var off = w.half + 1.1 + hashU(seed ^ 0x21) * 0.8;
           var bx = cx + nx * sd * off, bz = cz + nz * sd * off;
+          /* THE SHOP BACKS ONTO THE TOWN. Nothing used to check a wall was
+             behind the pitch, so booths stood free in open ground - a stall
+             in a field. If a face answers within reach, the booth snaps back
+             to it; if none does, the pitch is demoted to what actually
+             stands in the open: a barrow or a canopy, not a shopfront. */
+          var probeY = W.heightAt(bx, bz) + 1.3;
+          var wf2 = wallFacing(cx + nx * sd * (w.half + 2.6), probeY,
+                               cz + nz * sd * (w.half + 2.6), 2.2);
+          var key2 = tr.booth;
+          if (wf2) {
+            var snapx = wf2.fx + wf2.nx * 1.45, snapz = wf2.fz + wf2.nz * 1.45;
+            /* snap only if the face is roughly parallel to the lane, or a
+               corner answer would turn the shop sideways */
+            if (Math.abs(wf2.nx * nx * sd + wf2.nz * nz * sd) > 0.7) {
+              bx = snapx; bz = snapz;
+            }
+          } else if (key2.indexOf('booth') >= 0 || key2.indexOf('leanto') >= 0) {
+            key2 = hashU(seed ^ 0x8c) > 0.5 ? tr.front[0] : 'stall/barrow_grain';
+            if (!MODELS[key2]) key2 = tr.front[0];
+          }
           if (!clearGround(bx, bz, 1.7)) continue;
           var y = W.heightAt(bx, bz);
-          /* the shop faces the street it stands on */
-          var face = Math.atan2(-nx * sd, -nz * sd);
-          if (!placeBuilt(T.booth, bx, sitOn(T.booth, y, 1), bz, face, 1)) continue;
-          markContact(T.booth, bx, y, bz, 1);
+          var face = Math.atan2(-nx * sd, -nz * sd) + (hashU(seed ^ 0x35) - 0.5) * 0.26;
+          if (!placeBuilt(key2, bx, sitOn(key2, y, 1), bz, face, 1)) continue;
+          markContact(key2, bx, y, bz, 1);
           made++;
-          /* its table or its mat, out in front toward the lane */
-          var fx = bx - nx * sd * 1.85, fz = bz - nz * sd * 1.85;
-          var fk = T.front[Math.floor(hashU(seed ^ 0x11) * T.front.length) % T.front.length];
-          if (clearGround(fx, fz, 0.9)) {
-            placeBuilt(fk, fx, sitOn(fk, W.heightAt(fx, fz), 1), fz, face, 1);
-            markContact(fk, fx, W.heightAt(fx, fz), fz, 1);
+          /* ONE SHOP IN SIX IS SHUT: the booth stands, nothing is out front,
+             the goods are pulled inside. A market where every stall trades
+             at full stock at every hour is a diorama. */
+          var shut = hashU(seed ^ 0x77e) < 0.17;
+          if (!shut) {
+            var fx = bx - nx * sd * (1.55 + hashU(seed ^ 0x99) * 0.6);
+            var fz = bz - nz * sd * (1.55 + hashU(seed ^ 0x99) * 0.6);
+            var fk = tr.front[Math.floor(hashU(seed ^ 0x11) * tr.front.length) % tr.front.length];
+            if (clearGround(fx, fz, 0.9)) {
+              placeBuilt(fk, fx, sitOn(fk, W.heightAt(fx, fz), 1), fz,
+                         face + (hashU(seed ^ 0x44) - 0.5) * 0.2, 1);
+              markContact(fk, fx, W.heightAt(fx, fz), fz, 1);
+            }
           }
-          /* goods stacked behind the shop, where the wall is */
-          for (var g = 0; g < 1; g++) {
+          /* goods CLUSTER behind the shop: one to three stacks set close
+             together, not one lonely crate per shop for the whole town */
+          var gn = shut ? 1 : 1 + Math.floor(hashU(seed ^ 0x31) * 3);
+          var g0x = bx + nx * sd * (1.3 + hashU(seed ^ 0x3) * 0.7);
+          var g0z = bz + nz * sd * (1.3 + hashU(seed ^ 0x3) * 0.7);
+          for (var g = 0; g < gn; g++) {
             var gsd = (seed ^ (g * 40503)) | 0;
-            var gx = bx + nx * sd * (1.3 + hashU(gsd) * 0.9) + ux * (hashU(gsd ^ 3) - 0.5) * 2.2;
-            var gz = bz + nz * sd * (1.3 + hashU(gsd) * 0.9) + uz * (hashU(gsd ^ 3) - 0.5) * 2.2;
-            if (clearGround(gx, gz, 0.7)) {
-              propOn(T.goods, gsd, gx, W.heightAt(gx, gz), gz, hashU(gsd ^ 9) * 6.283, 1);
+            var gx = g0x + (hashU(gsd ^ 5) - 0.5) * 1.6;
+            var gz = g0z + (hashU(gsd ^ 7) - 0.5) * 1.6;
+            if (clearGround(gx, gz, 0.7) &&
+                !(W.roadAt && W.roadAt(gx, gz) > 0.6)) {
+              propOn(tr.goods, gsd, gx, W.heightAt(gx, gz), gz, hashU(gsd ^ 9) * 6.283, 1);
             }
           }
           /* A SHOP THAT IS NOT LIT IS A BLACK SLAB. A booth is a closed box
@@ -2079,16 +2226,22 @@
           /* These were spaced for a souk of two hundred shops. The clearance
              test now refuses any pitch standing inside a wall, so there are a
              hundred and fifty and the market had gone dark between them. */
-          if (made % 7 === 2) lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
-          if (made % 8 === 3) {
-            /* and ASK FIRST. A torch post was being driven into the ground
-               wherever the count came round, so one stood straight up through
-               the middle of a trestle table. Everything else in the souk goes
-               through clearGround; this did not. */
-            var tpx = cx + nx * sd * (w.half + 0.5);
-            var tpz = cz + nz * sd * (w.half + 0.5);
-            if (clearGround(tpx, tpz, 1.0)) {
-              torchPost(tpx, W.heightAt(tpx, tpz), tpz);
+          /* LIGHT WHERE IT IS DARK, not where the counter comes round.
+             `made % N` skipped lamps across exactly the stretches where
+             clearGround had refused pitches - the dark gaps stayed dark and
+             the dense runs got metronome lamps. Each side carries a ledger
+             of unlit metres instead; past eleven, the next shop burns. */
+          if (dark[String(sd)] > 11) {
+            if (hashU(seed ^ 0xd1) > 0.5) {
+              lamp(bx - nx * sd * 0.5, y + 2.05, bz - nz * sd * 0.5, 0.62, false, 7.5);
+              dark[String(sd)] = 0;
+            } else {
+              var tpx = cx + nx * sd * (w.half + 0.5);
+              var tpz = cz + nz * sd * (w.half + 0.5);
+              if (clearGround(tpx, tpz, 1.0)) {
+                torchPost(tpx, W.heightAt(tpx, tpz), tpz);
+                dark[String(sd)] = 0;
+              }
             }
           }
         }
@@ -2110,57 +2263,109 @@
   }
 
   function dressSquares() {
+    /* A SQUARE IS NOT A RING OF TABLES ROUND A YARD - which is exactly what
+       equal angular spacing plus jitter built, one function after the souk's
+       own docstring condemned it. A real market square holds two or three
+       TRADES, each owning a contiguous arc of stalls that share a facing and
+       their goods, and the arc toward the widest incoming way stays open so
+       carts and walkers come through. Every placement asks clearGround; the
+       goods stand at their own ground height, not the stall's. */
     var GOODS = ['p_jars', 'p_crates', 'p_sacks', 'p_barrels', 'p_basket',
                  'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood', 'p_stones'];
     for (var q = 0; q < SQUARES.length; q++) {
       var sq = SQUARES[q];
-      var stalls = 7 + Math.floor(hashU((q * 7717) | 0) * 5);
-      for (var i = 0; i < stalls; i++) {
-        var sd = (q * 92821 + i * 51203) | 0;
-        var a = (i / stalls) * 6.283 + hashU(sd) * 0.6;
-        var rr = sq.r * (0.72 + hashU(sd ^ 0x3) * 0.34);
-        var sx = sq.x + Math.cos(a) * rr, sz = sq.z + Math.sin(a) * rr;
-        if (W.roadAt && W.roadAt(sx, sz) > 0.55) continue;
-        var face = Math.atan2(sq.x - sx, sq.z - sz);      /* face the square */
-        var y = W.heightAt(sx, sz);
-        /* the open square gets the same trade kit as the lanes, so a stall
-           on the square and a shop in the souk belong to the same market */
-        var TQ = TRADES[Math.floor(hashU(sd ^ 0x2ab) * TRADES.length) % TRADES.length];
-        var pick = hashU(sd ^ 0x9);
-        var key = pick > 0.62 ? TQ.booth
-                : (pick > 0.34 ? TQ.front[0]
-                : (pick > 0.18 ? 'p_stall' : 'p_awning'));
-        if (!MODELS[key]) key = 'p_stall';
-        placeBuilt(key, sx, sitOn(key, y, 1), sz, face, 1);
-        markContact(key, sx, y, sz, 1);
-        if (pick > 0.62 && MODELS[TQ.mat]) {
-          var mx2 = sx - Math.sin(face) * 1.9, mz2 = sz - Math.cos(face) * 1.9;
-          placeBuilt(TQ.mat, mx2, sitOn(TQ.mat, W.heightAt(mx2, mz2), 1), mz2, face, 1);
-        }
-        /* the goods behind the stall, and one thing set out in front */
-        for (var k = 0; k < 3; k++) {
-          var gd = (sd ^ (k * 7919)) | 0;
-          var back = 1.9 + hashU(gd) * 1.5;
-          var side = (hashU(gd ^ 0x5) - 0.5) * 3.4;
-          propOn(GOODS, gd,
-                 sx - Math.sin(face) * (k === 2 ? -1.7 : back) + Math.cos(face) * side,
-                 y,
-                 sz - Math.cos(face) * (k === 2 ? -1.7 : back) - Math.sin(face) * side,
-                 hashU(gd ^ 0xb) * 6.283, 1);
+      var qs = (q * 7717) | 0;
+
+      /* which way does the widest street come in? that arc stays open */
+      var gapA = 0, gapW = 0;
+      for (var wi2 = 0; wi2 < WAYS.length; wi2++) {
+        var wq = WAYS[wi2];
+        var d0 = Math.hypot(wq.ax - sq.x, wq.az - sq.z);
+        var d1 = Math.hypot(wq.bx - sq.x, wq.bz - sq.z);
+        if (Math.min(d0, d1) < sq.r * 1.3 && wq.half > gapW) {
+          gapW = wq.half;
+          var fx0 = d0 < d1 ? wq.bx : wq.ax, fz0 = d0 < d1 ? wq.bz : wq.az;
+          gapA = Math.atan2(fz0 - sq.z, fx0 - sq.x);
         }
       }
-      /* something burning at the middle of the square */
-      var bx = sq.x + (hashU((q * 331) | 0) - 0.5) * 6;
-      var bz = sq.z + (hashU((q * 733) | 0) - 0.5) * 6;
-      var by = W.heightAt(bx, bz);
-      if (MODELS.p_brazier) placeBuilt('p_brazier', bx, by, bz, hashU(q) * 6.283, 1);
-      fire(bx, by + 0.62, bz, 0.66, 1.15);
-      /* and a cart left standing */
+
+      /* two or three trades, each with its arc */
+      var nArc = 2 + (hashU(qs ^ 0x71) > 0.55 ? 1 : 0);
+      var arc0 = gapA + 0.85;                 /* the arcs start past the gap */
+      var arcSpan = (6.283 - 1.7) / nArc;     /* 1.7 rad stays open */
+      for (var ai = 0; ai < nArc; ai++) {
+        var TQ = TRADES[Math.floor(hashU(qs ^ (0x2ab + ai * 97)) * TRADES.length) % TRADES.length];
+        var nSt = 3 + Math.floor(hashU(qs ^ (0x55 + ai)) * 3);
+        var aBase = arc0 + ai * arcSpan;
+        /* the arc's shared facing wobble: a row pitched by one trader leans
+           the same way, a few degrees off true */
+        var lean = (hashU(qs ^ (0xd + ai)) - 0.5) * 0.3;
+        for (var si2 = 0; si2 < nSt; si2++) {
+          var sd = (q * 92821 + ai * 7717 + si2 * 51203) | 0;
+          var a = aBase + (si2 + 0.5) * (arcSpan / nSt) * 0.92
+                + (hashU(sd) - 0.5) * 0.16;
+          var rr = sq.r * (0.74 + hashU(sd ^ 0x3) * 0.28);
+          var sx = sq.x + Math.cos(a) * rr, sz = sq.z + Math.sin(a) * rr;
+          if (W.roadAt && W.roadAt(sx, sz) > 0.55) continue;
+          if (!clearGround(sx, sz, 1.5)) continue;
+          var face = Math.atan2(sq.x - sx, sq.z - sz) + lean
+                   + (hashU(sd ^ 0x91) - 0.5) * 0.14;
+          var y = W.heightAt(sx, sz);
+          var pick = hashU(sd ^ 0x9);
+          var key = pick > 0.55 ? TQ.booth
+                  : (pick > 0.28 ? TQ.front[0]
+                  : (pick > 0.14 ? 'p_stall' : 'p_awning'));
+          if (!MODELS[key]) key = 'p_stall';
+          placeBuilt(key, sx, sitOn(key, y, 1), sz, face, 1);
+          markContact(key, sx, y, sz, 1);
+          var isTrade = key !== 'p_stall' && key !== 'p_awning';
+          if (isTrade && MODELS[TQ.mat] && hashU(sd ^ 0x6f) > 0.4) {
+            var mx2 = sx - Math.sin(face) * 1.9, mz2 = sz - Math.cos(face) * 1.9;
+            if (clearGround(mx2, mz2, 0.8)) {
+              placeBuilt(TQ.mat, mx2, sitOn(TQ.mat, W.heightAt(mx2, mz2), 1),
+                         mz2, face, 1);
+            }
+          }
+          /* the goods: the TRADE's goods behind a trade stall (a spice booth
+             backed by building stones was the fault), each at ITS OWN ground
+             height, each asking for room first */
+          var gl = isTrade ? TQ.goods : GOODS;
+          for (var k = 0; k < 2 + (hashU(sd ^ 0xe3) > 0.6 ? 1 : 0); k++) {
+            var gd = (sd ^ (k * 7919)) | 0;
+            var back = 1.9 + hashU(gd) * 1.2;
+            var side = (hashU(gd ^ 0x5) - 0.5) * 2.6;
+            var gx2 = sx - Math.sin(face) * (k === 2 ? -1.7 : back)
+                    + Math.cos(face) * side;
+            var gz2 = sz - Math.cos(face) * (k === 2 ? -1.7 : back)
+                    - Math.sin(face) * side;
+            if (!clearGround(gx2, gz2, 0.6)) continue;
+            propOn(gl, gd, gx2, W.heightAt(gx2, gz2), gz2,
+                   hashU(gd ^ 0xb) * 6.283, 1);
+          }
+        }
+      }
+
+      /* something burning at the middle of the square - asked for, tried
+         three spots, never driven through a stall */
+      var placedFire = false;
+      for (var bf = 0; bf < 3 && !placedFire; bf++) {
+        var bx = sq.x + (hashU((q * 331 + bf * 17) | 0) - 0.5) * 7;
+        var bz = sq.z + (hashU((q * 733 + bf * 29) | 0) - 0.5) * 7;
+        if (!clearGround(bx, bz, 1.0)) continue;
+        var by = W.heightAt(bx, bz);
+        if (MODELS.p_brazier) placeBuilt('p_brazier', bx, by, bz, hashU(q) * 6.283, 1);
+        fire(bx, by + 0.62, bz, 0.66, 1.15);
+        placedFire = true;
+      }
+      /* and a cart left standing - where there is room, at a hashed angle */
       if (hashU((q * 1471) | 0) > 0.35) {
-        var cx2 = sq.x + Math.cos(q * 2.1) * sq.r * 0.55;
-        var cz2 = sq.z + Math.sin(q * 2.1) * sq.r * 0.55;
-        propOn(['p_cart', 'p_bench'], (q * 5501) | 0, cx2, W.heightAt(cx2, cz2), cz2,
-               hashU((q * 17) | 0) * 6.283, 1);
+        var ca2 = hashU((q * 911) | 0) * 6.283;
+        var cx2 = sq.x + Math.cos(ca2) * sq.r * 0.55;
+        var cz2 = sq.z + Math.sin(ca2) * sq.r * 0.55;
+        if (clearGround(cx2, cz2, 1.2)) {
+          propOn(['p_cart', 'p_bench'], (q * 5501) | 0, cx2,
+                 W.heightAt(cx2, cz2), cz2, hashU((q * 17) | 0) * 6.283, 1);
+        }
       }
     }
   }
@@ -2301,8 +2506,12 @@
       var tx = -S + S * 2 * a2;
       torch(tx, Y + RAMPART_Y + 1.15, S - 1.9, 0);
       torch(tx, Y + RAMPART_Y + 1.15, -S + 1.9, Math.PI);
-      torch(S - 1.9, Y + RAMPART_Y + 1.15, tx, -Math.PI / 2);
-      torch(-S + 1.9, Y + RAMPART_Y + 1.15, tx, Math.PI / 2);
+      /* the sign convention: torch(rot) pushes the flame toward
+         (-sin rot, -cos rot). South (0) and north (PI) push onto the walk;
+         these two had the mirror signs and pushed 44cm INTO the parapet -
+         all twenty-four east and west flames burned inside the stone. */
+      torch(S - 1.9, Y + RAMPART_Y + 1.15, tx, Math.PI / 2);
+      torch(-S + 1.9, Y + RAMPART_Y + 1.15, tx, -Math.PI / 2);
     }
 
     /* Things stacked against the inside of the wall. A town wall is never a
@@ -2619,7 +2828,22 @@
         if (near.d < RAD * 0.45) continue;
         if (near.d > 32) continue;
 
-        var key = BUILT[idx % BUILT.length];
+        /* A REPEATING DECADE IS A MACHINE SIGNATURE. Cycling bh21..bh30 in
+           order down every street let the eye catch the pattern from the
+           rampart. The key comes from the cell's own hash now - and one
+           house in five copies its nearest neighbour, which is repetition
+           WITH cause: the same builder built the pair. */
+        var key;
+        if (placed.length && hashU(sd ^ 0x777) < 0.20) {
+          var bestD = 1e9, bestK = null;
+          for (var nb = 0; nb < placed.length; nb++) {
+            var dd2 = Math.hypot(x - placed[nb][0], z - placed[nb][1]);
+            if (dd2 < bestD && placed[nb][3]) { bestD = dd2; bestK = placed[nb][3]; }
+          }
+          key = bestK || BUILT[Math.floor(hashU(sd ^ 0x77b) * BUILT.length) % BUILT.length];
+        } else {
+          key = BUILT[Math.floor(hashU(sd ^ 0x77b) * BUILT.length) % BUILT.length];
+        }
         if (!MODELS[key]) { idx++; continue; }
         var myR = radOf(key);
         if (near.d < myR * 0.72) continue;
@@ -2649,23 +2873,45 @@
         var facing = Math.atan2(near.at.px - x, near.at.pz - z) + (hashU(sd ^ 0xabc) - 0.5) * 0.5;
         var g = placeBuilt(key, x, Y, z, facing, HOUSE_SCALE);
         if (!g) continue;
-        placed.push([x, z, myR]);
+        placed.push([x, z, myR, key]);
         made++;
         dressBuilding(key, x, Y, z, facing, HOUSE_SCALE, idx * 31 + 7);
 
         var fx = Math.sin(facing), fz = Math.cos(facing);
-        /* one house in nine keeps a torch by its door; the rest get a lamp,
-           which is one sprite instead of a fire's five meshes and its light */
-        if (idx % 9 === 0) torch(x + fx * 7.2, Y + 2.9, z + fz * 7.2, facing);
-        else if (idx % 3 === 0) lamp(x + fx * 6.4, Y + 3.3, z + fz * 6.4, 1.0, false);
+        /* THE DOOR LIGHT MOUNTS ON THE HOUSE. A fixed 7.2m in front of the
+           CENTRE, regardless of model, left torches standing in open ground
+           short of the big models and inside the crowded neighbours of the
+           small ones. The light walks outward along the facing until the
+           house's own front face answers, and brackets there. Chosen by
+           hash, not by counter, so the pattern never marches down a street
+           in lockstep - the overall counts stay what the draw-call budget
+           was tuned for. */
+        var lroll = hashU(sd ^ 0x515);
+        if (lroll < 0.44) {
+          var mounted = false;
+          for (var pr2 = 3.2; pr2 <= myR + 2.5 && !mounted; pr2 += 0.7) {
+            var wfh = wallFacing(x + fx * pr2, Y + 2.2, z + fz * pr2, 0.9);
+            if (wfh) {
+              if (lroll < 0.11) {
+                torch(wfh.fx + wfh.nx * 0.3, Y + 2.9, wfh.fz + wfh.nz * 0.3,
+                      Math.atan2(wfh.nx, wfh.nz));
+              } else {
+                lamp(wfh.fx + wfh.nx * 0.28, Y + 3.3, wfh.fz + wfh.nz * 0.28, 1.0);
+              }
+              mounted = true;
+            }
+          }
+        }
         for (var q = 0; q < 2; q++) {
           var sd2 = (idx * 7919 + q * 104729) | 0;
           if (hashU(sd2) < 0.52) continue;
-          propOn(PROPS_STREET, sd2,
-                 x + fx * (8.2 + hashU(sd2 ^ 3) * 2.4) + fz * (hashU(sd2 ^ 7) - 0.5) * 7,
-                 Y,
-                 z + fz * (8.2 + hashU(sd2 ^ 3) * 2.4) - fx * (hashU(sd2 ^ 7) - 0.5) * 7,
-                 hashU(sd2 ^ 9) * 6.283, 1);
+          var spx = x + fx * (8.2 + hashU(sd2 ^ 3) * 2.4) + fz * (hashU(sd2 ^ 7) - 0.5) * 7;
+          var spz = z + fz * (8.2 + hashU(sd2 ^ 3) * 2.4) - fx * (hashU(sd2 ^ 7) - 0.5) * 7;
+          if (!clearGround(spx, spz, 0.8)) continue;
+          /* and never in the middle of the roadway - a cart parks BESIDE a
+             lane; barrels in the wheel-ruts block the street */
+          if (W.roadAt && W.roadAt(spx, spz) > 0.5) continue;
+          propOn(PROPS_STREET, sd2, spx, Y, spz, hashU(sd2 ^ 9) * 6.283, 1);
         }
         /* AND THINGS AGAINST THE HOUSE ITSELF. The citadel wall already had
            its stone and firewood stacked along it, but the houses had nothing
@@ -2678,10 +2924,21 @@
           var ls = (idx * 51203 + L2 * 92821) | 0;
           if (hashU(ls) < 0.55) continue;
           var la = hashU(ls ^ 0x3f) * 6.283;
-          var lr = myR * (0.92 + hashU(ls ^ 0x5c) * 0.20);
-          var lxp = x + Math.cos(la) * lr, lzp = z + Math.sin(la) * lr;
-          if (!clearGround(lxp, lzp, 0.75)) continue;
-          propOn(HOUSE_LEAN, ls, lxp, Y, lzp, la + Math.PI / 2, 1);
+          /* LEANED THINGS TOUCH A WALL. The old circle at 0.92-1.12 of the
+             corner radius mostly missed the walls of a rectangular house:
+             firewood "leaning" half a metre out in the air at an angle that
+             matched nothing. Ask the engine where the wall actually is, and
+             keep the doorway's arc clear - a crate against your own door is
+             not lived-in, it is locked out. */
+          var adiff = Math.atan2(Math.sin(la - facing), Math.cos(la - facing));
+          if (Math.abs(adiff) < 0.55) continue;
+          var wfl = wallFacing(x + Math.cos(la) * (myR * 0.9), Y + 0.6,
+                               z + Math.sin(la) * (myR * 0.9), 1.4);
+          if (!wfl) continue;
+          var lxp = wfl.fx + wfl.nx * 0.35, lzp = wfl.fz + wfl.nz * 0.35;
+          if (!clearGround(lxp, lzp, 0.6)) continue;
+          propOn(HOUSE_LEAN, ls, lxp, Y, lzp,
+                 Math.atan2(wfl.nx, wfl.nz) + (hashU(ls ^ 0x9) - 0.5) * 0.4, 1);
         }
       }
     }
@@ -2695,8 +2952,12 @@
       if (hashU((L * 2654435761) | 0) > 0.45) {
         torchPost(lx, TOWN.y, lz);
       } else {
-        cyl(0.11, 0.15, 3.4, lx, TOWN.y + 1.7, lz, M.stone2);
-        cyl(0.22, 0.16, 0.24, lx, TOWN.y + 3.5, lz, M.metal, false);
+        /* cyl's fourth argument is SEG. Omitted, every argument after it
+           shifted one place: seg got a world coordinate, z got a Material,
+           the matrix went NaN - and the post was invisible, its lamp a glow
+           hanging in the air. The audit found it; the eye never had. */
+        cyl(0.11, 0.15, 3.4, 10, lx, TOWN.y + 1.7, lz, M.stone2);
+        cyl(0.22, 0.16, 0.24, 10, lx, TOWN.y + 3.5, lz, M.metal, false);
         lamp(lx, TOWN.y + 3.9, lz, 1.25);
       }
     }
@@ -2766,7 +3027,9 @@
       });
 
       W.addBox(tx, Y + 1.2, tz, 3.6, 1.2, 2.9, -a + Math.PI / 2);
-      if (MODELS.carpet) place('carpet', tx, Y + 0.04, tz, 3.0, -a + Math.PI / 2, false, 'x');
+      /* place() sets a model 0.14 below the y it is given: at Y+0.04 the
+         whole carpet was swallowed by the flattened ground. */
+      if (MODELS.carpet) place('carpet', tx, Y + 0.18, tz, 3.0, -a + Math.PI / 2, false, 'x');
     }
     /* the campfire, ringed with stones */
     for (var s = 0; s < 9; s++) {
@@ -2830,7 +3093,7 @@
     torch(cx - 5.6, Y + 2.7, cz - 2.5, 0.6);
     torch(cx + 5.6, Y + 2.7, cz - 2.5, -0.6);
     fire(cx, Y + 0.25, cz - 6.0, 1.5, 1.8);
-    if (MODELS.carpet) place('carpet', cx, Y + 0.06, cz - 4.2, 3.4, 0.3, false, 'x');
+    if (MODELS.carpet) place('carpet', cx, Y + 0.20, cz - 4.2, 3.4, 0.3, false, 'x');
     if (MODELS.mashaf) place('mashaf', cx, Y + 0.2, cz - 4.2, 0.42, 0.3, false, 'x');
     return { x: cx, z: cz, y: Y };
   }
@@ -3036,7 +3299,14 @@
       var x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
       var y = W.heightAt(x, z);
       if (y < W.WATER_Y + 0.2) continue;
-      if (MODELS.palm) place('palm', x, y - 0.2, z, 9 + (i % 5) * 1.6, a * 2.1);
+      if (MODELS.palm) {
+        var psc = 9 + (i % 5) * 1.6;
+        place('palm', x, y - 0.2, z, psc, a * 2.1);
+        /* the trunk stops a walker - same box the scatter gives its palms.
+           Nothing here ever streamed out, so the box is safe to keep. */
+        W.addBox(x, y + psc * 0.30, z, psc * 0.045 + 0.25, psc * 0.30,
+                 psc * 0.045 + 0.25, 0);
+      }
     }
     /* the oasis keeps its palms; the old normalised giants that used to ring
        it are out of the world with the rest of them. Proper trees at their
@@ -3047,7 +3317,10 @@
       var ty = W.heightAt(tx, tz);
       if (ty < W.WATER_Y + 0.3) continue;
       var key = ['tree/fig_2', 'tree/plane_3', 'tree/tamarisk_1'][t % 3];
-      if (MODELS[key]) place(key, tx, ty - 0.3, tz, null, ta, false, 'raw', 1.0);
+      if (MODELS[key]) {
+        place(key, tx, ty - 0.3, tz, null, ta, false, 'raw', 1.0);
+        W.addBox(tx, ty + 2.2, tz, 0.38, 2.2, 0.38, 0);
+      }
     }
     return { x: cx, z: cz, y: Y };
   }
@@ -3733,34 +4006,71 @@
     lawn.frustumCulled = false;
     W.scene.add(lawn);
   }
-  function refreshLawn(p) {
+  /* THE LAWN REBUILD WAS THE STUTTER. All 34,000 instances were resampled
+     in ONE frame - heightAt, groundWeights, flatAt and roadAt apiece - every
+     eleven metres of walking: a 20-80ms spike landing straight in the worst-
+     frame number every 1.2 seconds at a run. It is a ring now: a fixed slice
+     is reswept each frame until the sweep completes, and the frame never
+     feels it. Dead slots are parked under the world (scale 0 still uploads a
+     matrix; y -9999 keeps the maths one path). */
+  var lawnCursor = 0, lawnSweeping = false, lawnDummy = null;
+  var lawnParkM = null;
+  function lawnPark(i) {
+    if (!lawnParkM) {
+      var d0 = new T.Object3D();
+      d0.position.set(0, -9999, 0);
+      d0.scale.set(0.001, 0.001, 0.001);
+      d0.updateMatrix();
+      lawnParkM = d0.matrix.clone();
+    }
+    lawn.setMatrixAt(i, lawnParkM);
+  }
+  var LAWN_SLICE = 3600;
+
+  function lawnSlice(p) {
     if (!lawn) return;
-    var dummy = new T.Object3D();
-    var k = 0, tries = lawn.instanceMatrix.array.length / 16;
-    for (var i = 0; i < tries; i++) {
+    if (!lawnDummy) lawnDummy = new T.Object3D();
+    var dummy = lawnDummy;
+    var total = lawn.instanceMatrix.array.length / 16;
+    var end = Math.min(total, lawnCursor + LAWN_SLICE);
+    for (var i = lawnCursor; i < end; i++) {
       var sd = (Math.round(p.x / 8) * 73856093) ^ (Math.round(p.z / 8) * 19349663) ^ (i * 83492791);
       var a = hashU(sd) * 6.283;
       var r = Math.sqrt(hashU(sd ^ 0x9e3779b9)) * LAWN_R;
       /* The carpet thins towards its rim. Cut off square, it reads from the
          air as a dark disc following the player around the country. */
       var edge = r / LAWN_R;
-      if (hashU(sd ^ 0x51f) < edge * edge * 1.2 - 0.20) continue;
+      if (hashU(sd ^ 0x51f) < edge * edge * 1.2 - 0.20) { lawnPark(i); continue; }
       var gx = p.x + Math.cos(a) * r, gz = p.z + Math.sin(a) * r;
       var h = W.heightAt(gx, gz);
       var w = W.groundWeights(gx, gz, h);
-      if (h < W.WATER_Y + 0.12 || w.g < 0.20 || w.r > 0.65) continue;
-      if (W.flatAt(gx, gz) > 0.30 || W.roadAt(gx, gz) > 0.35) continue;
+      if (h < W.WATER_Y + 0.12 || w.g < 0.20 || w.r > 0.65) { lawnPark(i); continue; }
+      if (W.flatAt(gx, gz) > 0.30 || W.roadAt(gx, gz) > 0.35) { lawnPark(i); continue; }
       var lfl = lushField(gx, gz);
       var sc = (0.60 + hashU(sd ^ 0x85ebca6b) * 0.95) * (0.55 + 0.65 * w.g) * (0.70 + 0.80 * lfl);
       dummy.position.set(gx, h - 0.07, gz);
       dummy.rotation.set(0, hashU(sd ^ 0xc2b2ae35) * 6.283, 0);
       dummy.scale.set(sc, sc, sc);
       dummy.updateMatrix();
-      lawn.setMatrixAt(k++, dummy.matrix);
+      lawn.setMatrixAt(i, dummy.matrix);
     }
-    lawn.count = k;
+    /* r147 has no addUpdateRange; updateRange is one span per upload, and a
+       contiguous slice is exactly one span */
+    lawn.instanceMatrix.updateRange.offset = lawnCursor * 16;
+    lawn.instanceMatrix.updateRange.count = (end - lawnCursor) * 16;
     lawn.instanceMatrix.needsUpdate = true;
-    lawnAt.copy(p);
+    lawnCursor = end;
+    if (lawnCursor >= total) {
+      lawnCursor = 0;
+      lawnSweeping = false;
+      lawn.count = total;
+      lawnAt.copy(p);
+    }
+  }
+
+  function refreshLawn(p) {
+    /* begin a sweep; lawnSlice carries it forward a slice a frame */
+    lawnSweeping = true;
   }
 
 
@@ -4286,8 +4596,22 @@
       lp.g.position.set(gx + ox * ol, lp.y + oy * ol, gz + oz * ol);
       lp.g.scale.setScalar(vis * (0.90 + 0.16 * lp.lit));
     }
+    /* A FIREFLY SEVENTY METRES AWAY IS A SUB-PIXEL that still cost four
+       trig calls, a position write and an opacity write every frame - and
+       each one is its own sprite, its own draw call. The palace carries 256.
+       Every eighth tick they are gated by distance; the far ones stop
+       costing anything at all. */
+    if ((smallTick & 7) === 0) {
+      var fcp = W.cam.position;
+      for (var fg = 0; fg < FIREFLIES.length; fg++) {
+        var fgf = FIREFLIES[fg];
+        var fdx = fgf.x - fcp.x, fdz = fgf.z - fcp.z;
+        fgf.s.visible = (fdx * fdx + fdz * fdz) < 5000;
+      }
+    }
     for (var fy2 = 0; fy2 < FIREFLIES.length; fy2++) {
       var fl2 = FIREFLIES[fy2];
+      if (!fl2.s.visible) continue;
       fl2.s.position.set(
         fl2.x + Math.sin(t * 0.31 + fl2.p1) * 1.35,
         fl2.y + Math.sin(t * 0.22 + fl2.p2) * 0.85,

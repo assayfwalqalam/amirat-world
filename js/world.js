@@ -748,16 +748,22 @@
     W.starField.forEach(function (s2) { scene.add(s2); });
   }
 
+  /* skyFollow runs every frame, so it must not feed the garbage collector:
+     it used to open with a Group that was never used, and clone the moon
+     direction into two fresh vectors per frame - steady heap churn whose
+     collection pauses land in the worst-frame number. One hoisted vector,
+     reused. */
+  var _skyMp = new THREE.Vector3();
   function skyFollow(p) {
-    var g = new THREE.Group();
     clouds.forEach(function (c) {
       var y = Math.sin(c.el) * c.r, rr = Math.cos(c.el) * c.r;
       c.m.position.set(p.x + Math.cos(c.az) * rr, y, p.z + Math.sin(c.az) * rr);
       c.m.lookAt(p.x, p.y, p.z);
     });
-    var mp = moonDir.clone().multiplyScalar(2600).add(new THREE.Vector3(p.x, 0, p.z));
-    moonMesh.position.copy(mp); moonMesh.lookAt(p);
-    halo.position.copy(mp); halo.lookAt(p);
+    _skyMp.copy(moonDir).multiplyScalar(2600);
+    _skyMp.x += p.x; _skyMp.z += p.z;
+    moonMesh.position.copy(_skyMp); moonMesh.lookAt(p);
+    halo.position.copy(_skyMp); halo.lookAt(p);
   }
 
   /* ------------------------------------------------------------- lights */
@@ -1255,9 +1261,19 @@
     });
   };
 
-  function pumpChunks(budget) {
+  /* The pump used to budget by job COUNT alone, but the jobs are not equal:
+     a near chunk runs a full synchronous scatter (build.js sows thousands of
+     cards and flowers per chunk), so two or three of those in one frame was
+     a 15-60 ms hitch on every chunk boundary. The per-frame callers now pass
+     a DEADLINE as well, and the pump stops pulling jobs once it is past -
+     the count stays as an upper bound only. It always does at least one job
+     per call, so a machine that blows the deadline on every job still drains
+     the queue instead of starving. The init/prime callers pass no deadline
+     and keep their deliberate bulk fill. */
+  function pumpChunks(budget, deadline) {
     var made = 0;
     while (pending.length && made < budget) {
+      if (made > 0 && deadline !== undefined && performance.now() > deadline) break;
       var job = pending.shift();
       var old = chunks.get(job.key);
       if (old && old.seg === job.seg) continue;
@@ -1616,6 +1632,14 @@
 
   var _vegTick = 0;
 
+  /* step() used to build the forward/right/wish directions as three fresh
+     Vector3s every frame - with skyFollow's clones that was ~10 heap objects
+     a frame of standing garbage, the main steady GC feed in the core loop.
+     Hoisted once and reset with .set(), the same pattern _vFrust already
+     uses for visibility. They live only inside one step() call each, so
+     nothing overlaps. */
+  var _f = new THREE.Vector3(), _r = new THREE.Vector3(), _wish = new THREE.Vector3();
+
   /* exposed so a probe can drive the simulation by hand: the pane has no
      animation frames when it is hidden, so without this nothing can be tested */
   function step(dt) {
@@ -1632,12 +1656,14 @@
       if (W.moonLight) {
         W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
         W.moonTarget.updateMatrixWorld();
-        W.moonLight.position.copy(moonDir).multiplyScalar(900).add(
-          new THREE.Vector3(pos.x, 0, pos.z));
+        /* adding the components directly costs nothing; the old .add(new
+           THREE.Vector3(...)) allocated a vector per frame just to do it */
+        W.moonLight.position.copy(moonDir).multiplyScalar(900);
+        W.moonLight.position.x += pos.x; W.moonLight.position.z += pos.z;
       }
       skyFollow(pos);
       updateChunks(pos, false);
-      pumpChunks(pos.y > 120 ? 4 : 3);
+      pumpChunks(pos.y > 120 ? 4 : 3, performance.now() + 4);
       return;
     }
     /* A CARPET IS NOT A JET. Forty-two metres a second crossed the whole town
@@ -1648,10 +1674,10 @@
        it along for crossing open country. */
     var sp = fly ? ((keys['ShiftLeft'] || keys['ShiftRight']) ? 26 : 15)
                  : (keys['ShiftLeft'] || keys['ShiftRight'] ? 17 : 9.2);
-    var f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(-1);
+    var f = _f.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     if (fly) { f.y = Math.sin(pitch); f.normalize(); }
-    var r = new THREE.Vector3(-f.z, 0, f.x).normalize();
-    var wish = new THREE.Vector3();
+    var r = _r.set(-f.z, 0, f.x).normalize();
+    var wish = _wish.set(0, 0, 0);
     if (keys['KeyW'] || keys['ArrowUp']) wish.add(f);
     if (keys['KeyS'] || keys['ArrowDown']) wish.sub(f);
     if (keys['KeyD'] || keys['ArrowRight']) wish.add(r);
@@ -1706,12 +1732,14 @@
     if (W.moonLight) {
       W.moonTarget.position.set(pos.x, pos.y - 2, pos.z);
       W.moonTarget.updateMatrixWorld();
-      W.moonLight.position.copy(moonDir).multiplyScalar(900).add(
-        new THREE.Vector3(pos.x, 0, pos.z));
+      /* adding the components directly costs nothing; the old .add(new
+         THREE.Vector3(...)) allocated a vector per frame just to do it */
+      W.moonLight.position.copy(moonDir).multiplyScalar(900);
+      W.moonLight.position.x += pos.x; W.moonLight.position.z += pos.z;
     }
     skyFollow(pos);
     updateChunks(pos, false);
-    pumpChunks(pos.y > 120 ? 3 : 2);
+    pumpChunks(pos.y > 120 ? 3 : 2, performance.now() + 4);
   }
 
   /* ------------------------------------------------ idle · costs nothing */

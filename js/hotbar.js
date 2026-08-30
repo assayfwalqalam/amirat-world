@@ -291,9 +291,12 @@
       /* the stars have to keep facing the eye all the way down, or a falling
          stone turns edge-on and blinks out halfway */
       trails.gem.camLocal = W.cam.position;
-      W.fallDrive(trails.mote, dt, t);
-      W.fallDrive(trails.gem, dt, t);
-      W.fallDrive(trails.petal, dt, t);
+      /* a pool with nothing in the air costs nothing. These three used to be
+         driven every frame forever after the first swing; F.live is the
+         count relicfx keeps in emit()/driveFall, and zero means skip. */
+      if (trails.mote.live) W.fallDrive(trails.mote, dt, t);
+      if (trails.gem.live) W.fallDrive(trails.gem, dt, t);
+      if (trails.petal.live) W.fallDrive(trails.petal, dt, t);
     }
     if (!held) return;
     var R = held.spec, g = held.dressed.group, cam = W.cam;

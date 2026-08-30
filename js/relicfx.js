@@ -438,8 +438,21 @@
       pool.push({ live: 0, age: 0, life: 1, x: 0, y: -9999, z: 0,
                   vx: 0, vy: 0, vz: 0, sc: 0.02, spin: 0, ph: 0 });
     }
+    /* every slot is hidden ONCE, here, and hidden again only at the moment
+       a particle dies. driveFall used to re-write the hide matrix for every
+       dead slot every frame and re-upload the whole buffer, so an empty pool
+       cost as much as a full one, forever. */
+    var d0 = new T.Object3D();
+    d0.position.set(0, -9999, 0);
+    d0.scale.setScalar(0.0001);
+    d0.updateMatrix();
+    for (var m0 = 0; m0 < cap; m0++) mesh.setMatrixAt(m0, d0.matrix);
+    mesh.instanceMatrix.needsUpdate = true;
+    /* .live is the pool's live COUNT (each slot's own .live stays a flag):
+       emit() raises it, driveFall lowers it at death, and both driveFall and
+       the hotbar's tick skip the pool entirely when it reads zero */
     return { mesh: mesh, pool: pool, cols: cols, dummy: new T.Object3D(),
-             next: 0 };
+             next: 0, live: 0 };
   }
 
   function emit(F, x, y, z, opt) {
@@ -451,6 +464,7 @@
     }
     if (!p) return null;                    /* all in the air; drop this one */
     p.live = 1; p.age = 0;
+    F.live++;                               /* the pool count driveFall gates on */
     p.life = opt.life || 6.0;
     p.x = x; p.y = y; p.z = z;
     var sp = opt.spread === undefined ? 0.35 : opt.spread;
@@ -469,19 +483,30 @@
   }
 
   function driveFall(F, dt, t) {
+    /* an idle pool must be FREE. This used to hide every dead slot again
+       every frame and set needsUpdate unconditionally, so after the first
+       sword swing an idle player paid ~420 matrix composes and three full
+       instance-buffer uploads a frame with nothing alive. The hide matrix is
+       written once at pool creation and once at death (in makeFall and just
+       below), so the dead branch is a bare continue, an empty pool returns
+       at the top, and the buffer re-uploads only when something moved or
+       died. */
+    if (!F.live) return false;
     var d = F.dummy, any = false;
     for (var i = 0; i < F.pool.length; i++) {
       var p = F.pool[i];
-      if (!p.live) {
+      if (!p.live) continue;
+      any = true;
+      p.age += dt;
+      if (p.age >= p.life) {
+        p.live = 0; F.live--;
+        /* the one hide write this slot gets until it is emitted again */
         d.position.set(0, -9999, 0);
         d.scale.setScalar(0.0001);
         d.updateMatrix();
         F.mesh.setMatrixAt(i, d.matrix);
         continue;
       }
-      any = true;
-      p.age += dt;
-      if (p.age >= p.life) { p.live = 0; continue; }
       var u = p.age / p.life;
       /* SLOWLY. It is light coming off a thing, not gravel: it drifts down at
          a walking pace and the air keeps taking it sideways the whole way. */
@@ -504,7 +529,9 @@
       d.updateMatrix();
       F.mesh.setMatrixAt(i, d.matrix);
     }
-    F.mesh.instanceMatrix.needsUpdate = true;
+    /* only when something moved or died - never for a buffer that has not
+       changed since the last upload */
+    if (any) F.mesh.instanceMatrix.needsUpdate = true;
     return any;
   }
 
@@ -578,6 +605,10 @@
         blending: T.AdditiveBlending
       }), 64);
       shed.billboard = 1;
+      /* the persistent camera-in-local-frame vector tick() copies into -
+         it used to be GTMP.clone(), a fresh heap Vector3 every frame the
+         wings were equipped */
+      shed.camLocal = new T.Vector3();
       root.add(shed.mesh);
     }
 
@@ -647,10 +678,14 @@
             this.__last = phase;
           }
         }
-        if (shed) {
+        if (shed && shed.live) {
+          /* only while stones are in the air - and the camera position is
+             COPIED into shed's own persistent vector, not cloned: GTMP is
+             the shared temp so the value must be kept, but keeping it used
+             to allocate a fresh Vector3 every frame */
           GTMP.copy(camPos);
           shed.mesh.parent.worldToLocal(GTMP);
-          shed.camLocal = GTMP.clone();
+          shed.camLocal.copy(GTMP);
           driveFall(shed, dt, t);
         }
         /* the light breathes, slowly and by a little - a relic that pulses
