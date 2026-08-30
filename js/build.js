@@ -2000,13 +2000,29 @@
     if (!MODELS['stall/booth_cloth']) return 0;
     warmStalls();
     /* the widest lanes carry the market; the little alleys stay quiet */
+    /* THE MARKET RUNS THROUGH THE HEART OF THE TOWN, not round its rim.
+       Ranked by segment LENGTH, every lane that won was a ring-road piece
+       hugging the wall (the wide central arteries are chopped short by the
+       street generator's wander, so they always lost the sort) - measured:
+       of 264 stall pitches, none stood within forty metres of the well and
+       218 stood beyond eighty. A souk is the opposite thing: it packs the
+       way from the gate to the mosque and the well, and thins toward the
+       walls. So the rank is WIDTH first and then CLOSENESS to the centre,
+       and the wander-chopped artery pieces qualify at any length past six
+       metres. */
     var lanes = WAYS.filter(function (w) { return w.half >= 2.3; })
       .map(function (w) {
-        return { w: w, len: Math.hypot(w.bx - w.ax, w.bz - w.az) };
+        var len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+        var mx = (w.ax + w.bx) / 2, mz = (w.az + w.bz) / 2;
+        return { w: w, len: len, d0: Math.hypot(mx - 6, mz - 8) };
       })
-      .filter(function (o) { return o.len > 10; })
-      .sort(function (a, b) { return b.len - a.len; })
-      .slice(0, 22);
+      .filter(function (o) { return o.len > 6; })
+      .sort(function (a, b) {
+        var wd = b.w.half - a.w.half;
+        if (Math.abs(wd) > 0.3) return wd;
+        return a.d0 - b.d0;
+      })
+      .slice(0, 30);
 
     var made = 0, run = 0, trade = 0;
     lanes.forEach(function (o, li) {

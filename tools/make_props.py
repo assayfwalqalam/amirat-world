@@ -386,11 +386,23 @@ elif KIND == "carpet":
     parts.append(c)
 
 elif KIND == "cushions":
-    for sp in [(0, 0), (0.42, 0.1), (0.16, 0.4)]:
-        b = sphere(0.24, (sp[0], sp[1], 0.14))
-        b.scale = (1.15, 1.0, 0.42)
-        bpy.ops.object.transform_apply(scale=True)
-        jitter(b, 0.02)
+    # CUSHIONS, NOT PANCAKES. Squashed to 0.42 of a small sphere they lay on
+    # the palace floor like potatoes. A floor cushion is fat - it holds most
+    # of its height - it dents in the middle where people sit, and a pile of
+    # them leans: one on the floor, one against it at an angle.
+    for i, sp in enumerate([(0, 0, 0.0, 0.0), (0.52, 0.12, 0.0, 0.5),
+                            (0.20, 0.50, 0.0, -0.4), (0.30, 0.24, 0.26, 0.9)]):
+        b = sphere(0.30, (sp[0], sp[1], 0.19 + sp[2]))
+        b.scale = (1.2, 1.05, 0.62)
+        b.rotation_euler = (random.uniform(-0.10, 0.10) + (0.18 if i == 3 else 0),
+                            random.uniform(-0.08, 0.08), sp[3])
+        bpy.ops.object.transform_apply(scale=True, rotation=True)
+        # the dent where someone sat
+        for v in b.data.vertices:
+            r2 = (v.co.x - sp[0]) ** 2 + (v.co.y - sp[1]) ** 2
+            if v.co.z > 0.19 + sp[2] and r2 < 0.055:
+                v.co.z -= 0.05 * (1.0 - r2 / 0.055)
+        jitter(b, 0.018)
 
 elif KIND == "table":
     # A TABLE IS BOARDS, NOT A SLAB. One box on four sticks is the shape a
@@ -854,7 +866,9 @@ WOODY = {"barrel", "barrels", "crates", "cart", "bench", "stall", "table",
          "stool", "chest", "broom", "swordrack", "spears", "bowarrows",
          "firewood", "ladder", "pergola", "torchpost"}
 CLAYY = {"pot", "jars", "waterjug", "oillamp", "bowl", "plantpot", "bread"}
-CLOTHY = {"awning", "carpet", "cushions", "sacks"}
+CLOTHY = {"awning", "carpet", "sacks"}
+# a majlis cushion wears the same rich weave as the carpets, not sackcloth
+FANCY = {"cushions"}
 # every surface wears something: a flat colour is what made these read as toys
 # A WELL IS DRESSED MASONRY AND A BRAZIER IS IRON. Both were wearing
 # g_rock_d.jpg, which is a photograph of rocky GROUND - loose stones lying in
@@ -875,6 +889,8 @@ elif KIND in CLAYY:
     tex_file = "t_clay_d.jpg"
 elif KIND in CLOTHY:
     tex_file = "t_cloth_d.jpg"
+elif KIND in FANCY:
+    tex_file = "t_carpet_d.jpg"
 elif KIND in STONEY:
     tex_file = "g_rock_d.jpg"
 elif KIND in ASHLAR:

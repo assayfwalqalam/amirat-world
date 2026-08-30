@@ -218,7 +218,8 @@ def window_deep(target, cx, cy, cz, w, h, axis, sign, face, through):
             timber.append(solid(0.045, w - 0.04, 0.038, (fx, cy, gz), False))
 
 
-def storey(cx, cy, w, d, z0, h, front_door, n_win):
+def storey(cx, cy, w, d, z0, h, front_door, n_win, ceil_hole=None,
+           front_open=False):
     """Four wall slabs, so the inside is a real room you can walk into."""
     # the ceiling: a plastered slab across the room at the wall head. Without
     # it you stand inside and look up at the underside of the roof and out
@@ -226,7 +227,18 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
     # FULL width on purpose: its edges bury themselves inside the wall slabs,
     # so there is no line where ceiling meets wall for the night to show
     # through. Sized to the room it leaves a gap at every batter.
-    mud.append(solid(w, d, 0.18, (cx, cy, z0 + h - 0.11), False))
+    if ceil_hole is None:
+        mud.append(solid(w, d, 0.18, (cx, cy, z0 + h - 0.11), False))
+    else:
+        _cX0, _cX1, _cY0, _cY1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
+        for (a0, b0, a1, b1) in ((_cX0, _cY0, _cX1, ceil_hole[2]),
+                                 (_cX0, ceil_hole[3], _cX1, _cY1),
+                                 (_cX0, ceil_hole[2], ceil_hole[0], ceil_hole[3]),
+                                 (ceil_hole[1], ceil_hole[2], _cX1, ceil_hole[3])):
+            if a1 - a0 > 0.06 and b1 - b0 > 0.06:
+                mud.append(solid(a1 - a0, b1 - b0, 0.18,
+                                 ((a0 + a1) / 2, (b0 + b1) / 2, z0 + h - 0.11),
+                                 False))
     back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
     left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2))
     right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2))
@@ -234,7 +246,10 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win):
     # solid slab: the opening would be cut from the geometry while collision
     # still sealed it, and the house could be seen into but never entered.
     # It is recorded below as the pier either side plus the lintel over.
-    front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2), collide=not front_door)
+    # front_open: someone else is about to cut a doorway here and lay the
+    # collision strips themselves - one solid box would seal what they open
+    front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2),
+                  collide=(not front_door and not front_open))
     amt = BAT * h
     fy = cy - d / 2 + T / 2
     by = cy + d / 2 - T / 2
@@ -321,16 +336,39 @@ def beams(cx, cy, w, d, z, sides=('y', 'x'), out_len=0.26):
     return made
 
 
-def roof_slab(cx, cy, w, d, z, th=0.34, over=OV):
+def roof_slab(cx, cy, w, d, z, th=0.34, over=OV, hole=None):
     """A roof that reaches past the wall it sits on, with a proud lip.
     Roofs go on the mud list: a terrace is smoothed plaster, and wearing the
-    wall's block courses it read as a brick pavement from above."""
+    wall's block courses it read as a brick pavement from above.
+
+    hole=(x0, x1, y0, y1) pierces it for a stairwell - and the piercing MUST
+    be strips, never a boolean cut: collision is recorded when a solid is
+    born, so a cut slab still carries its whole collider and the climber
+    bangs his head on air. Four strips each carry their own true box."""
     # the slab SINKS into the wall head. Set exactly on top of it, the two
     # surfaces meet in a hairline and the night shows through the joint -
     # which is the light he could see along the top of every wall.
-    out = [solid(w + over * 2, d + over * 2, th + 0.10, (cx, cy, z + th / 2 - 0.05))]
-    out.append(solid(w + over * 2 + 0.05, d + over * 2 + 0.05, 0.07,
-                     (cx, cy, z + th - 0.035), False))
+    out = []
+    if hole is None:
+        out.append(solid(w + over * 2, d + over * 2, th + 0.10,
+                         (cx, cy, z + th / 2 - 0.05)))
+        out.append(solid(w + over * 2 + 0.05, d + over * 2 + 0.05, 0.07,
+                         (cx, cy, z + th - 0.035), False))
+    else:
+        X0, X1 = cx - w / 2 - over, cx + w / 2 + over
+        Y0, Y1 = cy - d / 2 - over, cy + d / 2 + over
+        hx0 = max(X0 + 0.1, hole[0])
+        hx1 = min(X1 - 0.1, hole[1])
+        hy0 = max(Y0 + 0.1, hole[2])
+        hy1 = min(Y1 - 0.1, hole[3])
+        for (a0, b0, a1, b1) in ((X0, Y0, X1, hy0), (X0, hy1, X1, Y1),
+                                 (X0, hy0, hx0, hy1), (hx1, hy0, X1, hy1)):
+            if a1 - a0 > 0.06 and b1 - b0 > 0.06:
+                out.append(solid(a1 - a0, b1 - b0, th + 0.10,
+                                 ((a0 + a1) / 2, (b0 + b1) / 2, z + th / 2 - 0.05)))
+                out.append(solid(a1 - a0 + 0.04, b1 - b0 + 0.04, 0.07,
+                                 ((a0 + a1) / 2, (b0 + b1) / 2, z + th - 0.035),
+                                 False))
     for o in out:
         erode(o, levels=1, fine=0.018, broad=0.03)
     mud.extend(out)
@@ -400,8 +438,40 @@ def ladder(x, y_wall, z_top, sgn, lean=0.28):
                   "k": "climb"})
 
 
+# ------------------------------------------------- the inner stair, planned
+# SOME HOUSES CLIMB FROM INSIDE - his order. The flight runs across the
+# house under the back of the upper room, rises through a pierced slab into
+# a railed well, and arrives ON the upper floor. Where the upper block
+# covers the whole footprint (towers) there is no terrace for an outside
+# door, so those houses MUST climb from inside.
+_terr_gap = (oy - ud / 2) - (-D / 2) if has_upper else 0.0
+INNER = has_upper and (random.random() < 0.55 or _terr_gap < 1.3)
+if INNER:
+    ST_RISE = H1 + 0.34 - 0.30
+    ST_N = max(10, int(math.ceil(ST_RISE / 0.30)))
+    ST_YL = min(oy + ud / 2 - T - 0.72, D / 2 - T - 0.72)   # the flight line
+    _usable = W - T * 2 - 1.0
+    ST_TREAD = min(0.30, (_usable - 0.2) / ST_N)
+    ST_RUN = ST_N * ST_TREAD
+    ST_DIR = 1 if ox >= 0 else -1
+    # ARRIVE NEAR THE MIDDLE OF THE ROOM. Arriving hard against the upper
+    # block's edge put the climber's head under whatever the generator had
+    # stood there (bh30: a baked box at the wall left 0.34m of headroom).
+    # The centre of a room is the one place nothing else claims.
+    ST_XE = ox + ST_DIR * min(uw / 2 - T - 1.0, 1.2)
+    ST_XS = ST_XE - ST_DIR * ST_RUN                          # the first tread
+    # the open well: over the top of the flight, where a head needs air
+    _headlen = min(ST_RUN - 0.4, 2.44 / (ST_RISE / ST_N) * ST_TREAD)
+    ST_HX0 = min(ST_XE + ST_DIR * 0.06, ST_XE - ST_DIR * _headlen)
+    ST_HX1 = max(ST_XE + ST_DIR * 0.06, ST_XE - ST_DIR * _headlen)
+    ST_HOLE = (ST_HX0, ST_HX1, ST_YL - 0.66, ST_YL + 0.66)
+else:
+    ST_HOLE = None
+
 # ---------------------------------------------------- the ground storey
-shell += storey(0, 0, W, D, 0, H1, True, random.randint(2, 4) if KIND == 'range' else random.randint(1, 2))
+shell += storey(0, 0, W, D, 0, H1, True,
+                random.randint(2, 4) if KIND == 'range' else random.randint(1, 2),
+                ceil_hole=ST_HOLE)
 SPOTS.append({"c": [0, 0.3, 0], "r": [round(W / 2 - 1.2, 2), round(D / 2 - 1.2, 2)], "k": "room"})
 floor = solid(W - T * 2, D - T * 2, 0.3, (0, 0, 0.15))
 erode(floor, levels=1, fine=0.02, broad=0.03)
@@ -428,13 +498,78 @@ for _bx, _by, _bw, _bd in _plinth:
 
 # the roof slab over the ground floor, which is also the terrace
 timber += beams(0, 0, W - 0.3, D - 0.3, H1 - 0.11)
-shell += roof_slab(0, 0, W, D, H1)
+shell += roof_slab(0, 0, W, D, H1, hole=ST_HOLE)
 
 top_z = H1 + 0.34
 if has_upper:
-    shell += storey(ox, oy, uw, ud, top_z, H2, False, random.randint(1, 2))
+    _upwalls = storey(ox, oy, uw, ud, top_z, H2, False, random.randint(1, 2),
+                      front_open=(_terr_gap >= 1.3))
+    shell += _upwalls
+    _upfront = _upwalls[3]
     timber += beams(ox, oy, uw - 0.3, ud - 0.3, top_z + H2 - 0.11)
     shell += roof_slab(ox, oy, uw, ud, top_z + H2, 0.32, 0.20)
+
+if INNER:
+    # THE FLIGHT: one masonry wedge under thin tread caps would be prettier,
+    # but the treads ARE the collision, so every one is its own true box -
+    # the same rule the outside stair follows. 0.30 of rise a step: the
+    # engine climbs 0.74, a person climbs 0.19; a palace climbs shallow.
+    _sr = ST_RISE / ST_N
+    for _k in range(ST_N):
+        _zt = 0.30 + _sr * (_k + 1)
+        _xk = ST_XS + ST_DIR * ST_TREAD * (_k + 0.5)
+        solid(ST_TREAD * 1.05, 1.24, _zt - 0.28, (_xk, ST_YL, 0.28 + (_zt - 0.28) / 2))
+    # the rail down the open side of the flight, segment by segment, so the
+    # hand-line climbs with the treads
+    for _k in range(0, ST_N, 3):
+        _zt = 0.30 + _sr * (_k + 2)
+        _xk = ST_XS + ST_DIR * ST_TREAD * (_k + 1.5)
+        solid(ST_TREAD * 3.2, 0.09, 0.80, (_xk, ST_YL - 0.66, _zt + 0.40))
+    # THE WELL IS RAILED above: across the far end and along the room side.
+    # The arrival side stays open - that is where you step off.
+    solid(0.09, 1.42, 0.85, (ST_HX0 - 0.045 if ST_DIR > 0 else ST_HX1 + 0.045,
+                             ST_YL, top_z + 0.425))
+    solid(ST_HX1 - ST_HX0 + 0.18, 0.09, 0.85,
+          ((ST_HX0 + ST_HX1) / 2, ST_YL - 0.70, top_z + 0.425))
+
+if has_upper:
+    # THE UPPER ROOM IS A ROOM: it gets its own furnishing spot, kept clear
+    # of the stairwell band so nothing is ever set down over the hole.
+    _ry1 = (ST_YL - 0.95) if INNER else (oy + ud / 2 - T - 0.6)
+    _ry0 = oy - ud / 2 + T + 0.6
+    if _ry1 - _ry0 > 1.6:
+        SPOTS.append({"c": [round(ox, 2), round(top_z + 0.3, 2),
+                            round(-(_ry0 + _ry1) / 2, 2)],
+                      "r": [round(uw / 2 - 1.15, 2), round((_ry1 - _ry0) / 2, 2)],
+                      "k": "room"})
+    # and a door onto the terrace wherever there is a terrace to walk out on
+    if _terr_gap >= 1.3:
+        _ufy = oy - ud / 2 + T / 2
+        _udx = ox + random.uniform(-uw * 0.15, uw * 0.15)
+        _udw, _udh = 1.25, 2.2
+        cut(_upfront, solid(_udw + 0.36, 0.24, _udh + 0.26,
+                            (_udx, _ufy - T / 2 + 0.12, top_z + _udh / 2), False))
+        cut(_upfront, solid(_udw, T + 1.2, _udh - _udw / 2,
+                            (_udx, _ufy, top_z + (_udh - _udw / 2) / 2), False))
+        cut(_upfront, cyl(_udw / 2, T + 1.2,
+                          (_udx, _ufy, top_z + _udh - _udw / 2),
+                          rot=(math.pi / 2, 0, 0), verts=14))
+        _ux0, _ux1 = ox - uw / 2, ox + uw / 2
+        for _a3, _b3 in ((_ux0, _udx - _udw / 2), (_udx + _udw / 2, _ux1)):
+            if _b3 - _a3 > 0.04:
+                COLLIDERS.append({"c": [round((_a3 + _b3) / 2, 3),
+                                        round(top_z + H2 / 2, 3), round(-_ufy, 3)],
+                                  "h": [round((_b3 - _a3) / 2, 3),
+                                        round(H2 / 2, 3), round(T / 2, 3)]})
+        if H2 - _udh > 0.04:
+            COLLIDERS.append({"c": [round(_udx, 3),
+                                    round(top_z + _udh + (H2 - _udh) / 2, 3),
+                                    round(-_ufy, 3)],
+                              "h": [round(_udw / 2, 3), round((H2 - _udh) / 2, 3),
+                                    round(T / 2, 3)]})
+        SPOTS.append({"c": [round(_udx - _udw / 2, 3), round(top_z, 3),
+                            round(-_ufy, 3)],
+                      "r": [round(_udw, 3), round(_udh, 3)], "k": "door"})
 
 top2_z = top_z + H2 + 0.32
 if has_upper and has_third:

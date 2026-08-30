@@ -243,11 +243,104 @@ def carpet(cx, cy, z, w, l, yaw=0.0, th=0.085, unit=3.2):
              uv=[(0.0, 0.0), (ru, 0.0), (ru, rv), (0.0, rv)])
 
 
+_SIM_CACHE = {}
+
+
+def _sim_panel(w_panel, h, seed):
+    """One curtain panel, DRAPED BY A REAL CLOTH SIMULATION.
+
+    The parametric version was an hourglass profile with a sine wave for
+    folds - and the owner called it what it was: too shapey, not organic. A
+    curtain's folds cannot be drawn, because their whole character is that
+    they are UNEQUAL - deep where the cloth is gathered, shallow at the hem,
+    and never the same twice. So the folds are not drawn here at all: a flat
+    panel with 1.7x fullness is pinned at the rod and at the holder, and
+    Blender's cloth solver hangs it under gravity for forty frames. The
+    accordion in the initial state is not a fold pattern - it is spare
+    MATERIAL, and where it ends up is the solver's decision, seeded
+    differently for every curtain in the palace.
+
+    Returns rows[t][u] of (across, depth, drop) in panel-local metres:
+    across 0 at the hinge edge, drop 0 at the rod going down."""
+    key = (round(w_panel, 2), round(h, 2), seed)
+    if key in _SIM_CACHE:
+        return _SIM_CACHE[key]
+    rnd = random.Random(seed * 6151 + 17)
+    NU, NT = 10, 20
+    HOLD_T = 0.52
+
+    me = bpy.data.meshes.new("simc")
+    ob = bpy.data.objects.new("simc", me)
+    bpy.context.collection.objects.link(ob)
+
+    verts = []
+    for it in range(NT + 1):
+        t = it / float(NT)
+        # the panel starts gathered at the rod, pinched at the holder,
+        # flaring to the hem - the SHAPE is the order; the folds are not
+        if t <= HOLD_T:
+            f = t / HOLD_T
+            f = f * f * (3 - 2 * f)
+            span = 0.55 + (0.42 - 0.30 * f) * w_panel
+        else:
+            f = (t - HOLD_T) / (1 - HOLD_T)
+            f = f * f * (3 - 2 * f)
+            # the hem flares, but not into a tent: at 1.4m a panel the pairs
+            # of neighbouring windows met in the middle and the wall below
+            # the sills was all cloth
+            span = 0.38 + (0.12 + 0.40 * f) * w_panel
+        for iu in range(NU + 1):
+            u = iu / float(NU)
+            # THE FULLNESS: the accordion stores 1.7x the hanging span of
+            # real material. The solver spends it as folds of its own
+            # choosing; the jitter decides where they break.
+            depth = 0.11 * math.sin(u * math.pi * 7.0 + seed) \
+                * (0.4 + 0.6 * t) + rnd.uniform(-0.02, 0.02)
+            verts.append((u * span, depth, -h * t))
+    faces = []
+    for it in range(NT):
+        for iu in range(NU):
+            a = it * (NU + 1) + iu
+            faces.append((a, a + 1, a + NU + 2, a + NU + 1))
+    me.from_pydata(verts, [], faces)
+
+    vg = ob.vertex_groups.new(name="pin")
+    vg.add(list(range(NU + 1)), 1.0, 'REPLACE')          # the rod
+    hr = int(NT * HOLD_T) * (NU + 1)
+    vg.add([hr + iu for iu in range(2, NU - 1)], 1.0, 'REPLACE')   # the cuff
+
+    cl = ob.modifiers.new("cl", 'CLOTH')
+    cl.settings.vertex_group_mass = "pin"
+    cl.settings.quality = 6
+    cl.settings.mass = 0.28
+    try:
+        cl.settings.bending_stiffness = 0.08
+    except AttributeError:
+        pass
+    sc = bpy.context.scene
+    sc.frame_set(1)
+    for f in range(1, 42):
+        sc.frame_set(f)
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = ob.evaluated_get(dg).to_mesh()
+    rows = []
+    for it in range(NT + 1):
+        row = []
+        for iu in range(NU + 1):
+            v = ev.vertices[it * (NU + 1) + iu].co
+            row.append((v.x, v.y, v.z))
+        rows.append(row)
+    ob.evaluated_get(dg).to_mesh_clear()
+    bpy.data.objects.remove(ob)
+    bpy.data.meshes.remove(me)
+    _SIM_CACHE[key] = rows
+    return rows
+
+
 def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
     """Cloth hung in an opening and GRASPED TO THE SIDE, held by a golden
-    holder - his order. A panel falls from the rod, is pinched at the holder a
-    little above half height, and flares again to the floor. That pinch is the
-    whole thing: without it a curtain is a board leaning on a wall."""
+    holder - his order. The drape itself comes out of a cloth simulation
+    (see _sim_panel); this only places the result and adds the metalwork."""
     fl = math.hypot(face[0], face[1]) or 1.0
     fx, fy = face[0] / fl, face[1] / fl
     yaw = math.atan2(fy, fx) + math.pi / 2
@@ -256,47 +349,29 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
     def P(a, o, z):
         return (cx + a * cs - o * sn, cy + a * sn + o * cs, z)
 
-    TT = 0.50                       # where along the drop the holder grips
-    NT, NU, TH = 9, 5, 0.035
+    TT = 0.52
+    TH = 0.030
     for sd in sides:
-        def edges(t):
-            """the panel's two edges as they run down: bunched, pinched, flared"""
-            if t <= TT:
-                f = t / TT
-                f = f * f * (3 - 2 * f)
-                a0 = 0.20 + (w / 2 - 0.25) * f
-                a1 = (w / 2 + 0.55) + 0.20 * f
-            else:
-                f = (t - TT) / (1 - TT)
-                f = f * f * (3 - 2 * f)
-                a0 = (w / 2 - 0.25) - 0.62 * f
-                a1 = (w / 2 + 0.75) + 0.34 * f
-            return sd * a0, sd * a1
+        seed = int(abs(cx * 37 + cy * 91 + z_top * 13)) + (1 if sd > 0 else 0)
+        rows = _sim_panel(w / 2, h, seed)
+        NT = len(rows) - 1
+        NU = len(rows[0]) - 1
+        # CLEAR OF THE WALL TRIM. At 0.16 the deeper folds of the simulated
+        # cloth swung back through the dado rail, and the gold band read as
+        # lying ON the curtain. The whole drape hangs a hand further out.
+        base_o = 0.32 + (0.05 if sd > 0 else 0.0)
 
-        def amp(t):
-            return 0.05 + 0.30 * (t ** 1.2) * \
-                (1.0 - 0.55 * math.exp(-((t - TT) ** 2) / 0.012))
-
-        grid = []
-        for it in range(NT + 1):
-            t = it / float(NT)
-            a0, a1 = edges(t)
-            row = []
-            for iu in range(NU + 1):
-                u = iu / float(NU)
-                a = a0 + (a1 - a0) * u
-                # the two panels hang at slightly different depths, as two
-                # curtains on one rod do - level with each other they meet in
-                # the middle and fight for every pixel
-                o = 0.16 + (0.05 if sd > 0 else 0.0) + \
-                    amp(t) * math.sin(u * math.pi * 3.0)
-                row.append((a, o, z_top - h * t))
-            grid.append(row)
         b0 = len(cloth.v)
         for side in (0, 1):
-            for row in grid:
-                for (a, o, z) in row:
-                    cloth.v.append(P(a, o - side * TH, z))
+            for row in rows:
+                for (sx, sy, sz) in row:
+                    a = sd * (0.20 + sx)
+                    # folds swing toward the ROOM only: a fold that swung back
+                    # went through the dado rail, and gold read as lying on
+                    # the cloth. The clamp flattens the deepest back-folds by
+                    # a few centimetres, which the eye never finds.
+                    o = base_o + max(sy, -0.08) - side * TH
+                    cloth.v.append(P(a, o, z_top + sz))
         VP = (NT + 1) * (NU + 1)
 
         def V(side, it, iu):
@@ -321,12 +396,14 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
                        V(1, NT, iu), smooth=True)
 
         # THE GOLDEN HOLDER: a cuff round the gathered cloth, on a short stem
-        # out of the jamb, with a knob at its end.
-        a0, a1 = edges(TT)
-        am = (a0 + a1) / 2
-        hz = z_top - h * TT
-        hx_, hy_, _ = P(am, 0.16, hz)
-        box(abs(a1 - a0) + 0.16, 0.34, 0.26, (hx_, hy_, hz), gold, yaw=yaw)
+        # out of the jamb, with a knob at its end. It sits where the sim was
+        # pinned, so the cloth visibly passes through its grip.
+        hrow = rows[int(NT * TT)]
+        ha = sd * (0.20 + (hrow[2][0] + hrow[NU - 2][0]) / 2)
+        hz = z_top + (hrow[2][2] + hrow[NU - 2][2]) / 2
+        span = abs(hrow[NU - 2][0] - hrow[2][0])
+        hx_, hy_, _ = P(ha, base_o, hz)
+        box(span + 0.20, 0.34, 0.26, (hx_, hy_, hz), gold, yaw=yaw)
         jx, jy, _ = P(sd * (w / 2 + 0.62), 0.10, hz)
         box(0.44, 0.13, 0.13, (jx, jy, hz), gold, yaw=yaw)
         sphere(0.15, (jx, jy, hz), gold, seg=8, rings=6)
@@ -354,8 +431,15 @@ def leaf3(cx, cy, cz, dv, sv, ln, wd):
     folia.quad(b0, b0 + 3, b0 + 2, b0 + 1)
 
 
-def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5):
-    """A five petal flower, flat, facing nrm - with a gold eye."""
+def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5, seed=None):
+    """A flower that GREW, not a stamp. The old one was five identical petals
+    at exactly 72 degrees - a rosette from a die. A real blossom has petals of
+    unequal size at uneven angles, some cupped up out of the plane, and it
+    passes the mirror test: flipped left-right it is a different flower.
+    npet is only a suggestion; the flower decides."""
+    rnd = random.Random(seed if seed is not None
+                        else int(cx * 511 + cy * 269 + cz * 97))
+    n = max(4, min(6, npet + rnd.choice((-1, 0, 0, 1))))
     nx, ny, nz = nrm
     nl = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
     nx, ny, nz = nx / nl, ny / nl, nz / nl
@@ -365,64 +449,135 @@ def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5):
     vx = ny * uz - nz * uy
     vy = nz * ux - nx * uz
     vz = nx * uy - ny * ux
-    for (pool, rr, n) in (((petal or bloom), r, npet), ((eye or gold), r * 0.30, 3)):
-        b0 = len(pool.v)
-        pool.v.append((cx + nx * 0.012, cy + ny * 0.012, cz + nz * 0.012))
-        for k in range(n):
-            a0 = k * 2 * math.pi / n
-            am = a0 + math.pi / n
-            a1 = a0 + 2 * math.pi / n
-            for (aa, q) in ((a0, 0.34), (am, 1.0), (a1, 0.34)):
-                pool.v.append((cx + (math.cos(aa) * ux + math.sin(aa) * vx) * rr * q,
-                               cy + (math.cos(aa) * uy + math.sin(aa) * vy) * rr * q,
-                               cz + (math.cos(aa) * uz + math.sin(aa) * vz) * rr * q))
-        for k in range(n):
-            i0 = b0 + 1 + k * 3
-            pool.tri(b0, i0, i0 + 1)
-            pool.tri(b0, i0 + 1, i0 + 2)
-            if pool is not gold:          # the eye lies on the petals: one side
-                pool.tri(b0, i0 + 1, i0)
-                pool.tri(b0, i0 + 2, i0 + 1)
+
+    # the petal angles: evenly spaced, then each pulled off its mark
+    angs = []
+    for k in range(n):
+        angs.append(k * 2 * math.pi / n + rnd.uniform(-0.22, 0.22))
+
+    pool = petal or bloom
+    b0 = len(pool.v)
+    pool.v.append((cx + nx * 0.012, cy + ny * 0.012, cz + nz * 0.012))
+    for k in range(n):
+        a0 = angs[k]
+        a1 = angs[(k + 1) % n] + (2 * math.pi if k == n - 1 else 0)
+        am = (a0 + a1) / 2 + rnd.uniform(-0.06, 0.06)
+        # A PETAL IS ROUND. The first grown version dropped the valley
+        # between petals to 0.30 of the radius, and every flower came out a
+        # starfish - the unequalness is right, the proportions were not.
+        # The valley stays high and the size varies gently.
+        q = rnd.uniform(0.88, 1.14)
+        cup = rnd.uniform(0.02, 0.12) * r
+        for (aa, qq, lift) in ((a0, 0.62, 0.0), (am, q, cup), (a1, 0.62, 0.0)):
+            pool.v.append((cx + (math.cos(aa) * ux + math.sin(aa) * vx) * r * qq + nx * lift,
+                           cy + (math.cos(aa) * uy + math.sin(aa) * vy) * r * qq + ny * lift,
+                           cz + (math.cos(aa) * uz + math.sin(aa) * vz) * r * qq + nz * lift))
+    for k in range(n):
+        i0 = b0 + 1 + k * 3
+        pool.tri(b0, i0, i0 + 1)
+        pool.tri(b0, i0 + 1, i0 + 2)
+        pool.tri(b0, i0 + 1, i0)
+        pool.tri(b0, i0 + 2, i0 + 1)
+
+    # the eye, still gold, still small
+    ep = eye or gold
+    e0 = len(ep.v)
+    ep.v.append((cx + nx * 0.03, cy + ny * 0.03, cz + nz * 0.03))
+    for k in range(3):
+        aa = k * 2.094 + rnd.uniform(0, 2.0)
+        rr = r * 0.26
+        ep.v.append((cx + (math.cos(aa) * ux + math.sin(aa) * vx) * rr + nx * 0.02,
+                     cy + (math.cos(aa) * uy + math.sin(aa) * vy) * rr + ny * 0.02,
+                     cz + (math.cos(aa) * uz + math.sin(aa) * vz) * rr + nz * 0.02))
+    ep.tri(e0, e0 + 1, e0 + 2)
+    ep.tri(e0, e0 + 2, e0 + 1)
 
 
 def garland(p0, p1, sag, nrm=(0, 0, 1), seed=0, n=11):
-    """A rope of leaves and flowers slung between two points and hanging in a
-    half circle - his 'floral rope-like thing that stretches along it all the
-    way, and goes in half circles'. It is what turns a bare arcade into a
-    garden, and it costs almost nothing to carry."""
+    """A rope of leaves and flowers slung between two points - his 'floral
+    rope-like thing that goes in half circles'. GROWN, not metered out: the
+    sprigs come at uneven intervals, the leaves pair and sometimes fail to,
+    and the flowers come in clusters of nothing, one, two or three with buds
+    among them - because that is how anything tied from real cuttings hangs.
+    The old version placed one flower at every link like beads on a wire."""
     rnd = random.Random(seed * 7919 + 13)
-    pts = []
-    for i in range(n + 1):
-        t = i / float(n)
-        pts.append((p0[0] + (p1[0] - p0[0]) * t,
-                    p0[1] + (p1[1] - p0[1]) * t,
-                    p0[2] + (p1[2] - p0[2]) * t - sag * math.sin(math.pi * t)))
-    for i in range(n):
+
+    def at(t):
+        return (p0[0] + (p1[0] - p0[0]) * t,
+                p0[1] + (p1[1] - p0[1]) * t,
+                p0[2] + (p1[2] - p0[2]) * t - sag * math.sin(math.pi * t))
+
+    # the rope itself, in even links (it IS a rope; only the growth is uneven)
+    # THE ROPE IS A CORD, NOT A CHAIN OF TIMBERS. At 18cm square and eleven
+    # links the old one was a zigzag of green planks with sharp corners, and
+    # it was the loudest thing in the arcade. A garland's rope is 6cm of
+    # bound stems in a smooth catenary, and by the time the leaves are on it
+    # you should hardly find it.
+    nn = max(n, 22)
+    pts = [at(i / float(nn)) for i in range(nn + 1)]
+    for i in range(nn):
         (x0, y0, z0), (x1, y1, z1) = pts[i], pts[i + 1]
         mx, my, mz = (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2
         dx, dy, dz = x1 - x0, y1 - y0, z1 - z0
         ln = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
-        box(ln * 1.16, 0.20, 0.20, (mx, my, mz), folia,
+        box(ln * 1.10, 0.06, 0.06, (mx, my, mz), folia,
             yaw=math.atan2(dy, dx),
             tilt=-math.asin(max(-1.0, min(1.0, dz / ln))))
+
+    # THE GROWTH: walk the rope at uneven steps and let each sprig decide
+    # what it carries.
+    t = rnd.uniform(0.03, 0.10)
+    while t < 0.97:
+        gx, gy, gz = at(t)
+        t1 = min(1.0, t + 0.015)
+        nx2, ny2, nz2 = at(t1)
+        dx, dy, dz = nx2 - gx, ny2 - gy, nz2 - gz
+        ln = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
         dv = (dx / ln, dy / ln, dz / ln)
         sv = (-dv[1], dv[0], 0.0)
         sl = math.hypot(sv[0], sv[1]) or 1.0
         sv = (sv[0] / sl, sv[1] / sl, 0.0)
-        for k in (-1, 1):
-            a = rnd.uniform(0.7, 1.5) * k
+
+        # leaves: usually a pair, sometimes one, angles never matching
+        # LEAVES ARE HAND-SIZED. The old ones ran to 72cm - palm fronds
+        # pinned to a ribbon. A garland leaf is 12-22cm, and there are
+        # several at every sprig, each at its own angle and droop, so the
+        # cord disappears under foliage instead of wearing four flags.
+        for _ in range(rnd.choice((3, 4, 4, 5))):
+            k = rnd.choice((-1, 1))
+            a = rnd.uniform(0.35, 1.85) * k
+            droop = rnd.uniform(0.25, 0.85)
             ld = (dv[0] * math.cos(a) + sv[0] * math.sin(a) * 0.7,
                   dv[1] * math.cos(a) + sv[1] * math.sin(a) * 0.7,
-                  -abs(math.sin(a)) * 0.55)
-            leaf3(mx, my, mz, ld, sv, rnd.uniform(0.44, 0.68), rnd.uniform(0.16, 0.26))
-        # HIS ORDER: more flowers in the hanging rope. One at every link,
-        # and a second turned aside on most of them.
-        blossom3(mx, my, mz - 0.13, nrm, rnd.uniform(0.20, 0.30))
-        if i % 3 != 2:
-            blossom3(mx + sv[0] * 0.20, my + sv[1] * 0.20, mz - 0.05,
-                     (nrm[0] * 0.7 + sv[0] * 0.7, nrm[1] * 0.7 + sv[1] * 0.7, 0.25),
-                     rnd.uniform(0.15, 0.24))
+                  -abs(math.sin(a)) * droop)
+            leaf3(gx + rnd.uniform(-0.06, 0.06), gy + rnd.uniform(-0.06, 0.06),
+                  gz - rnd.uniform(0.0, 0.08), ld, sv,
+                  rnd.uniform(0.17, 0.30), rnd.uniform(0.07, 0.12))
 
+        # flowers: a cluster of 0-3, each its own size, facing and droop,
+        # with small closed buds among them
+        for _ in range(rnd.choice((0, 1, 1, 2, 2, 3))):
+            off = rnd.uniform(-0.18, 0.18)
+            drop2 = rnd.uniform(0.10, 0.34)
+            fx2 = gx + sv[0] * off + dv[0] * rnd.uniform(-0.08, 0.08)
+            fy2 = gy + sv[1] * off + dv[1] * rnd.uniform(-0.08, 0.08)
+            fz2 = gz - drop2
+            fn = (nrm[0] + sv[0] * off * 2.2 + rnd.uniform(-0.3, 0.3),
+                  nrm[1] + sv[1] * off * 2.2 + rnd.uniform(-0.3, 0.3),
+                  nrm[2] * 0.6 - rnd.uniform(0.0, 0.5))
+            # the flowers FACE OUT. Tipped at random half of them stood
+            # edge-on and the swag read as wire with specks; a garland is
+            # tied so its flowers look at the room.
+            fn2 = (nrm[0] + rnd.uniform(-0.18, 0.18),
+                   nrm[1] + rnd.uniform(-0.18, 0.18),
+                   -rnd.uniform(0.10, 0.35))
+            if rnd.random() < 0.18:
+                blossom3(fx2, fy2, fz2, fn2, rnd.uniform(0.08, 0.12),
+                         npet=4, seed=rnd.randrange(1 << 20))   # a bud
+            else:
+                blossom3(fx2, fy2, fz2, fn2, rnd.uniform(0.20, 0.34),
+                         seed=rnd.randrange(1 << 20))
+        t += rnd.uniform(0.055, 0.115)
 
 
 def swag_row(x0, y0, x1, y1, z, n, sag, nrm=(0, 0, 1), seed=0):
@@ -491,7 +646,10 @@ def sconce(cx, cy, cz, face, power=0.5, reach=7.0):
     ox, oy = cx + fx * 0.56, cy + fy * 0.56
     cyl(0.13, 0.20, (ox, oy, cz + 0.30), gold, verts=10, r_top=0.24)  # the bowl
     cyl(0.20, 0.06, (ox, oy, cz + 0.42), glow, verts=10)              # the coals
-    cyl(0.135, 0.56, (ox, oy, cz + 0.72), glow, verts=6, r_top=0.008)
+    # NO FLAME GEOMETRY. The gold-lit cone that stood here read as a gilded
+    # ornament, not a fire - and the engine already hangs its own soft flame
+    # sprite on every lamp. The bowl and the coals are the fixture; the
+    # burning is the engine's.
     lamp_at(ox, oy, cz + 0.52, power, reach)
 
 
@@ -973,6 +1131,61 @@ for _sxg in (-1, 1):
     swag_row(_sxg * 8.5, -10.5, _sxg * 8.5, 10.5, z1 + S1_H - 1.55, 3, 0.72,
              nrm=(-_sxg, 0, 0), seed=51 + _sxg)
 
+# THE HALL IS LIVED IN. The court of a palace is not an empty carpet: it is
+# the diwan - cushions in a broken line down both long walls where people sit
+# against the wall - sitting groups round low tables in the side aisles,
+# braziers holding the night off, and the dais end at the north with the
+# books and the writing things of the majlis. The disorder has its causes:
+# cushions sit at the angles people left them at, one group's table is
+# pushed aside, the scrolls at the dais lie where they were put down.
+_hr = random.Random(4051)
+for _sy4 in (-1, 1):
+    _hx4 = -19.0
+    while _hx4 < 19.0:
+        if abs(_hx4) > 3.2 or _sy4 > 0:          # the south door stays clear
+            if _hr.random() > 0.18:              # a broken line, not a fence
+                plant("p_cushions", _hx4 + _hr.uniform(-0.2, 0.2),
+                      _sy4 * (14.6 - 1.15) + _hr.uniform(-0.25, 0.25), CY,
+                      rot=(math.pi / 2 if _sy4 < 0 else -math.pi / 2)
+                      + _hr.uniform(-0.4, 0.4), sc=_hr.uniform(0.85, 1.05))
+        _hx4 += _hr.uniform(1.35, 2.1)
+for (_gx5, _gy5) in ((-14.5, -6.0), (14.5, -6.0), (-14.5, 6.0), (14.5, 6.0)):
+    _ox5 = _hr.uniform(-0.6, 0.6)
+    _oy5 = _hr.uniform(-0.6, 0.6)
+    plant("p_table", _gx5 + _ox5, _gy5 + _oy5, CY, rot=_hr.uniform(0, 6.28))
+    plant("p_oillamp", _gx5 + _ox5, _gy5 + _oy5, CY + 0.48, sc=0.8,
+          rot=_hr.uniform(0, 6.28))
+    if _hr.random() < 0.6:
+        plant("p_bowl", _gx5 + _ox5 + _hr.uniform(-0.35, 0.35),
+              _gy5 + _oy5 + _hr.uniform(-0.35, 0.35), CY + 0.48,
+              rot=_hr.uniform(0, 6.28), sc=0.7)
+    for _c5 in range(_hr.choice((3, 4))):
+        _a5 = _hr.uniform(0, 6.283)
+        _d5 = _hr.uniform(1.4, 2.3)
+        plant("p_cushions", _gx5 + _ox5 + math.cos(_a5) * _d5,
+              _gy5 + _oy5 + math.sin(_a5) * _d5, CY,
+              rot=_a5 + math.pi + _hr.uniform(-0.55, 0.55),
+              sc=_hr.uniform(0.8, 1.0))
+plant("p_brazier", -10.6, 0.4, CY, rot=_hr.uniform(0, 6.28))
+plant("p_brazier", 10.6, -0.6, CY, rot=_hr.uniform(0, 6.28))
+FIRES.append({"x": -10.6, "z": -0.4, "y": round(CY + 0.72, 2), "s": 0.34,
+              "p": 0.85, "g": round(CY, 2)})
+FIRES.append({"x": 10.6, "z": 0.6, "y": round(CY + 0.72, 2), "s": 0.34,
+              "p": 0.85, "g": round(CY, 2)})
+# the dais: the majlis end, where the books are
+for (_dx6, _dy6, _dr6) in ((-2.2, 12.4, 0.3), (0.0, 12.9, 0.0),
+                           (2.3, 12.5, -0.4), (-1.1, 11.6, 0.6),
+                           (1.2, 11.5, -0.5)):
+    plant("p_cushions", _dx6, _dy6, CY, rot=math.pi + _dr6,
+          sc=_hr.uniform(0.9, 1.05))
+plant("p_table", 0.0, 10.6, CY, rot=_hr.uniform(-0.1, 0.1))
+plant("p_inkset", 0.15, 10.5, CY + 0.48, rot=_hr.uniform(0, 6.28))
+plant("p_books", -3.6, 13.6, CY, rot=0.5)
+plant("p_scrolls", 3.3, 13.3, CY, rot=_hr.uniform(0, 6.28))
+plant("p_scrolls", 1.9, 10.9, CY, rot=_hr.uniform(0, 6.28))
+plant("p_chest", -6.4, 13.7, CY, rot=math.pi + 0.08)
+plant("p_chest", 6.2, 13.6, CY, rot=math.pi - 0.15)
+
 # CLOTH AT EVERY WINDOW, not at one door. The hall's ground storey has
 # nineteen openings in its outer walls; each one gets its curtain, hung inside.
 for _wx in (-19, -15, -11, 11, 15, 19):
@@ -1219,6 +1432,37 @@ def module(cx, cy, face, gate=False, code=""):
         for sa4 in (-1, 1):
             sdx, sdy = P(sa4 * 3.6, -(w_hy - WT2 - 0.18))
             sconce(sdx, sdy, fl_z + 2.30, inward, power=0.5, reach=8.0)
+
+        # THE LIVED-IN LAW. A room with a carpet and a lantern and nothing
+        # else is a show flat. Someone lives in each of these, and the
+        # furniture says what they were doing: a low table pushed a little
+        # off the carpet's centre with cushions shoved back from it at
+        # unequal angles - people got up; a chest against the far wall; the
+        # water jug inside the door where a person coming in would set it.
+        # Every room draws from its own seed, so no two are furnished alike.
+        fr = random.Random(int(cx * 31 + cy * 57) & 0xffff)
+        fyaw = math.atan2(-ox, oy)
+        tx_, ty_ = P(fr.uniform(-1.4, 1.4), fr.uniform(-1.2, 1.8))
+        plant("p_table", tx_, ty_, fl_z, rot=fyaw + fr.uniform(-0.3, 0.3))
+        plant("p_oillamp", tx_, ty_, fl_z + 0.48, rot=fr.uniform(0, 6.28), sc=0.8)
+        if fr.random() < 0.5:
+            plant("p_bowl", tx_ + fr.uniform(-0.3, 0.3), ty_ + fr.uniform(-0.3, 0.3),
+                  fl_z + 0.48, rot=fr.uniform(0, 6.28), sc=0.7)
+        for _ in range(fr.choice((2, 3, 3))):
+            ca_ = fr.uniform(0, 6.283)
+            cd_ = fr.uniform(1.3, 2.1)
+            cxx, cyy = P(fr.uniform(-1.4, 1.4) + math.cos(ca_) * cd_,
+                         fr.uniform(-1.2, 1.8) + math.sin(ca_) * cd_)
+            plant("p_cushions", cxx, cyy, fl_z,
+                  rot=ca_ + math.pi + fr.uniform(-0.5, 0.5), sc=fr.uniform(0.8, 1.0))
+        wx2_, wy2_ = P(fr.uniform(-(w_hx - 2.6), w_hx - 2.6), w_hy - WT2 - 0.85)
+        plant(fr.choice(("p_chest", "p_crates", "p_basket")), wx2_, wy2_, fl_z,
+              rot=fyaw + math.pi + fr.uniform(-0.12, 0.12))
+        jx_, jy_ = P(fr.choice((-1, 1)) * (w_hx - 1.9), -(w_hy - 2.3))
+        plant("p_waterjug", jx_, jy_, fl_z, rot=fr.uniform(0, 6.28))
+        if fr.random() < 0.4:
+            bx_, by_ = P(fr.uniform(-2.0, 2.0), w_hy - WT2 - 1.9)
+            plant("p_books", bx_, by_, fl_z, rot=fr.uniform(0, 6.28), sc=0.9)
         # a second curtain, at the middle niche of the far wall
         nqx, nqy = P(0, w_hy - WT2 - 0.14)
         curtain(nqx, nqy, fl_z + 5.05, 1.9, 4.2, face=(ox, oy))
@@ -1702,7 +1946,7 @@ parts.append(make_mesh(glow, (1.0, 0.58, 0.22, 1), 0.9, 0.0,
                        emis=(1.0, 0.40, 0.09, 1), estr=0.80))
 # the amber panes of the lanterns: lit from within, warm, never white
 parts.append(make_mesh(pane, (0.72, 0.40, 0.16, 1), 0.42, 0.0,
-                       emis=(0.98, 0.36, 0.08, 1), estr=0.34))
+                       emis=(1.0, 0.55, 0.16, 1), estr=0.85))
 # THE SOIL OF THE BEDS. Flat brown paint read as cardboard under the plants -
 # a garden bed is grass and turned earth, and it wants a surface.
 parts.append(make_mesh(earth, (0.38, 0.30, 0.21, 1), 1.0, 0.0,
