@@ -173,7 +173,10 @@ if KIND == "barrel":
     cyl(0.30, 0.30, 0.04, (0, 0, 0.93), verts=16)
 
 elif KIND == "barrels":
-    spots = [(0, 0, 0), (0.78, 0.12, 0), (0.36, 0.72, 0), (0.42, 0.3, 0.94)]
+    # the ground barrels top out at z 0.90 (centre 0.45 + half-height 0.45),
+    # so the ridden barrel's base starts exactly there - spawned at 0.94 it
+    # hung 4 cm in the air above the three rims it is meant to rest across
+    spots = [(0, 0, 0), (0.78, 0.12, 0), (0.36, 0.72, 0), (0.42, 0.3, 0.90)]
     for i, sp in enumerate(spots):
         b = cyl(0.33, 0.33, 0.9, (sp[0], sp[1], sp[2] + 0.45), verts=14,
                 collide=True)
@@ -182,12 +185,32 @@ elif KIND == "barrels":
             torus(0.345, 0.026, (sp[0], sp[1], sp[2] + z))
 
 elif KIND == "crates":
-    for i, sp in enumerate([(0, 0, 0, 0.0), (0.92, 0.1, 0, 0.4), (0.3, 0.84, 0, -0.3), (0.5, 0.35, 0.72, 0.2)]):
-        s = random.uniform(0.62, 0.78)
-        c = box(s, s, s * 0.92, (sp[0], sp[1], sp[2] + s * 0.46), sp[3], collide=True)
+    # THE STACKED CRATE SITS ON A REAL CRATE. Its base was hard-coded at
+    # z 0.72 while the ground crates roll their size at random (top =
+    # s*0.92, s in 0.62..0.78), so it shipped floating 5 cm up - and it was
+    # centred over the GAP between all three footprints, resting on nothing.
+    # So: roll the ground crates first and remember each one's actual size,
+    # then set the top crate down ON the tallest one, centred over it,
+    # bedded 5 mm so the jittered faces meet.
+    grounds = []
+    for (gx, gy, grot) in [(0, 0, 0.0), (0.92, 0.1, 0.4), (0.3, 0.84, -0.3)]:
+        grounds.append((gx, gy, grot, random.uniform(0.62, 0.78)))
+    bx, by, brot, bs = max(grounds, key=lambda g: g[3])
+    stack = [(gx, gy, 0.0, grot, gs) for (gx, gy, grot, gs) in grounds]
+    stack.append((bx, by, bs * 0.92 - 0.005, brot + 0.2, random.uniform(0.62, 0.78)))
+    for (cx, cy, cz, rot, s) in stack:
+        c = box(s, s, s * 0.92, (cx, cy, cz + s * 0.46), rot, collide=True)
         jitter(c, 0.01)
+        # the battens turn WITH the crate: the old offset was applied in
+        # world axes, so on every rotated crate the batten missed the face
+        # centre - part buried, part floating off the corner. And battens
+        # belong on the plank edges, top and bottom, not one band at
+        # mid-height on an extruded cube.
         for e in (-1, 1):
-            box(s + 0.03, 0.05, 0.07, (sp[0], sp[1] + e * s / 2, sp[2] + s * 0.46), sp[3])
+            ox = -e * (s / 2) * math.sin(rot)
+            oy = e * (s / 2) * math.cos(rot)
+            for bt in (0.08, 0.84):
+                box(s + 0.03, 0.05, 0.07, (cx + ox, cy + oy, cz + s * bt), rot)
 
 elif KIND == "jars":
     for k, (jx, jy, js) in enumerate([(-0.22, 0.05, 1.0), (0.16, -0.08, 0.85), (0.05, 0.22, 0.7)]):
@@ -225,14 +248,30 @@ elif KIND == "sacks":
         prof = [(r * sc * (1.0 + random.uniform(-0.05, 0.05)), z * sc)
                 for (r, z) in prof]
         b = lathe(prof, segments=18, thickness=0.010)
+        rz = random.uniform(0, 6.28)
         b.location = (cx, cy, cz)
-        b.rotation_euler = (lean[0], lean[1], random.uniform(0, 6.28))
+        b.rotation_euler = (lean[0], lean[1], rz)
         bpy.ops.object.select_all(action='DESELECT')
         b.select_set(True)
         bpy.context.view_layer.objects.active = b
         bpy.ops.object.transform_apply(location=True, rotation=True)
         jitter(b, 0.012 * sc)                       # the weave never sits true
-        torus(0.098 * sc, 0.016 * sc, (cx, cy, cz + 0.478 * sc), seg=12)
+        # THE CORD IS TIED TO THE NECK, SO IT LEANS WITH THE SACK. It used
+        # to be dropped at the un-leaned neck spot AFTER the sack's tilt
+        # was baked, so on every leaning sack the ring hung off the neck -
+        # clipping cloth on one side, hovering in air on the other. Build
+        # it in the sack's own frame instead: bake the neck offset into the
+        # ring's mesh, then give it the sack's location and rotation_euler
+        # and apply them the same way, so it lands exactly where the neck
+        # went and tilts with it.
+        t = torus(0.098 * sc, 0.016 * sc, (0, 0, 0.478 * sc), seg=12)
+        bpy.ops.object.select_all(action='DESELECT')
+        t.select_set(True)
+        bpy.context.view_layer.objects.active = t
+        bpy.ops.object.transform_apply(location=True)  # neck offset into mesh
+        t.location = (cx, cy, cz)
+        t.rotation_euler = (lean[0], lean[1], rz)
+        bpy.ops.object.transform_apply(location=True, rotation=True)
         rec((cx, cy, cz + 0.24 * sc), 0.30 * sc, 0.30 * sc, 0.28 * sc)
         return b
 
@@ -246,21 +285,54 @@ elif KIND == "sacks":
                  (random.uniform(-0.10, 0.10), random.uniform(-0.10, 0.10)))
 
 elif KIND == "awning":
-    # four poles and a sagging cloth, the shade over a stall
+    # CLOTH THAT HANGS, NOT CLOTH THAT IS DRAWN. The old cloth was the
+    # banned pattern by name: a grid pushed down by (1-u^2)(1-w^2)*0.34 - a
+    # perfect mirror-symmetric paraboloid with zero randomness, its free
+    # edges dead straight while the held middle sagged, backwards from real
+    # canvas. The folds are not drawn any more: like the palace curtains,
+    # the panel is pinned where it is actually held - the two rail edges,
+    # which carry the four pole-top corners - and dropped under gravity for
+    # forty frames, so the sag is the solver's. A small random jitter
+    # seeded into the flat mesh decides where the folds break, so they
+    # come out unequal: mirror the render now and it changes.
     W, D, H = 3.4, 2.4, 2.5
     for sx in (-1, 1):
         for sy in (-1, 1):
             cyl(0.055, 0.05, H, (sx * W / 2, sy * D / 2, H / 2), verts=8, collide=True)
-    bpy.ops.mesh.primitive_grid_add(x_subdivisions=8, y_subdivisions=6, size=1,
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=16, y_subdivisions=10, size=1,
                                     location=(0, 0, H))
     cloth = bpy.context.active_object
     cloth.scale = (W / 2 + 0.2, D / 2 + 0.2, 1)
     bpy.ops.object.transform_apply(scale=True)
     me = cloth.data
+    pinned = [v.index for v in me.vertices
+              if abs(abs(v.co.y) - (D / 2 + 0.2)) < 0.01]
     for v in me.vertices:
-        u = abs(v.co.x) / (W / 2 + 0.2)
-        w = abs(v.co.y) / (D / 2 + 0.2)
-        v.co.z -= (1 - u * u) * (1 - w * w) * 0.34
+        if v.index not in pinned:                   # the tied edges stay put
+            v.co.y += random.uniform(-0.02, 0.02)
+    vg = cloth.vertex_groups.new(name="pin")
+    vg.add(pinned, 1.0, 'REPLACE')
+    cl = cloth.modifiers.new("cl", 'CLOTH')
+    cl.settings.vertex_group_mass = "pin"
+    cl.settings.quality = 6
+    cl.settings.mass = 0.25
+    try:
+        # canvas, not silk: stiff in the weave so the span between the
+        # rails sags like an awning, not a hammock to the counter
+        cl.settings.tension_stiffness = 40
+        cl.settings.shear_stiffness = 40
+        cl.settings.bending_stiffness = 0.10
+    except AttributeError:
+        pass
+    scene.frame_set(1)
+    for f in range(1, 42):
+        scene.frame_set(f)
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = cloth.evaluated_get(dg).to_mesh()
+    for v, evv in zip(me.vertices, ev.vertices):
+        v.co = evv.co
+    cloth.evaluated_get(dg).to_mesh_clear()
+    cloth.modifiers.remove(cl)
     sol = cloth.modifiers.new("sol", 'SOLIDIFY')
     sol.thickness = 0.03
     bpy.context.view_layer.objects.active = cloth
@@ -291,13 +363,42 @@ elif KIND == "cart":
     for sy in (-1, 1):
         box(1.7, 0.08, 0.3, (0, sy * 0.46, 0.8), collide=True)
     box(0.08, 0.95, 0.3, (-0.84, 0, 0.8))
+    # A WHEEL IS RIM, HUB AND SPOKES. The old wheel was a solid disc with
+    # six "spokes" whose offset was multiplied by zero - six boxes
+    # z-fighting at one point under the disc, the angle computed for them
+    # never used. Now: an annular rim (a torus turned onto the axle line),
+    # a hub boss, and three full-diameter rods that read as six spokes.
     for sy in (-1, 1):
-        w = cyl(0.44, 0.44, 0.1, (0.2, sy * 0.56, 0.44), rot=(math.pi / 2, 0, 0), verts=16)
-        for k in range(6):
+        rim = torus(0.40, 0.045, (0.2, sy * 0.56, 0.44), seg=18)
+        bpy.ops.object.select_all(action='DESELECT')
+        rim.select_set(True)
+        bpy.context.view_layer.objects.active = rim
+        rim.rotation_euler = (math.pi / 2, 0, 0)    # ring axis onto the axle
+        bpy.ops.object.transform_apply(rotation=True)
+        cyl(0.07, 0.07, 0.14, (0.2, sy * 0.56, 0.44), rot=(math.pi / 2, 0, 0), verts=8)
+        for k in range(3):
             a = k * math.pi / 3
-            box(0.06, 0.06, 0.82, (0.2 + math.cos(a) * 0, sy * 0.56, 0.44), 0)
-    for sx in (-1, 1):
-        cyl(0.05, 0.04, 1.5, (-1.5, sx * 0.3, 0.72), rot=(0, math.pi / 2, 0), verts=8)
+            cyl(0.028, 0.028, 0.78, (0.2, sy * 0.56, 0.44), rot=(0, a, 0), verts=6)
+    # THE WHEELS TURN ON AN AXLE THAT CARRIES THE BED. There was none: the
+    # wheel inner faces stopped 3.5 cm short of the bed with clear air
+    # between. The axle runs hub to hub; at r 0.05 its top is z 0.49 and
+    # the bed underside 0.55, so two bolster blocks bridge axle to bed -
+    # without them the running gear still would not touch the cart.
+    cyl(0.05, 0.05, 1.22, (0.2, 0, 0.44), rot=(math.pi / 2, 0, 0), verts=10)
+    for sy in (-1, 1):
+        box(0.14, 0.10, 0.12, (0.2, sy * 0.35, 0.50))
+    # THE SHAFTS REST ON THE GROUND. A two-wheeled cart at rest tips onto
+    # its shafts; held dead level at z 0.72 with nothing under their far
+    # ends it read as suspended. Each shaft leaves the bed's tail (thick
+    # end buried in the slab) and comes down until its tip lies on the
+    # ground. No collider on them, so the pose costs nothing.
+    SH_L = 1.5
+    drop = 0.62 - 0.04                  # bed tail down to a tip lying at z 0.04
+    tilt = math.asin(drop / SH_L)
+    dx = math.sqrt(SH_L * SH_L - drop * drop)
+    for sy in (-1, 1):
+        cyl(0.04, 0.05, SH_L, (-0.80 - dx / 2, sy * 0.3, (0.62 + 0.04) / 2),
+            rot=(0, math.pi / 2 - tilt, 0), verts=8)
 
 elif KIND == "well":
     # THE SHAFT IS MUD BRICK AND THE COPING IS STONE. That is how a well in a
@@ -368,9 +469,47 @@ elif KIND == "stall":
     bpy.context.view_layer.objects.active = cloth
     bpy.ops.object.modifier_apply(modifier=sol.name)
     parts.append(cloth)
-    for i in range(5):
-        s = random.uniform(0.16, 0.26)
-        sphere(s, (random.uniform(-0.85, 0.85), random.uniform(-0.3, 0.3), 0.92 + s))
+    # GOODS, NOT CANNONBALLS. The old goods were five bare uv-spheres
+    # 32-52 cm across - half-metre wood-textured balls on the counter.
+    # A stall sells things a hand can lift: lathed jars (the jar branch's
+    # own profile) and small tied sacks (the sack branch's own profile,
+    # scaled down), each sitting ON the bench top at z 0.92 with its own
+    # lean and turn, jars clustered at one end, sacks at the other.
+    def stall_jar(jx, jy, js, yaw):
+        j = lathe([(0.08 * js, 0.0), (0.14 * js, 0.03), (0.19 * js, 0.14),
+                   (0.21 * js, 0.3), (0.17 * js, 0.44), (0.11 * js, 0.52),
+                   (0.13 * js, 0.58), (0.12 * js, 0.60)])
+        slot(j, "clay")             # a clay jar must not read as carved wood
+        j.location = (jx, jy, 0.92)
+        j.rotation_euler = (random.uniform(-0.04, 0.04),
+                            random.uniform(-0.04, 0.04), yaw)
+        bpy.ops.object.select_all(action='DESELECT')
+        j.select_set(True)
+        bpy.context.view_layer.objects.active = j
+        bpy.ops.object.transform_apply(location=True, rotation=True)
+
+    def stall_sack(sx2, sy2, sc2):
+        prof = [(0.000, 0.000), (0.250, 0.000), (0.292, 0.055), (0.318, 0.150),
+                (0.312, 0.255), (0.278, 0.340), (0.196, 0.410), (0.116, 0.452),
+                (0.086, 0.478), (0.132, 0.520), (0.070, 0.556), (0.000, 0.566)]
+        prof = [(r * sc2 * (1.0 + random.uniform(-0.05, 0.05)), z * sc2)
+                for (r, z) in prof]
+        s2 = lathe(prof, segments=14, thickness=0.010)
+        slot(s2, "cloth")
+        s2.location = (sx2, sy2, 0.92)
+        s2.rotation_euler = (random.uniform(-0.06, 0.06),
+                            random.uniform(-0.06, 0.06), random.uniform(0, 6.28))
+        bpy.ops.object.select_all(action='DESELECT')
+        s2.select_set(True)
+        bpy.context.view_layer.objects.active = s2
+        bpy.ops.object.transform_apply(location=True, rotation=True)
+        jitter(s2, 0.006)
+
+    stall_jar(-0.72, -0.10, 0.80, 0.6)
+    stall_jar(-0.38, 0.16, 0.72, 2.1)
+    stall_jar(-0.30, -0.22, 0.62, 4.0)
+    stall_sack(0.42, -0.08, 0.52)
+    stall_sack(0.78, 0.14, 0.44)
 
 elif KIND == "carpet":
     bpy.ops.mesh.primitive_grid_add(x_subdivisions=10, y_subdivisions=7, size=1, location=(0, 0, 0.02))
@@ -426,7 +565,15 @@ elif KIND == "table":
             cyl(0.048, 0.034, 0.26, (lx, ly, 0.115), verts=14)
             cyl(0.056, 0.052, 0.035, (lx, ly, 0.017), verts=14)
             torus(0.048, 0.011, (lx, ly, 0.235), seg=12)
-    box(0.88, 0.05, 0.05, (0, 0, 0.11))                 # low stretcher
+    # AN H-STRETCHER JOINS THE LEGS. The old single bar ran down the
+    # centre line at y=0 while the legs stand at y=+-0.28: it touched
+    # nothing at either end, a stick floating under the table. Two end
+    # rails run along y at each leg pair - length 0.56 buries their ends
+    # in the leg shafts - and the centre bar ties the rails together, its
+    # ends at x=+-0.44 landing inside them.
+    for sx in (-1, 1):
+        box(0.05, 0.56, 0.05, (sx * 0.45, 0, 0.11))     # end rails, leg to leg
+    box(0.88, 0.05, 0.05, (0, 0, 0.11))                 # centre bar between rails
 
 elif KIND == "stool":
     # a dished seat with a moulding under its rim, three splayed turned legs,
@@ -543,16 +690,24 @@ elif KIND == "bowarrows":
                                      major_segments=18, minor_segments=5,
                                      rotation=(math.pi / 2, 0, 0))
     parts.append(bpy.context.active_object)
-    cyl(0.14, 0.16, 0.42, (0.44, 0.06, 0.21), verts=12)
+    # A QUIVER IS A HAND'S SPAN ACROSS, NOT A BARREL. At r 0.14-0.16 it
+    # was 28-32 cm in diameter, double anything a man slings on his back;
+    # r 0.06-0.07 is believable. The arrows' scatter and tilt shrink with
+    # it - they used to wander +-0.05, wider than the new mouth - so every
+    # shaft now stays inside the leather instead of hanging beside it.
+    cyl(0.06, 0.07, 0.42, (0.44, 0.06, 0.21), verts=12)
     for i in range(6):
         cyl(0.008, 0.008, 0.66,
-            (0.44 + random.uniform(-0.05, 0.05), 0.06 + random.uniform(-0.05, 0.05), 0.5),
-            rot=(random.uniform(-0.1, 0.1), random.uniform(-0.08, 0.08), 0), verts=4)
+            (0.44 + random.uniform(-0.025, 0.025), 0.06 + random.uniform(-0.025, 0.025), 0.5),
+            rot=(random.uniform(-0.05, 0.05), random.uniform(-0.04, 0.04), 0), verts=4)
 
 elif KIND == "basket":
     b = cyl(0.24, 0.19, 0.3, (0, 0, 0.15), verts=14, collide=True)
     jitter(b, 0.012)
-    torus(0.24, 0.02, (0, 0, 0.3), seg=14)
+    # the rim rides the wall's LIP: the wall tapers to r 0.19 at the top,
+    # and the old hoop (major 0.24) circled 3 cm outside it - a detached
+    # ring hovering round the mouth
+    torus(0.19, 0.02, (0, 0, 0.3), seg=14)
     for i in range(4):
         sphere(0.07, (random.uniform(-0.1, 0.1), random.uniform(-0.1, 0.1), 0.32))
 
@@ -816,6 +971,10 @@ TINT = {
 SLOT_TEX = {
     "brick": "t_mudbrick_d.jpg",
     "stone": "t_sandstone_d.jpg",
+    # the stall's goods: a clay jar and a cloth sack must not wear the
+    # bench's wood photograph
+    "clay": "t_clay_d.jpg",
+    "cloth": "t_cloth_d.jpg",
 }
 
 mat = bpy.data.materials.new(KIND)

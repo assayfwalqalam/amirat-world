@@ -538,17 +538,37 @@
     return m;
   }
 
-  function lamp(x, y, z, power, model, reach) {
-    if (!glowGeo) {
+  /* ONE MESH FOR EVERY GLOW IN THE TOWN. Each lamp used to carry its own
+     billboard plane - identical geometry, identical material - and from the
+     gate about three hundred of them were three hundred draw calls: more
+     than a third of the whole frame's command budget, on a machine the law
+     says is draw-call bound. They live in one InstancedMesh now; the tick
+     writes a matrix per VISIBLE lamp and parks the rest at zero scale, and
+     the whole population costs one call. */
+  var glowInst = null, glowDummy = null, glowN = 0;
+  function glowSlot() {
+    if (!glowInst) {
       glowGeo = new T.PlaneGeometry(1.5, 1.5);
       glowMat = new T.MeshBasicMaterial({ map: W.tex('assets/glow.png', true),
         color: 0xffd08a, transparent: true, blending: T.AdditiveBlending,
         depthWrite: false, toneMapped: false, opacity: 0.7 });
+      glowInst = new T.InstancedMesh(glowGeo, glowMat, 640);
+      glowInst.frustumCulled = false;
+      glowInst.count = 0;
+      glowDummy = new T.Object3D();
+      /* park everything before first use */
+      glowDummy.scale.set(0.0001, 0.0001, 0.0001);
+      glowDummy.position.set(0, -9999, 0);
+      glowDummy.updateMatrix();
+      for (var pi = 0; pi < 640; pi++) glowInst.setMatrixAt(pi, glowDummy.matrix);
+      W.scene.add(glowInst);
     }
-    var g = new T.Mesh(glowGeo, glowMat);
-    g.position.set(x, y, z);
-    W.scene.add(g);
-    var e = { g: g, base: (power || 1.5) * 1.9, reach: reach || 26, x: x, y: y, z: z, col: 0xffb367,
+    return glowN < 640 ? glowN++ : -1;
+  }
+
+  function lamp(x, y, z, power, model, reach) {
+    var gi = glowSlot();
+    var e = { gi: gi, base: (power || 1.5) * 1.9, reach: reach || 26, x: x, y: y, z: z, col: 0xffb367,
               ph: Math.random() * 9, steady: 1, lit: 1 };
     lamps.push(e);
     EMIT.push(e);
@@ -4562,6 +4582,7 @@
         if (dr.pivot && dr.pivot.visible !== near) dr.pivot.visible = near;
       }
     }
+    var glowTouched = false;
     for (var l = 0; l < lamps.length; l++) {
       var lp = lamps[l];
       /* 60,000 is 245 metres - the whole town and then some, so every glow in
@@ -4580,10 +4601,21 @@
          whichever lamp happened to be last in this loop set the brightness
          of all of them - so every glow in the world flickered in lockstep
          with one lamp somewhere behind you.) */
+      if (lp.gi < 0) continue;
       var vis = 1 - W.sstep(2600, 5400, lp.d2);
-      if (vis <= 0.02) { lp.g.visible = false; continue; }
-      lp.g.visible = true;
-      lp.g.lookAt(cp);
+      if (vis <= 0.02) {
+        if (!lp.parked) {
+          glowDummy.position.set(0, -9999, 0);
+          glowDummy.scale.set(0.0001, 0.0001, 0.0001);
+          glowDummy.rotation.set(0, 0, 0);
+          glowDummy.updateMatrix();
+          glowInst.setMatrixAt(lp.gi, glowDummy.matrix);
+          lp.parked = true;
+          glowTouched = true;
+        }
+        continue;
+      }
+      lp.parked = false;
       /* AND IT MUST NOT CUT INTO THE WALL IT HANGS ON. A billboard turned to
          face the camera is a flat plane standing in the air; against a wall
          behind it, half of it disappears into the stone and the rest reads as
@@ -4593,8 +4625,13 @@
       var gz = lp.gz === undefined ? lp.z : lp.gz;
       var ox = cp.x - gx, oy = cp.y - lp.y, oz = cp.z - gz;
       var ol = 0.26 / Math.max(0.001, Math.sqrt(ox * ox + oy * oy + oz * oz));
-      lp.g.position.set(gx + ox * ol, lp.y + oy * ol, gz + oz * ol);
-      lp.g.scale.setScalar(vis * (0.90 + 0.16 * lp.lit));
+      glowDummy.position.set(gx + ox * ol, lp.y + oy * ol, gz + oz * ol);
+      glowDummy.lookAt(cp);
+      var gsc = vis * (0.90 + 0.16 * lp.lit);
+      glowDummy.scale.set(gsc, gsc, gsc);
+      glowDummy.updateMatrix();
+      glowInst.setMatrixAt(lp.gi, glowDummy.matrix);
+      glowTouched = true;
     }
     /* A FIREFLY SEVENTY METRES AWAY IS A SUB-PIXEL that still cost four
        trig calls, a position write and an opacity write every frame - and
@@ -4608,6 +4645,10 @@
         var fdx = fgf.x - fcp.x, fdz = fgf.z - fcp.z;
         fgf.s.visible = (fdx * fdx + fdz * fdz) < 5000;
       }
+    }
+    if (glowInst && glowTouched) {
+      glowInst.count = glowN;
+      glowInst.instanceMatrix.needsUpdate = true;
     }
     for (var fy2 = 0; fy2 < FIREFLIES.length; fy2++) {
       var fl2 = FIREFLIES[fy2];
