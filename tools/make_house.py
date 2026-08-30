@@ -239,9 +239,37 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win, ceil_hole=None,
                 mud.append(solid(a1 - a0, b1 - b0, 0.18,
                                  ((a0 + a1) / 2, (b0 + b1) / 2, z0 + h - 0.11),
                                  False))
-    back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
-    left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2))
-    right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2))
+    # WALLS LEAN; ONE BOX CANNOT. batter() draws the outer face inward by
+    # BAT*h at the head, but solid() had already recorded a full-thickness
+    # box - up to 15cm of invisible stone at head height, against the law's
+    # 5cm. Each wall's collision is three stacked bands now, each thinner
+    # and further in than the one below, tracking the lean to within ~2cm.
+    back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2), False)
+    left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2), False)
+    right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2), False)
+    _amt0 = BAT * h
+    # THE BANDS TELESCOPE. Three stacked thirds each exposed a flat TOP at a
+    # third of the wall's height - and the lowest one, 1.41m up, was exactly
+    # one engine-step above the plinth: the checker (and the player) climbed
+    # onto a ledge inside the wall. Each band runs from its own height to the
+    # FULL wall head instead, so the only exposed top is the wall head, and
+    # the outer profile still steps inward with the lean (error <= amt/3).
+    for _b in range(3):
+        _zlo = z0 + h * _b / 3.0
+        _t2 = max(0.10, T - _amt0 * (_b / 3.0))
+        _hy = (z0 + h - _zlo) / 2.0
+        _zc = _zlo + _hy
+        COLLIDERS.append({"c": [round(cx, 3), round(_zc, 3),
+                                round(-(cy + d / 2 - T + _t2 / 2), 3)],
+                          "h": [round(w / 2, 3), round(_hy, 3), round(_t2 / 2, 3)]})
+        COLLIDERS.append({"c": [round(cx - w / 2 + T - _t2 / 2, 3),
+                                round(_zc, 3), round(-cy, 3)],
+                          "h": [round(_t2 / 2, 3), round(_hy, 3),
+                                round((d - T * 2) / 2, 3)]})
+        COLLIDERS.append({"c": [round(cx + w / 2 - T + _t2 / 2, 3),
+                                round(_zc, 3), round(-cy, 3)],
+                          "h": [round(_t2 / 2, 3), round(_hy, 3),
+                                round((d - T * 2) / 2, 3)]})
     # The front wall carries the doorway, so it must NOT be recorded as one
     # solid slab: the opening would be cut from the geometry while collision
     # still sealed it, and the house could be seen into but never entered.
@@ -249,7 +277,16 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win, ceil_hole=None,
     # front_open: someone else is about to cut a doorway here and lay the
     # collision strips themselves - one solid box would seal what they open
     front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2),
-                  collide=(not front_door and not front_open))
+                  collide=False)
+    if not front_door and not front_open:
+        for _b2 in range(3):
+            _zlo2 = z0 + h * _b2 / 3.0
+            _t3 = max(0.10, T - BAT * h * (_b2 / 3.0))
+            _hy2 = (z0 + h - _zlo2) / 2.0
+            COLLIDERS.append({"c": [round(cx, 3), round(_zlo2 + _hy2, 3),
+                                    round(-(cy - d / 2 + T - _t3 / 2), 3)],
+                              "h": [round(w / 2, 3), round(_hy2, 3),
+                                    round(_t3 / 2, 3)]})
     amt = BAT * h
     fy = cy - d / 2 + T / 2
     by = cy + d / 2 - T / 2

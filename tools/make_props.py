@@ -292,9 +292,14 @@ elif KIND == "awning":
     # canvas. The folds are not drawn any more: like the palace curtains,
     # the panel is pinned where it is actually held - the two rail edges,
     # which carry the four pole-top corners - and dropped under gravity for
-    # forty frames, so the sag is the solver's. A small random jitter
-    # seeded into the flat mesh decides where the folds break, so they
-    # come out unequal: mirror the render now and it changes.
+    # forty frames, so the sag is the solver's. A flat sheet pinned at
+    # both edges CANNOT sag - it has no spare material and canvas will not
+    # stretch (the first bake came back flat to 3 cm) - so, exactly like
+    # the palace curtain's accordion, extra cloth is folded into the
+    # starting mesh as a wave: it is spare MATERIAL, not a fold pattern,
+    # and where the solver spends it is its own decision. A small random
+    # jitter decides where the folds break, so they come out unequal:
+    # mirror the render now and it changes.
     W, D, H = 3.4, 2.4, 2.5
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -302,14 +307,27 @@ elif KIND == "awning":
     bpy.ops.mesh.primitive_grid_add(x_subdivisions=16, y_subdivisions=10, size=1,
                                     location=(0, 0, H))
     cloth = bpy.context.active_object
-    cloth.scale = (W / 2 + 0.2, D / 2 + 0.2, 1)
+    # size=1 makes a grid spanning +-0.5, so the scale must be the FULL
+    # width, not the half-width: scaled by the half-width the cloth
+    # shipped as a sheet half the size of its own frame, floating between
+    # the rails and touching neither them nor the poles
+    cloth.scale = (W + 0.4, D + 0.4, 1)
     bpy.ops.object.transform_apply(scale=True)
     me = cloth.data
     pinned = [v.index for v in me.vertices
               if abs(abs(v.co.y) - (D / 2 + 0.2)) < 0.01]
+    if not pinned:
+        # an empty pin group does not error - the whole sheet just falls
+        # out of the prop during the bake, silently. Never again.
+        raise RuntimeError("awning: no pin verts found on the rail edges")
+    ph = random.uniform(0, 6.28)
     for v in me.vertices:
         if v.index not in pinned:                   # the tied edges stay put
             v.co.y += random.uniform(-0.02, 0.02)
+            # ~4% spare length between the rails: sags to roughly the old
+            # 0.34 depth, but as the solver's catenary, not a formula's
+            v.co.z += 0.06 * math.sin(v.co.y / (D / 2 + 0.2) * math.pi * 3.0 + ph) \
+                + random.uniform(-0.01, 0.01)
     vg = cloth.vertex_groups.new(name="pin")
     vg.add(pinned, 1.0, 'REPLACE')
     cl = cloth.modifiers.new("cl", 'CLOTH')
@@ -897,6 +915,19 @@ elif KIND == "stones":
         jitter(b, 0.05)
 
 # ------------------------------------------------------------- assemble
+# UNTAGGED PARTS MUST NOT INHERIT SLOT 0. An object with no material slots
+# joins with every face at material_index 0 - and after the join, index 0
+# is the FIRST SLOT material. So the stall's whole wooden bench came out
+# wearing the goods' clay, and the untagged-face remap below could not see
+# it (index 0 IS a slot index). Tag every untagged part with a placeholder
+# BEFORE the join; the remap then moves exactly those faces onto the
+# default photographed material, which is what the slot() contract above
+# ("anything not tagged falls to the default slot") promised all along.
+if SLOTS:
+    _base = bpy.data.materials.new("untagged")
+    for o in parts:
+        if not o.data.materials:
+            o.data.materials.append(_base)
 bpy.ops.object.select_all(action='DESELECT')
 for o in parts:
     o.select_set(True)
