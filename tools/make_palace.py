@@ -90,6 +90,7 @@ water = Pool("water")
 sapph = Pool("sapph")
 spark = Pool("spark")
 sparkv = Pool("sparkv")
+iron = Pool("iron")        # wrought fittings: sconce arms, brackets
 
 
 def rot_z(pts, yaw):
@@ -661,17 +662,22 @@ def sconce(cx, cy, cz, face, power=0.5, reach=7.0):
     fl = math.hypot(face[0], face[1]) or 1.0
     fx, fy = face[0] / fl, face[1] / fl
     yaw = math.atan2(fy, fx)
-    box(0.30, 0.16, 0.62, (cx, cy, cz), gold, yaw=yaw)                # back plate
-    box(0.52, 0.09, 0.09, (cx + fx * 0.30, cy + fy * 0.30, cz + 0.10), gold,
-        yaw=yaw, tilt=-0.42)
-    ox, oy = cx + fx * 0.56, cy + fy * 0.56
-    cyl(0.13, 0.20, (ox, oy, cz + 0.30), gold, verts=10, r_top=0.24)  # the bowl
-    cyl(0.20, 0.06, (ox, oy, cz + 0.42), glow, verts=10)              # the coals
+    # WROUGHT IRON, NOT GOLD FURNITURE. The old fixture was a gold plate,
+    # gold arm and gold bowl - his crop showed exactly why it read as junk
+    # bolted to the pier. A hall sconce is a thin dark strap, a slim arm,
+    # a small bowl; the FLAME is the ornament, and the engine hangs it.
+    box(0.09, 0.045, 0.46, (cx, cy, cz), iron, yaw=yaw)               # the strap
+    box(0.42, 0.045, 0.045, (cx + fx * 0.22, cy + fy * 0.22, cz + 0.12), iron,
+        yaw=yaw, tilt=-0.38)
+    ox, oy = cx + fx * 0.44, cy + fy * 0.44
+    cyl(0.085, 0.13, (ox, oy, cz + 0.26), iron, verts=8, r_top=0.15)  # the bowl
+    cyl(0.145, 0.025, (ox, oy, cz + 0.325), gold, verts=8)            # brass rim
+    cyl(0.125, 0.05, (ox, oy, cz + 0.345), glow, verts=8)             # the coals
     # NO FLAME GEOMETRY. The gold-lit cone that stood here read as a gilded
     # ornament, not a fire - and the engine already hangs its own soft flame
     # sprite on every lamp. The bowl and the coals are the fixture; the
     # burning is the engine's.
-    lamp_at(ox, oy, cz + 0.52, power, reach)
+    lamp_at(ox, oy, cz + 0.42, power, reach)
 
 
 def rose_boss(cx, cy, cz, nrm, r):
@@ -1132,8 +1138,6 @@ for _i in range(7):
         arch(_x, _yw, ARC_Z, 3.6, 3.40, 0.86, stone,
              frame=0.40, lit=None, face=(0, -_sy2))
         box(2.9, 0.14, 3.0, (_x, _yw - _sy2 * 0.06, ARC_Z + 1.62), flor)
-        if _i < 6:
-            rose_boss(_x + 3.2, _sy2 * (17 - WT), ARC_Z + 2.90, (0, -_sy2, 0), 0.40)
 for _j in range(5):
     _y = -12.8 + 25.6 * _j / 4.0
     for _sx2 in (1, -1):
@@ -1141,19 +1145,11 @@ for _j in range(5):
         arch(_xw, _y, ARC_Z, 3.6, 3.40, 0.86, stone,
              frame=0.40, lit=None, face=(-_sx2, 0))
         box(0.14, 2.9, 3.0, (_xw - _sx2 * 0.06, _y, ARC_Z + 1.62), flor)
-        if _j < 4:
-            rose_boss(_sx2 * (23 - WT), _y + 3.2, ARC_Z + 2.90, (-_sx2, 0, 0), 0.40)
-# THE GARLANDS, hung in half circles under the ceiling all the way round
-for _sy3 in (1, -1):
-    swag_row(-20.4, _sy3 * (17 - WT - 0.55), 20.4, _sy3 * (17 - WT - 0.55),
-             z1 + S1_H - 1.15, 7, 0.78, nrm=(0, -_sy3, 0), seed=11 + _sy3)
-for _sx3 in (1, -1):
-    swag_row(_sx3 * (23 - WT - 0.55), -14.6, _sx3 * (23 - WT - 0.55), 14.6,
-             z1 + S1_H - 1.15, 5, 0.78, nrm=(-_sx3, 0, 0), seed=31 + _sx3)
-# and between the two rows of columns, so the middle of the hall is dressed too
-for _sxg in (-1, 1):
-    swag_row(_sxg * 8.5, -10.5, _sxg * 8.5, 10.5, z1 + S1_H - 1.55, 3, 0.72,
-             nrm=(-_sxg, 0, 0), seed=51 + _sxg)
+# NO GARLANDS, NO ROSETTE PLAQUES. His verdict on the strung flowers and the
+# gold-framed bosses: "so horrible and ugly... do not fit at all with the
+# whole theme." A real hall of this school is carried by its surfaces -
+# tile, one gold course, carved plaster, the arcade - and by its lamps.
+# Nothing is pinned to the walls.
 
 # THE HALL IS LIVED IN. The court of a palace is not an empty carpet: it is
 # the diwan - cushions in a broken line down both long walls where people sit
@@ -1193,12 +1189,14 @@ for (_gx5, _gy5) in ((-14.5, -6.0), (14.5, -6.0), (-14.5, 6.0), (14.5, 6.0)):
         plant("p_bowl", _gx5 + _ox5 + _hr.uniform(-0.35, 0.35),
               _gy5 + _oy5 + _hr.uniform(-0.35, 0.35), CY + 0.48,
               rot=_hr.uniform(0, 6.28), sc=0.7)
+    # the cushions HUG the table - flung to 2.3m they read as litter on the
+    # stone ("random stones", his words), at arm's reach they read as seats
     for _c5 in range(_hr.choice((3, 4))):
         _a5 = _hr.uniform(0, 6.283)
-        _d5 = _hr.uniform(1.4, 2.3)
+        _d5 = _hr.uniform(0.85, 1.25)
         plant("p_cushions", _gx5 + _ox5 + math.cos(_a5) * _d5,
               _gy5 + _oy5 + math.sin(_a5) * _d5, CY,
-              rot=_a5 + math.pi + _hr.uniform(-0.55, 0.55),
+              rot=_a5 + math.pi + _hr.uniform(-0.35, 0.35),
               sc=_hr.uniform(0.8, 1.0))
 plant("p_brazier", -10.6, 0.4, CY, rot=_hr.uniform(0, 6.28))
 plant("p_brazier", 10.6, -0.6, CY, rot=_hr.uniform(0, 6.28))
@@ -1232,7 +1230,11 @@ carpet(0, -1, CY, 7.0, 26)
 for _sxr in (-1, 1):
     carpet(_sxr * 15.4, 0, CY, 9.6, 24)
 # and the cloth at the two great doors, grasped to the side by a gold holder
-curtain(0, 15.22, CY + 8.30, 5.4, 8.30, face=(0, 1))
+# NO NORTH DRAPE AT ALL. It was moved twice - buried in the wall, then hung
+# free - and both times it stood in front of a BLIND arch (the north door's
+# arch is beyond the outer face; the inner wall at x=0 has no opening), so
+# it was always cloth on blank stone, the exact fault he circled. The dais
+# wall is carried by its tile, its band, its stucco and its arch.
 curtain(0, -18.70, CY + 6.60, 5.0, 6.60, face=(0, -1))
 cornice(23, 17, z1 + S1_H, stone)
 dentils(0, 0, 23, 17, z1 + S1_H - 0.7, stone)
@@ -1524,8 +1526,6 @@ def module(cx, cy, face, gate=False, code=""):
             nx_, ny_ = P(nn, w_hy - WT2 - 0.02)
             arch(nx_, ny_, fl_z + 2.85, 1.7, 3.1, 0.6, stone, frame=0.3,
                  lit=(nn == 0), face=inward)
-            rose_boss(nx_ + inward[0] * 0.34, ny_ + inward[1] * 0.34,
-                      fl_z + 2.20, (inward[0], inward[1], 0), 0.34)
     # the upper storeys ride on the ceiling, solid as before
     for (hw, hd, zz, hh) in ((w_hx, w_hy, W1, 0), (w_hx - 1, w_hy - 1, W1, W2),
                              (w_hx - 2, w_hy - 2, W1 + W2, W3)):
@@ -1592,10 +1592,6 @@ def module(cx, cy, face, gate=False, code=""):
     fbx, fby = P(0, -(w_hy + 0.30))
     fbsx, fbsy = sized(w_hx * 2 - 1.2, 0.36)
     box(fbsx, fbsy, 0.85, (fbx, fby, CY + 5.75), flor)
-    gxa, gya = P(-11.6, -(w_hy + 0.80))
-    gxb, gyb = P(11.6, -(w_hy + 0.80))
-    swag_row(gxa, gya, gxb, gyb, CY + 4.95, 4, 0.98,
-             nrm=(inward[0], inward[1], 0), seed=int(abs(cx) * 3 + abs(cy)) + 5)
     if code:
         rsx, rsy = sized((w_hx - WT2) * 2, (w_hy - WT2) * 2)
         region(code, "gate" if gate else "room", "rect", cx, cy, rsx, rsy,
@@ -1742,7 +1738,6 @@ def riwaq_run(x0, y0, x1, y1, face):
         px = x0 + ux * (ln * (i + 0.5) / n)
         py = y0 + uy * (ln * (i + 0.5) / n)
         arch(px, py, CY, ln / n - 0.8, 7.2, 0.7, stone, frame=0.38, lit=None, face=face)
-        rose_boss(px + fx0 * 0.30, py + fy0 * 0.30, CY + 6.9, (fx0, fy0, 0), 0.40)
     # The roof of the colonnade runs INTO the curtain behind it. It used to
     # stop at its own depth and left a hairline of daylight along the joint;
     # a roof that only kisses a wall always will. It is carried 0.9m further
@@ -1757,13 +1752,8 @@ def riwaq_run(x0, y0, x1, y1, face):
     # a carved band of leaf over the whole colonnade
     box(abs(dx) + (0.5 if fx0 else 0.44), abs(dy) + (0.44 if fx0 else 0.5), 0.80,
         ((x0 + x1) / 2 + fx0 * 0.30, (y0 + y1) / 2 + fy0 * 0.30, CY + 7.82), flor)
-    # HIS FLORAL ROPE: hung from pier to pier, in half circles, all the way
-    for i in range(n):
-        ga = (x0 + ux * (ln * i / n) + fx0 * 0.66,
-              y0 + uy * (ln * i / n) + fy0 * 0.66, CY + 5.55)
-        gb = (x0 + ux * (ln * (i + 1) / n) + fx0 * 0.66,
-              y0 + uy * (ln * (i + 1) / n) + fy0 * 0.66, CY + 5.55)
-        garland(ga, gb, 1.05, nrm=(fx0, fy0, 0), seed=int(abs(x0) + abs(y0)) * 7 + i)
+    # (the floral rope that hung pier to pier is gone - his verdict on the
+    # strung flowers: horrible, ugly, off-theme)
     # torches along the arcade, and a pot of flowers between them
     for i in range(1, n, 5):
         tx = x0 + ux * (ln * i / n) + fx0 * 2.4
@@ -1956,6 +1946,9 @@ parts.append(make_mesh(stone, (0.86, 0.82, 0.74, 1), 0.72, 0.0,
                        tex="t_ashlar_d.jpg", tint=(1.56, 1.47, 1.24, 1), uvs=6.0))
 parts.append(make_mesh(gold, (1.0, 0.78, 0.28, 1), 0.20, 0.85,
                        emis=(0.62, 0.44, 0.13, 1), estr=0.75))
+# wrought iron: near-black, a little rough, faintly metallic - the fittings
+# of a real hall, not gilded furniture bolted to the piers
+parts.append(make_mesh(iron, (0.13, 0.12, 0.115, 1), 0.55, 0.55))
 parts.append(make_mesh(wood, (0.52, 0.38, 0.24, 1), 0.85, 0.0,
                        tex="t_door_d.jpg", uvs=1.4))
 # THE CARPETS. They were made of `wood`, which wears the DOOR sheet - panels,
@@ -2004,7 +1997,7 @@ parts.append(make_mesh(spark, (1.0, 0.9, 0.7, 1), 0.9, 0.0,
 parts.append(make_mesh(sparkv, (0.9, 0.7, 1.0, 1), 0.9, 0.0,
                        emis=(0.78, 0.48, 0.95, 1), estr=4.0))
 # what each surface costs, so a heavy round can be traced to its pool
-for _pl in (stone, gold, wood, rug, cloth, tile, flor, folia, bloom, pane,
+for _pl in (stone, gold, iron, wood, rug, cloth, tile, flor, folia, bloom, pane,
             glow, earth, water, sapph, spark, sparkv):
     if _pl.v:
         _t = sum(len(f) - 2 for f in _pl.f)

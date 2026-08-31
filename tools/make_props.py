@@ -543,23 +543,48 @@ elif KIND == "carpet":
     parts.append(c)
 
 elif KIND == "cushions":
-    # CUSHIONS, NOT PANCAKES. Squashed to 0.42 of a small sphere they lay on
-    # the palace floor like potatoes. A floor cushion is fat - it holds most
-    # of its height - it dents in the middle where people sit, and a pile of
-    # them leans: one on the floor, one against it at an angle.
-    for i, sp in enumerate([(0, 0, 0.0, 0.0), (0.52, 0.12, 0.0, 0.5),
-                            (0.20, 0.50, 0.0, -0.4), (0.30, 0.24, 0.26, 0.9)]):
-        b = sphere(0.30, (sp[0], sp[1], 0.19 + sp[2]))
-        b.scale = (1.2, 1.05, 0.62)
-        b.rotation_euler = (random.uniform(-0.10, 0.10) + (0.18 if i == 3 else 0),
-                            random.uniform(-0.08, 0.08), sp[3])
-        bpy.ops.object.transform_apply(scale=True, rotation=True)
-        # the dent where someone sat
+    # A FLOOR CUSHION IS A SQUARE SACK WITH SEAMS - not a squashed sphere.
+    # The sphere version was called "random stones on the ground" twice,
+    # and that is exactly what smooth ellipsoids on stone look like. This
+    # one is a rounded-corner square slab: a bevelled box, inflated at the
+    # waist the way stuffing pushes a sack out, corners held in by their
+    # seams, dented where someone sat.
+    def cushion(cx, cy, cz, s, h, yaw, lean=0.0, dent=True):
+        b = box(s, s, h, (cx, cy, cz + h / 2), rot=yaw)
+        bev = b.modifiers.new("bv", 'BEVEL')
+        bev.width = h * 0.34
+        bev.segments = 3
+        bpy.context.view_layer.objects.active = b
+        bpy.ops.object.modifier_apply(modifier=bev.name)
         for v in b.data.vertices:
-            r2 = (v.co.x - sp[0]) ** 2 + (v.co.y - sp[1]) ** 2
-            if v.co.z > 0.19 + sp[2] and r2 < 0.055:
-                v.co.z -= 0.05 * (1.0 - r2 / 0.055)
-        jitter(b, 0.018)
+            # mesh coords are LOCAL: the box's origin sits at its centre
+            lx = v.co.x
+            ly = v.co.y
+            lz = (v.co.z + h / 2) / h         # 0 floor .. 1 top
+            # the stuffing: the waist swells, the seam line stays
+            swell = 1.0 + 0.14 * math.sin(math.pi * max(0.0, min(1.0, lz)))
+            # the corners pull IN - the seam gathers them
+            ang = math.atan2(ly, lx) - yaw
+            corner = abs(math.sin(2 * ang)) ** 3
+            swell *= 1.0 - 0.06 * (1 - corner)
+            v.co.x = lx * swell
+            v.co.y = ly * swell
+            if dent and lz > 0.7:
+                r2 = lx * lx + ly * ly
+                lim = (s * 0.38) ** 2
+                if r2 < lim:
+                    v.co.z -= h * 0.30 * (1.0 - r2 / lim)
+        if lean:
+            b.rotation_euler = (lean, 0, 0)
+            bpy.ops.object.transform_apply(rotation=True)
+        jitter(b, 0.011)
+        return b
+
+    cushion(0.0, 0.0, 0.0, 0.66, 0.22, random.uniform(0, 1.2))
+    cushion(0.04, 0.05, 0.22, 0.56, 0.19, random.uniform(0.4, 1.0))
+    cushion(0.55, 0.34, 0.0, 0.60, 0.21, random.uniform(0, 1.2), dent=False)
+    # one leaning against the pile, as a person left it
+    cl = cushion(0.02, -0.44, 0.10, 0.58, 0.18, 0.1, lean=0.62, dent=False)
 
 elif KIND == "table":
     # A TABLE IS BOARDS, NOT A SLAB. One box on four sticks is the shape a
@@ -950,7 +975,7 @@ bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.mesh.remove_doubles(threshold=0.0005)
 bpy.ops.mesh.normals_make_consistent(inside=False)
-bpy.ops.uv.cube_project(cube_size=1.1)
+bpy.ops.uv.cube_project(cube_size=0.45 if KIND == "cushions" else 1.1)
 bpy.ops.object.mode_set(mode='OBJECT')
 
 # THE PROPS WERE ALL FLAT SHADED. Nothing in this file ever called
@@ -1080,7 +1105,7 @@ elif KIND in CLAYY:
 elif KIND in CLOTHY:
     tex_file = "t_cloth_d.jpg"
 elif KIND in FANCY:
-    tex_file = "t_carpet_d.jpg"
+    tex_file = "t_cushion_d.jpg"
 elif KIND in STONEY:
     tex_file = "g_rock_d.jpg"
 elif KIND in ASHLAR:

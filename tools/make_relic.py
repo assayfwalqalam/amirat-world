@@ -473,29 +473,24 @@ def build_carpet():
 
 # =========================================================== THE WINGS
 def build_wings():
-    """Angel wings AS WE KNOW THEM, which the last three attempts were not.
+    """DRAGON WINGS, FEATHERED - from his reference picture, named so it
+    cannot drift:
 
-    The owner is right that nothing on the internet looks like what was
-    built: each "wing" was a symmetric pointed lens - a LEAF - and fourteen
-    leaves fanned through a hundred degrees is an agave plant. The faults,
-    named from his screenshot so they cannot return: (1) the silhouette was
-    a lens, when a real wing is ASYMMETRIC - a gently arched top edge and a
-    deep-bellied bottom edge that is nothing but feather tips; (2) the chord
-    was 0.4 of the span, when a swan's is over half; (3) the feathers were
-    fingernail chips, when the PRIMARIES are the single most readable thing
-    on a wing - long, parallel, round-tipped, each one visible; (4) the fan
-    spread the wings like spokes, when stacked seraph wings lie nearly
-    PARALLEL, each mostly behind the one before.
+      - the leading edge is an ARM: it rises from the shoulder to a KNUCKLE
+        at ~40% of the span, with a thumb-spike at the joint, then runs as
+        the longest FINGER out to the far tip;
+      - four more FINGER RAYS fan from the knuckle, each shorter and steeper
+        than the last, the innermost pointing almost straight down;
+      - the trailing edge is SCALLOPED: a concave arc between every pair of
+        finger tips, so every tip stands out as a point - the one thing every
+        wing in his picture shares;
+      - a dragon's membrane fills the panels between the fingers; here the
+        fill is FEATHERS - overlapping rows running down each panel, the
+        outer row's tips tracing the scallop - because his order was dragon
+        IN SHAPE, "but feathers and filled with it".
 
-    Measured from the reference (a mute swan's open wing, and the classical
-    depictions drawn from it):
-      - chord at mid-wing = 0.5-0.6 of span
-      - the top edge rises to a wrist bump at a third of the span, then
-        sweeps down to a tip that points out and DOWN
-      - 9-11 primaries fan the outer half of the underline, tips rounded,
-        overlapping half their width; secondaries fill the inner half,
-        shorter; two rows of small coverts tile the face at the top
-      - the whole underline is scalloped by feather TIPS, never by gaps
+    Two planes a side (main + one behind at 4/5 scale) so the wing has depth
+    without becoming the old seven-layer shell.
     """
     GEMS = []
     KINDS = ("rose", "sapphire", "diamond", "ruby", "amethyst")
@@ -505,169 +500,203 @@ def build_wings():
         t = max(0.0, min(1.0, (x - a) / max(b - a, 1e-6)))
         return t * t * (3.0 - 2.0 * t)
 
-    # the seraph stack: seven per side, nearly PARALLEL, each behind and a
-    # little smaller than the one before - one layered mass, not a fan
-    # deepest pitch capped at 0.42: past that the far layers' tips swung
-    # under and IN, closing the silhouette into a shell instead of the
-    # dragon sweep he asked for
-    LAYERS = [(-0.06, 1.00), (0.03, 0.93), (0.11, 0.85), (0.19, 0.77),
-              (0.27, 0.68), (0.35, 0.59), (0.42, 0.50)]
-    S0 = 2.75
+    S0 = 2.9
+    LAYERS = ((0.0, 1.00, 0.0), (0.14, 0.80, 0.10))    # pitch, scale, y-shift
 
     for side in (1, -1):
-        for (li, (pitch, sc)) in enumerate(LAYERS):
+        for (li, (pitch, sc, yoff)) in enumerate(LAYERS):
             S = S0 * sc
-            rj = random.Random(li * 977 + (7 if side > 0 else 3))
-            # DRAGON-LIKE IN SHAPE, FEATHERS IN SUBSTANCE - his order. The
-            # dragon silhouette is: a steep rise from the shoulder to a HIGH
-            # WRIST at two-fifths of the span, then one long sweep down to a
-            # low outswept tip, with the trailing edge curving deep toward
-            # the body - and every bit of it filled with plumage.
-            hump = 0.30 * rj.uniform(0.96, 1.04)
-            # 0.80 drove the tips UNDER the wing into a closed shell; at
-            # 0.70 they point out-and-down, the dragon sweep he asked for
-            dropt = 0.70 * rj.uniform(0.95, 1.05)
+            rj = random.Random(li * 613 + (11 if side > 0 else 5))
 
             def xf(x, y, z):
+                # +y in wing-local space means PROUD OF THE FACE THE VIEWER
+                # SEES. Blender +y exports to glTF -z, and the viewer camera
+                # sits at +z: three renders in a row had a complete plumage
+                # hidden BEHIND the membrane because this sign was wrong.
                 x2 = x * math.cos(pitch) - z * math.sin(pitch)
                 z2 = x * math.sin(pitch) + z * math.cos(pitch)
-                # the stack climbs AND recedes. (Rooting deeper layers
-                # further outboard was tried against the root-cards showing
-                # at the centre - it OPENED the corridor instead; the cover
-                # is the mantle below, not spacing)
-                return (side * (x2 + 0.06), y - li * 0.075,
-                        z2 + 0.30 + li * 0.05)
+                return (side * (x2 + 0.10), -y + yoff + li * 0.06, z2 + 0.42)
 
-            def lead(t):
-                """shoulder -> high wrist at 0.42 -> long dive to a low tip"""
-                if t <= 0.42:
-                    z = hump * S * math.sin((t / 0.42) * math.pi / 2)
-                else:
-                    z = hump * S - dropt * S * ((t - 0.42) / 0.58) ** 1.25
-                return t * S, z
+            # the skeleton, jittered so no two layers or sides are twins
+            # the rays SPREAD, and the whole frame is z-compressed: his
+            # reference wing is about twice as wide as it is tall. The first
+            # cut dropped the fan to the floor and each wing read as a
+            # hanging curtain.
+            ZS = 0.74
+            K = (0.34 * S, ZS * 0.30 * S * rj.uniform(0.96, 1.05))
+            TIPS = []
+            for (tx, tz) in ((1.00, 0.02), (0.94, -0.26), (0.80, -0.50),
+                             (0.58, -0.68), (0.34, -0.78)):
+                TIPS.append((tx * S * rj.uniform(0.97, 1.03),
+                             ZS * tz * S * rj.uniform(0.95, 1.06)))
+            BODY = (0.05 * S, ZS * -0.42 * S)
 
-            def chord(t):
-                """deepest toward the BODY - the dragon's trailing curve -
-                narrowing along the sweep to the tip"""
-                c = S * (0.52 + 0.26 * (1.0 - t) ** 1.15)
-                return c * (1.0 - 0.72 * smooth(0.88, 1.0, t))
+            def bulge(t):
+                """the wing has camber: proud in the middle, flat at edges"""
+                return 0.05 * S * math.sin(math.pi * min(1.0, t))
 
-            def at(t, u):
-                lx, lz = lead(t)
-                return (lx, 0.045 * S * math.sin(math.pi * u) * (1 - 0.5 * t),
-                        lz - chord(t) * u)
-
-            # THE CANOPY: the whole wing as one solid sheet, so no light ever
-            # passes between feathers
-            NS, NU = 24, 6
-            rows = []
-            for i in range(NS + 1):
-                t = i / NS
+            # THE ARM: shoulder up to the knuckle - a stacked tube with a
+            # slight arch, so the leading edge reads as bone under cover
+            NA = 8
+            arm = []
+            for i in range(NA + 1):
+                t = i / float(NA)
+                ax = K[0] * t
+                az = K[1] * math.sin(t * math.pi / 2) + 0.02 * S * math.sin(t * 6.0)
+                r = S * (0.050 - 0.022 * t)
                 ring = []
-                for k in range(NU + 1):
-                    px, py, pz = at(t, (k / NU) * 0.97)
-                    ring.append(xf(px, py, pz))
-                rows.append(ring)
-            can = loft(rows, close=False, cap_a=False, cap_b=False,
-                       name="canopy%d" % li)
-            sol = can.modifiers.new("s", 'SOLIDIFY')
-            sol.thickness = 0.014
-            bpy.context.view_layer.objects.active = can
-            bpy.ops.object.modifier_apply(modifier=sol.name)
-            slot(can, "feather")
+                for q in range(7):
+                    a = q / 6.0 * 2 * math.pi
+                    ring.append(xf(ax, math.cos(a) * r,
+                                   az + math.sin(a) * r))
+                arm.append(ring)
+            slot(loft(arm, close=True, cap_a=True, cap_b=True,
+                      name="arm%d" % li), "feather")
 
-            def feather(t0, u0, ang, L, wid, proud, slname, sag=0.10):
-                """one feather: a tent-sectioned card, full width to 60% of
-                its length then closing on an ellipse - long, rounded, REAL"""
-                rx, ry, rz = at(t0, u0)
-                ex, ez = math.sin(ang), -math.cos(ang)    # its direction
-                px2, pz2 = ez, -ex                        # across it
-                NR = 7
+            # THE CANOPY: one ruled sheet per finger panel, its outer edge
+            # pulled in between the tips - the scallop is IN the surface,
+            # not painted on
+            def panel_pt(A, B, w, v):
+                px = K[0] + v * ((1 - w) * (A[0] - K[0]) + w * (B[0] - K[0]))
+                pz = K[1] + v * ((1 - w) * (A[1] - K[1]) + w * (B[1] - K[1]))
+                return px, pz
+
+            EDGES = list(TIPS) + [BODY]
+            for k in range(len(EDGES) - 1):
+                A, B = EDGES[k], EDGES[k + 1]
+                rows = []
+                NW, NV = 6, 7
+                for iv in range(NV + 1):
+                    v = iv / float(NV)
+                    ring = []
+                    for iw in range(NW + 1):
+                        w = iw / float(NW)
+                        vmax = 1.0 - 0.15 * math.sin(math.pi * w) \
+                            * rj.uniform(0.9, 1.1)
+                        px, pz = panel_pt(A, B, w, v * vmax)
+                        ring.append(xf(px, bulge(v) * (1 - 0.6 * abs(w - 0.5)),
+                                       pz))
+                    rows.append(ring)
+                can = loft(rows, close=False, cap_a=False, cap_b=False,
+                           name="pan%d_%d" % (li, k))
+                sol = can.modifiers.new("s", 'SOLIDIFY')
+                sol.thickness = 0.016
+                bpy.context.view_layer.objects.active = can
+                bpy.ops.object.modifier_apply(modifier=sol.name)
+                # the canopy is the pale pink UNDERLAYER everywhere; the
+                # white plumage tiles over it
+                slot(can, "feather_in")
+
+            def feather(x0, z0, ang, L, wid, proud, slname, sag=0.06):
+                """one feather card: tent section, full width to 60% then an
+                ellipse tip - rooted at (x0,z0), pointing along ang"""
+                ex, ez = math.sin(ang), -math.cos(ang)
+                px2, pz2 = ez, -ex
+                NR = 6
                 rings = []
                 for q in range(NR + 1):
-                    ft = q / NR
+                    ft = q / float(NR)
                     if ft < 0.60:
                         hw = wid * 0.5 * (0.62 + 0.38 * smooth(0.0, 0.25, ft))
                     else:
                         e = (ft - 0.60) / 0.40
                         hw = wid * 0.5 * math.sqrt(max(0.0, 1.0 - e * e))
                     hw = max(hw, 0.0015)
-                    sg = sag * L * ft * ft
-                    cx0 = rx + ex * L * ft
-                    cz0 = rz + ez * L * ft - sg
+                    cx0 = x0 + ex * L * ft
+                    cz0 = z0 + ez * L * ft - sag * L * ft * ft
                     rg = []
                     for (mu, my) in ((1.0, 0.0), (0.30, 0.007),
                                      (-0.30, 0.007), (-1.0, 0.0)):
-                        rg.append(xf(cx0 + px2 * hw * mu, ry + proud + my,
+                        rg.append(xf(cx0 + px2 * hw * mu, proud + my,
                                      cz0 + pz2 * hw * mu))
                     rings.append(rg)
                 slot(loft(rings, name="f"), slname)
 
-            # THE PRIMARIES: the outer half of the underline, long and
-            # parallel, every one of them readable
-            NP = 10
-            for fi in range(NP):
-                t = 0.44 + (fi + 0.5) / NP * 0.53
-                t += rj.uniform(-0.008, 0.008)
-                fan = (t - 0.44) / 0.53
-                ang = -math.pi / 2 + 1.30 * fan ** 1.15                     + rj.uniform(-0.03, 0.03)
-                L = chord(t) * 0.55 + S * (0.30 - 0.14 * fan)
-                L *= rj.uniform(0.96, 1.05)
-                wid = L * 0.23 * rj.uniform(0.94, 1.06)
-                feather(t, 0.58, ang, L, wid, 0.004 + (fi % 2) * 0.004,
-                        "feather", sag=0.06)
-                if fi % 3 == 1:
-                    gx, gy2, gz = at(t, 0.58)
-                    mx, my, mz = xf(gx + math.sin(ang) * L * 0.8, gy2,
-                                    gz - math.cos(ang) * L * 0.8 * -1 - 0.06 * L)
+            # THE FINGER RIDGES: rows of small coverts marching down every
+            # ray, slightly proud - the dark ribs of his picture, feathered
+            for (k, T) in enumerate(TIPS):
+                fl = math.hypot(T[0] - K[0], T[1] - K[1])
+                ang = math.atan2(T[0] - K[0], -(T[1] - K[1]))
+                n = 7 - k // 2
+                for i in range(n):
+                    t = (i + 0.5) / n
+                    fx0 = K[0] + (T[0] - K[0]) * t
+                    fz0 = K[1] + (T[1] - K[1]) * t + 0.012
+                    L = fl * 0.24 * (1.0 - 0.35 * t) * rj.uniform(0.9, 1.1)
+                    feather(fx0, fz0, ang + rj.uniform(-0.06, 0.06), L,
+                            L * 0.34, bulge(t) + 0.030 + 0.004 * (i % 2),
+                            "feather", sag=0.03)
+                if li == 0 and k < 4:
+                    mx, my, mz = xf(K[0] + (T[0] - K[0]) * 0.30,
+                                    bulge(0.3) + 0.07,
+                                    K[1] + (T[1] - K[1]) * 0.30)
                     GEMS.append([round(mx, 4), round(mz, 4),
-                                 round(-my - 0.05, 4), KINDS[gi % 5]])
+                                 round(-my - 0.04, 4), KINDS[gi % 5]])
                     gi += 1
 
-            # THE SECONDARIES: the inner half, shorter, hanging nearly down
-            NSec = 8
-            for fi in range(NSec):
-                t = 0.04 + (fi + 0.5) / NSec * 0.42
-                ang = -math.pi / 2 + 0.14 * (fi / NSec) + rj.uniform(-0.04, 0.04)
-                L = chord(t) * 0.72 * rj.uniform(0.94, 1.06)
-                wid = L * 0.24 * rj.uniform(0.92, 1.08)
-                feather(t, 0.42, ang, L, wid, 0.003 + (fi % 2) * 0.004,
-                        "feather", sag=0.05)
+            # THE PANEL FILL: rows of feathers running down each panel, the
+            # outermost row longest so its tips trace the scallop arc
+            for k in range(len(EDGES) - 1):
+                A, B = EDGES[k], EDGES[k + 1]
+                span = math.hypot(B[0] - A[0], B[1] - A[1])
+                nw = max(4, int(span / (0.068 * S)))
+                for (v0, pr) in ((0.10, 0.006), (0.28, 0.011),
+                                 (0.48, 0.016), (0.68, 0.022),
+                                 (0.90, 0.028)):
+                    for iw in range(nw):
+                        w = (iw + 0.5) / nw
+                        vmax = 1.0 - 0.15 * math.sin(math.pi * w)
+                        px, pz = panel_pt(A, B, w, v0 * vmax)
+                        dx = px - K[0]
+                        dz = pz - K[1]
+                        dl = math.hypot(dx, dz) or 1.0
+                        ang = math.atan2(dx / dl, -dz / dl) \
+                            + rj.uniform(-0.05, 0.05)
+                        # sized from the panel's FULL depth at this line, not
+                        # from the root's own radius - radius-scaled cards
+                        # shrank to dust near the knuckle and the membrane
+                        # showed bare with a fringe at the rim
+                        ex_, ez_ = panel_pt(A, B, w, vmax)
+                        D = math.hypot(ex_ - K[0], ez_ - K[1])
+                        L = D * (0.24 if v0 > 0.85 else 0.32) \
+                            * rj.uniform(0.94, 1.08)
+                        wid = span / nw * 1.9
+                        # the card is FLAT but the canopy is CAMBERED: a card
+                        # held at its root's height dives under the rising
+                        # swell and the membrane swallows it whole - which is
+                        # why two renders showed bare pink with a rim fringe.
+                        # Each card rides at the camber's peak over its own
+                        # reach, so no part of it is ever below the surface.
+                        vend = min(1.0, v0 + L / max(D, 1e-6))
+                        if v0 <= 0.5 <= vend:
+                            mb = 0.05 * S
+                        else:
+                            mb = max(bulge(v0), bulge(vend))
+                        feather(px, pz, ang, L, wid,
+                                mb + pr + 0.004 * (iw % 2),
+                                "feather" if (iw + int(v0 * 10)) % 5
+                                else "feather_in",
+                                sag=0.05)
 
-            # THE COVERTS: two tiled rows over the roots, the inner one the
-            # palest pink - an underlayer glimpsed, never blotches
-            for (rn, (u0, lm, wm, n2, pr, sln)) in enumerate((
-                    (0.16, 0.30, 1.7, 13, 0.014, "feather"),
-                    (0.34, 0.42, 1.7, 11, 0.009, "feather_in"))):
-                for fi in range(n2):
-                    t = 0.03 + (fi + 0.5) / n2 * 0.90 + rj.uniform(-0.01, 0.01)
-                    ang = -math.pi / 2 + 0.85 * smooth(0.5, 1.0, t)                         + rj.uniform(-0.05, 0.05)
-                    L = chord(t) * lm * rj.uniform(0.92, 1.08)
-                    wid = wm * (0.95 * S / n2) * rj.uniform(0.92, 1.08)
-                    feather(t, u0, ang, L, wid,
-                            pr + (fi % 2) * 0.0035, sln, sag=0.04)
-                    if rn == 0 and fi % 4 == 2:
-                        gx, gy2, gz = at(t, u0 + 0.1)
-                        mx, my, mz = xf(gx, gy2, gz)
-                        GEMS.append([round(mx, 4), round(mz, 4),
-                                     round(-my - 0.05, 4), KINDS[gi % 5]])
-                        gi += 1
-
-            # THE MANTLE: on the front layer only, a cape of broad feathers
-            # draped over the shoulder roots and across the centre line -
-            # the scapulars of a real bird. Without it the V between the
-            # wings was a corridor of bare root-cards, the worst thing in
-            # the front view. These root near the body, point down and
-            # INWARD past x=0, and sit proud of everything behind them.
+            # THE ARM COVERTS: two rows over the shoulder-to-knuckle edge
+            for (v0, n2) in ((0.30, 7), (0.72, 8)):
+                for i in range(n2):
+                    t = (i + 0.5) / n2
+                    ax = K[0] * t
+                    az = K[1] * math.sin(t * math.pi / 2) - 0.04 * S * v0
+                    L = S * 0.16 * rj.uniform(0.9, 1.1)
+                    feather(ax, az, rj.uniform(-0.25, 0.25) - 0.35 * t, L,
+                            L * 0.5, 0.045 + 0.005 * (i % 2), "feather",
+                            sag=0.03)
             if li == 0:
-                for fi in range(7):
-                    t = 0.015 + fi * 0.022
-                    ang = -math.pi / 2 - 0.34 + fi * 0.085 \
-                        + rj.uniform(-0.03, 0.03)
-                    L = S * (0.46 - 0.030 * fi) * rj.uniform(0.95, 1.05)
-                    wid = L * 0.30 * rj.uniform(0.94, 1.06)
-                    feather(t, 0.10, ang, L, wid, 0.050 + fi * 0.004,
-                            "feather", sag=0.05)
+                mxg, myg, mzg = xf(K[0], 0.09, K[1] + 0.02)
+                GEMS.append([round(mxg, 4), round(mzg, 4),
+                             round(-myg - 0.04, 4), KINDS[gi % 5]])
+                gi += 1
+
+            # THE THUMB SPIKE at the knuckle, pointing up and out
+            feather(K[0], K[1] + 0.01, 0.55, S * 0.17, S * 0.05, 0.05,
+                    "feather", sag=0.0)
 
     # the clasp the wings root into
     slot(lathe([(0.0, -0.16), (0.085, -0.13), (0.115, -0.02), (0.105, 0.10),
@@ -1050,9 +1079,172 @@ def build_astrolabe():
             "up": 0.62}
 
 
+# =========================================================== THE AVATAR
+def build_avatar():
+    """The player, aniconic - his order: 'only a dress with a beautiful
+    crown... no body will be inside it, and the crown will hover above it.'
+
+    Named from the theme so it cannot drift:
+      - a full-length gown in the rose damask of the palace cloth, EMPTY -
+        the collar opens onto nothing, the sleeves hang hollow;
+      - the folds are UNEQUAL gores, deep at the hem and gone at the bodice,
+        seeded so the mirror test fails (the organic law);
+      - a gold sash at the waist with falling tails, gold four-point stars
+        embroidered down the skirt (the approved star shape, never a cut
+        solid);
+      - the crown HOVERS above the open collar: a thin gold circlet with
+        alternating points, every point tipped by a twinkling star gem, one
+        bright star floating in its centre;
+      - baby pink dominant, the glow left to the engine's bloom.
+    """
+    GEMS = []
+    KINDS = ("rose", "diamond", "sapphire", "ruby", "amethyst")
+    rj = random.Random(4207)
+    H = 1.45                      # the collar height; the crown floats above
+
+    # THE GOWN: one loft, hem to collar. The cross-section carries the
+    # gores: a sum of unequal sine folds whose depth dies toward the bodice.
+    NF = [(5, 0.050, rj.uniform(0, 6.3)), (8, 0.034, rj.uniform(0, 6.3)),
+          (11, 0.020, rj.uniform(0, 6.3)), (3, 0.028, rj.uniform(0, 6.3))]
+    PROFILE = [(0.00, 0.50), (0.06, 0.485), (0.16, 0.44), (0.30, 0.375),
+               (0.46, 0.30), (0.62, 0.225), (0.76, 0.175), (0.88, 0.158),
+               (0.97, 0.166), (1.06, 0.178), (1.16, 0.178), (1.26, 0.160),
+               (1.34, 0.128), (1.40, 0.092), (1.45, 0.070)]
+    NR = 30
+    rows = []
+    for (z, r) in PROFILE:
+        t = z / H
+        depth = (1.0 - t) ** 1.6            # folds live at the hem
+        ring = []
+        for k in range(NR):
+            a = k / float(NR) * 2 * math.pi
+            f = 1.0
+            for (nk, amp, ph) in NF:
+                f += amp * depth * math.sin(nk * a + ph)
+            # a slight train behind (-y), and the hem kicked as if mid-step
+            cy = -0.070 * (1.0 - t) ** 2
+            ring.append((math.cos(a) * r * f,
+                         cy + math.sin(a) * r * f * (1.06 if math.sin(a) < 0
+                                                    else 1.0),
+                         z))
+        rows.append(ring)
+    gown = loft(rows, close=True, cap_a=True, cap_b=False, name="gown")
+    sol = gown.modifiers.new("s", 'SOLIDIFY')
+    sol.thickness = 0.012
+    bpy.context.view_layer.objects.active = gown
+    bpy.ops.object.modifier_apply(modifier=sol.name)
+    slot(gown, "cloth")
+
+    # THE SLEEVES: hollow tubes arcing out and down from the shoulders,
+    # nothing inside them, cuffs open and flared
+    for sd in (1, -1):
+        pts = [(0.135, 1.335, 0.050), (0.205, 1.290, 0.052),
+               (0.265, 1.175, 0.056), (0.300, 1.020, 0.060),
+               (0.318, 0.840, 0.070), (0.326, 0.660, 0.086),
+               (0.330, 0.560, 0.104)]
+        srows = []
+        for (px, pz, pr) in pts:
+            ring = []
+            for k in range(10):
+                a = k / 10.0 * 2 * math.pi
+                ring.append((sd * (px + math.cos(a) * pr * 0.9),
+                             math.sin(a) * pr,
+                             pz + math.cos(a) * pr * 0.35))
+            srows.append(ring)
+        sl = loft(srows, close=True, cap_a=True, cap_b=False,
+                  name="slv%d" % (sd > 0))
+        so2 = sl.modifiers.new("s", 'SOLIDIFY')
+        so2.thickness = 0.010
+        bpy.context.view_layer.objects.active = sl
+        bpy.ops.object.modifier_apply(modifier=so2.name)
+        slot(sl, "cloth")
+
+    # THE COLLAR: a slim gold band round the empty neck
+    slot(torus(0.082, 0.012, (0, 0, H), seg=20, minor=8), "gold")
+
+    # THE SASH: a gold band at the waist with a pearl knot. (It had falling
+    # ribbon tails; single-sided lofts, they rendered as a black cravat and
+    # are gone - the band and the knot say everything.)
+    slot(torus(0.168, 0.020, (0, 0, 0.90), seg=20, minor=8), "gold")
+    slot(sphere(0.038, (0.10, -0.155, 0.875), seg=10, ring=8), "gold")
+
+    def star4(x, y, z, s, tilt):
+        """the approved star shape: two long thin bipyramids crossed - the
+        points STRETCHED, the waist a sliver, never a squarish solid"""
+        ct, st = math.cos(tilt), math.sin(tilt)
+        for horiz in (False, True):
+            rows2 = []
+            for (e, w) in ((-1.0, 0.03), (0.0, 1.0), (1.0, 0.03)):
+                ring = []
+                for q in (0.0, 1.57, 3.14, 4.71):
+                    ww = s * 0.14 * w
+                    if horiz:
+                        lx, ly, lz = e * s, math.sin(q) * ww, math.cos(q) * ww
+                    else:
+                        lx, ly, lz = math.cos(q) * ww, math.sin(q) * ww, e * s
+                    ring.append((x + lx * ct - ly * st,
+                                 y + lx * st + ly * ct, z + lz))
+                rows2.append(ring)
+            slot(loft(rows2, close=True, cap_a=False, cap_b=False,
+                      name="st"), "gold")
+
+    # gold stars embroidered down the skirt, unevenly, as the relics wear
+    for i in range(9):
+        a = rj.uniform(0, 6.283)
+        t = rj.uniform(0.08, 0.55)
+        z = H * t
+        rr = 0.50 - 0.32 * t
+        star4(math.cos(a) * rr * 1.01, math.sin(a) * rr * 1.01, z,
+              rj.uniform(0.030, 0.048), a)
+        # (no gem sprites on the skirt: at portrait distance one mid-twinkle
+        # flare read as a headlight through the cloth - the gold stars carry
+        # the skirt; the sprites live at the collar and the crown)
+
+    # THE CROWN, HOVERING: nothing holds it, which is the point
+    CZ = H + 0.17
+    slot(torus(0.096, 0.015, (0, 0, CZ), seg=24, minor=8), "gold")
+    slot(torus(0.090, 0.009, (0, 0, CZ + 0.032), seg=24, minor=6), "gold")
+    # four broad points, and a small gold orb between each pair - a crown,
+    # not a fence of nails
+    NPT = 8
+    for k in range(NPT):
+        a = k / float(NPT) * 2 * math.pi
+        px, py = math.cos(a) * 0.096, math.sin(a) * 0.096
+        if k % 2 == 0:
+            tall = 0.108
+            prows = []
+            for (hh, ww) in ((0.0, 0.030), (0.35, 0.022), (0.72, 0.013),
+                             (1.0, 0.003)):
+                prows.append([(px + math.cos(q + a) * ww,
+                               py + math.sin(q + a) * ww,
+                               CZ + 0.012 + tall * hh)
+                              for q in (0.0, 1.57, 3.14, 4.71)])
+            slot(loft(prows, close=True, cap_a=True, cap_b=True,
+                      name="pt"), "gold")
+            GEMS.append([round(px, 4), round(CZ + 0.012 + tall + 0.02, 4),
+                         round(-py, 4), KINDS[(k // 2) % 5]])
+        else:
+            slot(sphere(0.020, (px, py, CZ + 0.052), seg=10, ring=8), "gold")
+    # the one bright star floating inside the circlet
+    GEMS.append([0.0, round(CZ + 0.085, 4), 0.0, "diamond"])
+    # and a pair riding the collar
+    GEMS.append([0.078, round(H + 0.01, 4), 0.0, "rose"])
+    GEMS.append([-0.078, round(H + 0.01, 4), 0.0, "rose"])
+
+    return {"lights": [{"x": 0, "y": 1.15, "z": 0, "c": "#ffb6d4", "p": 0.9,
+                        "r": 5.5},
+                       # warm light AT the crown, so the gold reads as gold
+                       {"x": 0, "y": 1.80, "z": 0.35, "c": "#ffd9a0",
+                        "p": 1.3, "r": 3.2}],
+            "motes": {"n": 34, "r": 0.85, "h": 2.05, "y": 0.10},
+            "gems": GEMS,
+            "gemScale": 0.65,
+            "up": 0.0}
+
+
 BUILDERS = {"sabre": build_sabre, "carpet": build_carpet,
             "wings": build_wings, "wand": build_wand,
-            "astrolabe": build_astrolabe}
+            "astrolabe": build_astrolabe, "avatar": build_avatar}
 
 if KIND not in BUILDERS:
     raise SystemExit("no such relic: %s (have %s)"
@@ -1169,6 +1361,8 @@ SLOT_LOOK = {
 SLOT_TEX = {
     ("carpet", "cloth"): "t_rug_d.jpg",
     ("wand", "wood"): "t_woodp_d.jpg",
+    # the avatar's gown wears the real rose jacquard, the bright cut
+    ("avatar", "cloth"): "t_cushion_d.jpg",
 }
 
 for name in SLOTS:

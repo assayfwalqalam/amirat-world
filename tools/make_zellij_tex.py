@@ -21,14 +21,16 @@ SIZE = 512
 SS = 3
 W = SIZE * SS
 
-# the glaze pot: white, honey, emerald, sapphire, and the plum of the palace
-WHITE = (232, 226, 214)
-HONEY = (198, 158, 84)
-EMER = (36, 104, 82)
-SAPPH = (40, 66, 132)
-PLUM = (112, 60, 104)
+# the glaze pot. The first mix ran dark - plum crosses on dark grout read as
+# a red-brown wallpaper across a room. Real dado zellij is LIGHT: white and
+# honey carry it, green and blue are the accents, the grout is pale lime.
+WHITE = (242, 236, 224)
+HONEY = (212, 172, 100)
+EMER = (62, 128, 104)
+SAPPH = (70, 100, 158)
+PLUM = (96, 126, 150)   # a soft sky where the plum was
 ROSE = (196, 130, 154)
-GROUT = (92, 76, 70)   # the lime between the pieces, not a black line
+GROUT = (134, 120, 108)  # pale lime between the pieces
 
 
 def glazed(img, seed=3, chip=1.0):
@@ -172,20 +174,30 @@ def bake_floral():
 
             wrapped(draw)
 
-    # THE CARVING: what makes plaster read as carved is the shadow its own
-    # relief throws. The raised motifs are found by their lightness, the mask
-    # is shifted down-right for shadow and up-left for the lit arris, and the
-    # wrap keeps it seamless.
-    a = np.asarray(im).astype(np.float32)
-    lum = a.mean(axis=2)
+    # THE CARVING, CUT INTO REAL PLASTER. The drawn canvas above is only the
+    # STENCIL now: its motif mask is lifted and pressed into a photographed
+    # lime-plaster scan (PolyHaven CC0, assets/source/plaster_cc0.jpg),
+    # re-tinted warm cream. Every pore and trowel mark in the field is real;
+    # the relief is read the way real carving is read - by its own shadow.
+    lum = np.asarray(im).astype(np.float32).mean(axis=2)
     mask = (lum > (GRND[0] + GRND[1] + GRND[2]) / 3.0 + 4.0).astype(np.float32)
-    sh = max(3, W // 200)
-    shadow = np.clip(np.roll(np.roll(mask, sh, 0), sh, 1) - mask, 0, 1)
-    lit = np.clip(np.roll(np.roll(mask, -sh, 0), -sh, 1) - mask, 0, 1)
-    a -= shadow[:, :, None] * 60.0
-    a += lit[:, :, None] * 28.0
-    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
-    out = glazed(im, 11, 0.35)
+    mimg = Image.fromarray((mask * 255).astype(np.uint8)).resize(
+        (SIZE, SIZE), Image.LANCZOS)
+    m = np.asarray(mimg).astype(np.float32) / 255.0
+    pl = Image.open(os.path.join(ASSETS, "source", "plaster_cc0.jpg"))
+    pa = np.asarray(pl.convert("RGB").resize((SIZE, SIZE),
+                                             Image.LANCZOS)).astype(np.float32)
+    tgt = (209, 201, 185)
+    mean = pa.mean(axis=(0, 1))
+    for c in range(3):
+        pa[:, :, c] *= tgt[c] / max(mean[c], 1.0)
+    sh = max(2, SIZE // 170)
+    shadow = np.clip(np.roll(np.roll(m, sh, 0), sh, 1) - m, 0, 1)
+    lit = np.clip(np.roll(np.roll(m, -sh, 0), -sh, 1) - m, 0, 1)
+    pa += m[:, :, None] * 11.0            # the raised motif, a shade lighter
+    pa -= shadow[:, :, None] * 58.0       # the undercut
+    pa += lit[:, :, None] * 26.0          # the lit arris
+    out = Image.fromarray(np.clip(pa, 0, 255).astype(np.uint8))
     p = os.path.abspath(os.path.join(ASSETS, "t_floral_d.jpg"))
     out.save(p, quality=94)
     return p, out

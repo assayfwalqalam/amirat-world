@@ -399,75 +399,46 @@ def bake_carpet():
 
 
 # ============================================================= THE CURTAIN
+def _redye(src_name, lo, hi, size=512):
+    """A photographed cloth re-dyed. The scan's luminance drives a two-tone
+    ramp - every thread and slub of the real weave survives, only the colour
+    changes. This is how the studios do it: scan first, dye after."""
+    from PIL import ImageOps
+    src = Image.open(os.path.join(ASSETS, "source", src_name)).convert("L")
+    src = src.resize((size, size), Image.LANCZOS)
+    src = ImageOps.autocontrast(src, cutoff=1)
+    a = np.asarray(src).astype(np.float32) / 255.0
+    out = np.zeros((size, size, 3), np.float32)
+    for c in range(3):
+        out[:, :, c] = lo[c] + (hi[c] - lo[c]) * a
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
 def bake_curtain():
-    """The drape. It TILES both ways - a curtain is a length of cloth, not a
-    framed picture - so every motif is drawn up to four times, wrapped over
-    the edges. Same dyes as the carpet, one step lighter: silk, not wool."""
-    CG = (192, 132, 156)
-    CG_D = (178, 118, 143)
-    im = Image.new("RGB", (W, W), CG)
-    d = ImageDraw.Draw(im)
-
-    # the woven stripe of a damask ground
-    for x in range(0, W, int(W * 0.055)):
-        d.rectangle([x, 0, x + int(W * 0.012), W], fill=CG_D)
-
-    def wrapped(fn):
-        """draw fn at nine offsets so nothing is cut at the seam"""
-        for ox in (-W, 0, W):
-            for oy in (-W, 0, W):
-                fn(ox, oy)
-
-    # an ogee lattice of stems - the classic silk repeat - with a flower in
-    # every eye of the net
-    NX = 4
-    cell = W / float(NX)
-    for gy in range(NX + 1):
-        for gx in range(NX + 1):
-            bx = gx * cell + (cell * 0.5 if gy % 2 else 0.0)
-            by = gy * cell
-
-            def draw(ox, oy, bx=bx, by=by, gx=gx, gy=gy):
-                x, y = bx + ox, by + oy
-                if x < -cell or x > W + cell or y < -cell or y > W + cell:
-                    return
-                dd = ImageDraw.Draw(im)
-                # the ogee arms
-                for sgn in (-1, 1):
-                    vine(dd, (x, y - cell * 0.5), (x + sgn * cell * 0.5, y),
-                         cell * 0.12 * sgn, GOLD, max(2, int(W * 0.0040)))
-                    vine(dd, (x + sgn * cell * 0.5, y), (x, y + cell * 0.5),
-                         cell * 0.12 * sgn, GOLD, max(2, int(W * 0.0040)))
-                # the flower in the eye
-                if (gx + gy) % 2 == 0:
-                    rosette(dd, x, y, cell * 0.19, n=8, pet=IVORY, heart=SAPPH, ring=GOLD)
-                else:
-                    palmette(dd, x, y + cell * 0.12, -math.pi / 2, cell * 0.22,
-                             GOLD_HI, GOLD)
-                for k in range(4):
-                    a = math.pi / 4 + k * math.pi / 2
-                    leaf(dd, x + math.cos(a) * cell * 0.27,
-                         y + math.sin(a) * cell * 0.27, a, cell * 0.15,
-                         cell * 0.040, EMER if k % 2 else EMER_HI, EMER_HI)
-                    bud(dd, x + math.cos(a) * cell * 0.44,
-                        y + math.sin(a) * cell * 0.44, a, cell * 0.075,
-                        SAPPH_HI if k % 2 else GOLD_HI)
-
-            wrapped(draw)
-
-    d = ImageDraw.Draw(im)
-    glints(d, 420, (0, 0, W, W), (GOLD_HI, GOLD, IVORY, SAPPH_HI, EMER_HI),
-           W * 0.0015, W * 0.0032, 23)
-
-    out = weave(im, 256, nap=0.34, jitter=6.0, warp=0.55, seed=9)
+    """REAL CLOTH AT LAST. The hand-drawn ogee lattice is retired - his
+    verdict stood against every redraw. The drape now wears a photographed
+    woven jacquard (PolyHaven CC0, assets/source/jacquard_cc0.jpg): actual
+    thread, actual raised acanthus, re-dyed to the palace rose. Seamless
+    because the scan is."""
+    out = _redye("jacquard_cc0.jpg", (112, 60, 80), (198, 142, 162))
     p = os.path.abspath(os.path.join(ASSETS, "t_curtain_d.jpg"))
+    out.save(p, quality=94)
+    return p, out
+
+
+def bake_cushion():
+    """The majlis cushion in the same real jacquard, a shade brighter - the
+    carpet-weave version at prop scale read as mottled STONES on the floor
+    (his words, twice)."""
+    out = _redye("jacquard_cc0.jpg", (150, 98, 118), (226, 180, 194))
+    p = os.path.abspath(os.path.join(ASSETS, "t_cushion_d.jpg"))
     out.save(p, quality=94)
     return p, out
 
 
 if __name__ == "__main__":
     from PIL import ImageStat
-    for (p, img) in (bake_carpet(), bake_curtain()):
+    for (p, img) in (bake_carpet(), bake_curtain(), bake_cushion()):
         st = ImageStat.Stat(img)
         print("WROTE", p, "mean", [round(v) for v in st.mean],
               "stddev", [round(v) for v in st.stddev])
