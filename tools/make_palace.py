@@ -276,19 +276,22 @@ def _sim_panel(w_panel, h, seed):
     verts = []
     for it in range(NT + 1):
         t = it / float(NT)
-        # the panel starts gathered at the rod, pinched at the holder,
-        # flaring to the hem - the SHAPE is the order; the folds are not
+        # GRASPED TO THE SIDE - his words, finally built as said. The old
+        # shape pinched at the CENTRE like a corset, and he called the bend
+        # fake because it was: no curtain on earth narrows at its own waist.
+        # A tied-back curtain is pulled to ONE side: full across the rod,
+        # swept toward the jamb, gathered there in the tieback's grip, and
+        # falling from it with the hem swinging part-way back.
         if t <= HOLD_T:
             f = t / HOLD_T
             f = f * f * (3 - 2 * f)
-            span = 0.55 + (0.42 - 0.30 * f) * w_panel
+            spread = 1.0 - 0.72 * f          # how much of the width it uses
+            pull = 0.62 * f * w_panel        # how far the bundle has swept
         else:
             f = (t - HOLD_T) / (1 - HOLD_T)
             f = f * f * (3 - 2 * f)
-            # the hem flares, but not into a tent: at 1.4m a panel the pairs
-            # of neighbouring windows met in the middle and the wall below
-            # the sills was all cloth
-            span = 0.38 + (0.12 + 0.40 * f) * w_panel
+            spread = 0.28 + 0.30 * f
+            pull = 0.62 * w_panel * (1.0 - 0.35 * f)
         for iu in range(NU + 1):
             u = iu / float(NU)
             # THE FULLNESS: the accordion stores 1.7x the hanging span of
@@ -296,7 +299,7 @@ def _sim_panel(w_panel, h, seed):
             # choosing; the jitter decides where they break.
             depth = 0.11 * math.sin(u * math.pi * 7.0 + seed) \
                 * (0.4 + 0.6 * t) + rnd.uniform(-0.02, 0.02)
-            verts.append((u * span, depth, -h * t))
+            verts.append((pull + u * w_panel * spread, depth, -h * t))
     faces = []
     for it in range(NT):
         for iu in range(NU):
@@ -307,7 +310,8 @@ def _sim_panel(w_panel, h, seed):
     vg = ob.vertex_groups.new(name="pin")
     vg.add(list(range(NU + 1)), 1.0, 'REPLACE')          # the rod
     hr = int(NT * HOLD_T) * (NU + 1)
-    vg.add([hr + iu for iu in range(2, NU - 1)], 1.0, 'REPLACE')   # the cuff
+    # the tieback grips the OUTER side of the bundle, at the jamb
+    vg.add([hr + iu for iu in range(NU - 4, NU + 1)], 1.0, 'REPLACE')
 
     cl = ob.modifiers.new("cl", 'CLOTH')
     cl.settings.vertex_group_mass = "pin"
@@ -337,7 +341,8 @@ def _sim_panel(w_panel, h, seed):
     return rows
 
 
-def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
+def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True,
+            reveal=True):
     """Cloth hung in an opening and GRASPED TO THE SIDE, held by a golden
     holder - his order. The drape itself comes out of a cloth simulation
     (see _sim_panel); this only places the result and adds the metalwork."""
@@ -356,21 +361,29 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
         rows = _sim_panel(w / 2, h, seed)
         NT = len(rows) - 1
         NU = len(rows[0]) - 1
-        # CLEAR OF THE WALL TRIM. At 0.16 the deeper folds of the simulated
-        # cloth swung back through the dado rail, and the gold band read as
-        # lying ON the curtain. The whole drape hangs a hand further out.
-        base_o = 0.32 + (0.05 if sd > 0 else 0.0)
+        # IN THE REVEAL, NOT ON THE WALL. Every fix that pushed the cloth
+        # further into the room still fought the wall's own mouldings - his
+        # screenshot showed gold cutting straight through the drape. A real
+        # curtain in a metre-thick wall hangs INSIDE the window reveal,
+        # behind the interior face, where no band can ever reach it - and
+        # that is where it hangs now, by construction. A FREESTANDING
+        # curtain (reveal=False) - hung across a room on its own rod, with
+        # no opening behind it - stays on the room side instead, or the
+        # same offset would bury it in the wall it stands before.
+        base_o = (-0.55 if reveal else 0.12) + (0.06 if sd > 0 else 0.0)
 
         b0 = len(cloth.v)
         for side in (0, 1):
             for row in rows:
                 for (sx, sy, sz) in row:
                     a = sd * (0.20 + sx)
-                    # folds swing toward the ROOM only: a fold that swung back
-                    # went through the dado rail, and gold read as lying on
-                    # the cloth. The clamp flattens the deepest back-folds by
-                    # a few centimetres, which the eye never finds.
-                    o = base_o + max(sy, -0.08) - side * TH
+                    # folds stay within the reveal: never past the interior
+                    # face, never through the outer grille. Freestanding:
+                    # folds swing to the room side, never into what's behind.
+                    if reveal:
+                        o = base_o + max(min(sy, 0.40), -0.30) - side * TH
+                    else:
+                        o = base_o + max(min(sy, 0.45), -0.10) - side * TH
                     cloth.v.append(P(a, o, z_top + sz))
         VP = (NT + 1) * (NU + 1)
 
@@ -399,20 +412,23 @@ def curtain(cx, cy, z_top, w, h, face=(0, -1), sides=(-1, 1), rod=True):
         # out of the jamb, with a knob at its end. It sits where the sim was
         # pinned, so the cloth visibly passes through its grip.
         hrow = rows[int(NT * TT)]
-        ha = sd * (0.20 + (hrow[2][0] + hrow[NU - 2][0]) / 2)
-        hz = z_top + (hrow[2][2] + hrow[NU - 2][2]) / 2
-        span = abs(hrow[NU - 2][0] - hrow[2][0])
+        ha = sd * (0.20 + (hrow[NU - 3][0] + hrow[NU - 1][0]) / 2)
+        hz = z_top + (hrow[NU - 3][2] + hrow[NU - 1][2]) / 2
+        bun = abs(hrow[NU - 1][0] - hrow[NU - 4][0]) + 0.16
         hx_, hy_, _ = P(ha, base_o, hz)
-        box(span + 0.20, 0.34, 0.26, (hx_, hy_, hz), gold, yaw=yaw)
-        jx, jy, _ = P(sd * (w / 2 + 0.62), 0.10, hz)
-        box(0.44, 0.13, 0.13, (jx, jy, hz), gold, yaw=yaw)
-        sphere(0.15, (jx, jy, hz), gold, seg=8, rings=6)
+        # the cuff wraps the BUNDLE at the jamb - a ring round gathered
+        # cloth, not a brick floating on the drape
+        box(bun, 0.30, 0.22, (hx_, hy_, hz), gold, yaw=yaw)
+        jx, jy, _ = P(sd * (w / 2 + 0.55), base_o, hz)
+        box(0.34, 0.11, 0.11, (jx, jy, hz), gold, yaw=yaw)
+        sphere(0.12, (jx, jy, hz), gold, seg=8, rings=6)
     if rod:
-        rx, ry, _ = P(0, 0.16, z_top + 0.14)
-        box(w + 1.9, 0.16, 0.16, (rx, ry, z_top + 0.14), gold, yaw=yaw)
+        ro = -0.55 if reveal else 0.12
+        rx, ry, _ = P(0, ro, z_top + 0.14)
+        box(w + 1.4, 0.14, 0.14, (rx, ry, z_top + 0.14), gold, yaw=yaw)
         for sd2 in (-1, 1):
-            ex, ey, _ = P(sd2 * (w / 2 + 0.95), 0.16, z_top + 0.14)
-            sphere(0.17, (ex, ey, z_top + 0.14), gold, seg=8, rings=6)
+            ex, ey, _ = P(sd2 * (w / 2 + 0.72), ro, z_top + 0.14)
+            sphere(0.15, (ex, ey, z_top + 0.14), gold, seg=8, rings=6)
 
 
 # --------------------------------------------------------- the floral rope
@@ -489,8 +505,13 @@ def blossom3(cx, cy, cz, nrm, r, petal=None, eye=None, npet=5, seed=None):
         ep.v.append((cx + (math.cos(aa) * ux + math.sin(aa) * vx) * rr + nx * 0.02,
                      cy + (math.cos(aa) * uy + math.sin(aa) * vy) * rr + ny * 0.02,
                      cz + (math.cos(aa) * uz + math.sin(aa) * vz) * rr + nz * 0.02))
-    ep.tri(e0, e0 + 1, e0 + 2)
-    ep.tri(e0, e0 + 2, e0 + 1)
+    # all three rim verts fanned from the centre - with only the first two,
+    # the third was an orphan and every eye rendered as an off-centre sliver
+    for _k2 in range(3):
+        _r1 = e0 + 1 + _k2
+        _r2 = e0 + 1 + (_k2 + 1) % 3
+        ep.tri(e0, _r1, _r2)
+        ep.tri(e0, _r2, _r1)
 
 
 def garland(p0, p1, sag, nrm=(0, 0, 1), seed=0, n=11):
@@ -1087,19 +1108,22 @@ for sxc in (-1, 1):
 # over it and a carved floral band over that; then the blind arcade stands on
 # the band, cut deep enough to throw a shadow, each bay carrying a field of
 # carved leaf and a rosette in every spandrel.
+# THE REAL SCHEME, copied from the rooms that survive: zellij to the waist,
+# ONE modest band over it, and above that a tall field of carved stucco -
+# cream on cream, the gold kept for the band alone. His verdict on the old
+# three-rail star-paper wall was "no sense of copying from actual ancient
+# housing", and he was right: no Andalusi room stacks gold rails.
 DADO = CY + 1.85
 for _sy in (17 - WT, -(17 - WT)):
     _s = 1 if _sy > 0 else -1
     box(44.6, 0.30, 1.85, (0, _sy - 0.15 * _s, CY + 0.925), tile)
-    box(44.6, 0.40, 0.24, (0, _sy - 0.20 * _s, DADO + 0.12), gold)
-    box(44.6, 0.30, 0.90, (0, _sy - 0.15 * _s, DADO + 0.69), flor)
-    box(44.6, 0.40, 0.20, (0, _sy - 0.20 * _s, DADO + 1.24), gold)
+    box(44.6, 0.34, 0.14, (0, _sy - 0.17 * _s, DADO + 0.07), gold)
+    box(44.6, 0.30, 1.26, (0, _sy - 0.15 * _s, DADO + 0.14 + 0.63), flor)
 for _sx in (23 - WT, -(23 - WT)):
     _s = 1 if _sx > 0 else -1
     box(0.30, 32.6, 1.85, (_sx - 0.15 * _s, 0, CY + 0.925), tile)
-    box(0.40, 32.6, 0.24, (_sx - 0.20 * _s, 0, DADO + 0.12), gold)
-    box(0.30, 32.6, 0.90, (_sx - 0.15 * _s, 0, DADO + 0.69), flor)
-    box(0.40, 32.6, 0.20, (_sx - 0.20 * _s, 0, DADO + 1.24), gold)
+    box(0.34, 32.6, 0.14, (_sx - 0.17 * _s, 0, DADO + 0.07), gold)
+    box(0.30, 32.6, 1.26, (_sx - 0.15 * _s, 0, DADO + 0.14 + 0.63), flor)
 ARC_Z = DADO + 1.40
 for _i in range(7):
     _x = -19.2 + 38.4 * _i / 6.0
@@ -1139,16 +1163,26 @@ for _sxg in (-1, 1):
 # cushions sit at the angles people left them at, one group's table is
 # pushed aside, the scrolls at the dais lie where they were put down.
 _hr = random.Random(4051)
+# A DIWAN IS A BENCH OF MATTRESSES against the wall with cushions set on it -
+# not loose cushions scattered on stone, which read (his words) as random
+# stones on the ground. The mattress is built into the palace mesh in the
+# curtain cloth; the cushions ride on top, backs to the dado. Both centre
+# doorways stay clear.
 for _sy4 in (-1, 1):
-    _hx4 = -19.0
-    while _hx4 < 19.0:
-        if abs(_hx4) > 3.2 or _sy4 > 0:          # the south door stays clear
-            if _hr.random() > 0.18:              # a broken line, not a fence
-                plant("p_cushions", _hx4 + _hr.uniform(-0.2, 0.2),
-                      _sy4 * (14.6 - 1.15) + _hr.uniform(-0.25, 0.25), CY,
+    _hx4 = -18.5
+    while _hx4 < 18.0:
+        _mlen = _hr.uniform(2.4, 3.4)
+        if abs(_hx4 + _mlen / 2) > 3.6 and _hr.random() > 0.15:
+            _my4 = _sy4 * 14.44
+            box(_mlen, 1.05, 0.30, (_hx4 + _mlen / 2, _my4, CY + 0.15), cloth)
+            col(_hx4 + _mlen / 2, _my4, CY + 0.15, _mlen / 2, 0.525, 0.15)
+            for _ci4 in range(int(_mlen / 1.15)):
+                _cx4 = _hx4 + 0.6 + _ci4 * 1.1 + _hr.uniform(-0.15, 0.15)
+                plant("p_cushions", _cx4,
+                      _my4 + _sy4 * _hr.uniform(-0.1, 0.15), CY + 0.30,
                       rot=(math.pi / 2 if _sy4 < 0 else -math.pi / 2)
-                      + _hr.uniform(-0.4, 0.4), sc=_hr.uniform(0.85, 1.05))
-        _hx4 += _hr.uniform(1.35, 2.1)
+                      + _hr.uniform(-0.3, 0.3), sc=_hr.uniform(0.62, 0.78))
+        _hx4 += _mlen + _hr.uniform(0.4, 1.4)
 for (_gx5, _gy5) in ((-14.5, -6.0), (14.5, -6.0), (-14.5, 6.0), (14.5, 6.0)):
     _ox5 = _hr.uniform(-0.6, 0.6)
     _oy5 = _hr.uniform(-0.6, 0.6)
@@ -1186,16 +1220,12 @@ plant("p_scrolls", 1.9, 10.9, CY, rot=_hr.uniform(0, 6.28))
 plant("p_chest", -6.4, 13.7, CY, rot=math.pi + 0.08)
 plant("p_chest", 6.2, 13.6, CY, rot=math.pi - 0.15)
 
-# CLOTH AT EVERY WINDOW, not at one door. The hall's ground storey has
-# nineteen openings in its outer walls; each one gets its curtain, hung inside.
-for _wx in (-19, -15, -11, 11, 15, 19):
-    curtain(_wx, -(17 - WT) + 0.10, CY + 5.40, 2.6, 5.40, face=(0, -1))
-    curtain(_wx * 0.72, (17 - WT) - 0.10, CY + 5.40, 2.6, 5.40, face=(0, 1))
-for _sxw2 in (-1, 1):
-    for _i2 in range(4):
-        _cy2 = -12 + 24 * (_i2 + 0.5) / 4
-        curtain(_sxw2 * ((23 - WT) - 0.10), _cy2, CY + 5.40, 2.6, 5.40,
-                face=(_sxw2, 0))
+# NO CLOTH ON BLANK STONE. Fourteen curtains used to hang against the hall's
+# ground-storey walls - walls with no openings in them - and his screenshot
+# said what that looks like: cloth overlapping the mouldings behind it, gold
+# cutting through the drape, decoration with no cause. A curtain hangs where
+# something opens: the two portal drapes below, the room doors, the pavilion.
+# The hall walls are carried by their own courses and the blind arcade.
 
 # THE CARPETS: a runner down the middle and one in each side aisle
 carpet(0, -1, CY, 7.0, 26)
@@ -1416,7 +1446,7 @@ def module(cx, cy, face, gate=False, code=""):
         rx_, ry_ = P(0, 0)
         carpet(rx_, ry_, fl_z, 7.2, w_hy * 1.5, yaw=math.atan2(-ox, oy))
         cux, cuy = P(0, -(w_hy - WT2 / 2 - 1.0))
-        curtain(cux, cuy, fl_z + 5.0, 3.0, 5.0, face=inward)
+        curtain(cux, cuy, fl_z + 5.0, 3.0, 5.0, face=inward, reveal=False)
         for ll in (-4.5, 4.5):
             llx, lly = P(ll, 0)
             lantern(llx, lly, ceil_z - 0.1, drop=2.1, r=0.26,
@@ -1442,7 +1472,11 @@ def module(cx, cy, face, gate=False, code=""):
         # Every room draws from its own seed, so no two are furnished alike.
         fr = random.Random(int(cx * 31 + cy * 57) & 0xffff)
         fyaw = math.atan2(-ox, oy)
-        tx_, ty_ = P(fr.uniform(-1.4, 1.4), fr.uniform(-1.2, 1.8))
+        # the table's LOCAL spot is kept: the cushions ring it, and a ring
+        # around freshly-rolled coordinates is a ring around a phantom
+        _tlx = fr.uniform(-1.4, 1.4)
+        _tly = fr.uniform(-1.2, 1.8)
+        tx_, ty_ = P(_tlx, _tly)
         plant("p_table", tx_, ty_, fl_z, rot=fyaw + fr.uniform(-0.3, 0.3))
         plant("p_oillamp", tx_, ty_, fl_z + 0.48, rot=fr.uniform(0, 6.28), sc=0.8)
         if fr.random() < 0.5:
@@ -1451,21 +1485,22 @@ def module(cx, cy, face, gate=False, code=""):
         for _ in range(fr.choice((2, 3, 3))):
             ca_ = fr.uniform(0, 6.283)
             cd_ = fr.uniform(1.3, 2.1)
-            cxx, cyy = P(fr.uniform(-1.4, 1.4) + math.cos(ca_) * cd_,
-                         fr.uniform(-1.2, 1.8) + math.sin(ca_) * cd_)
+            cxx, cyy = P(_tlx + math.cos(ca_) * cd_,
+                         _tly + math.sin(ca_) * cd_)
             plant("p_cushions", cxx, cyy, fl_z,
                   rot=ca_ + math.pi + fr.uniform(-0.5, 0.5), sc=fr.uniform(0.8, 1.0))
         wx2_, wy2_ = P(fr.uniform(-(w_hx - 2.6), w_hx - 2.6), w_hy - WT2 - 0.85)
         plant(fr.choice(("p_chest", "p_crates", "p_basket")), wx2_, wy2_, fl_z,
               rot=fyaw + math.pi + fr.uniform(-0.12, 0.12))
-        jx_, jy_ = P(fr.choice((-1, 1)) * (w_hx - 1.9), -(w_hy - 2.3))
+        # clear of the side wall (inner face w_hx - WT2) AND its dado
+        jx_, jy_ = P(fr.choice((-1, 1)) * (w_hx - WT2 - 0.55), -(w_hy - 2.3))
         plant("p_waterjug", jx_, jy_, fl_z, rot=fr.uniform(0, 6.28))
         if fr.random() < 0.4:
             bx_, by_ = P(fr.uniform(-2.0, 2.0), w_hy - WT2 - 1.9)
             plant("p_books", bx_, by_, fl_z, rot=fr.uniform(0, 6.28), sc=0.9)
         # a second curtain, at the middle niche of the far wall
         nqx, nqy = P(0, w_hy - WT2 - 0.14)
-        curtain(nqx, nqy, fl_z + 5.05, 1.9, 4.2, face=(ox, oy))
+        curtain(nqx, nqy, fl_z + 5.05, 1.9, 4.2, face=(ox, oy), reveal=False)
         # THE ROOM'S OWN COURSES: the same tiled dado, gold string and carved
         # floral band the great hall wears, on its three solid walls. A room
         # with a carpet and bare walls above it reads as a store with a rug in
@@ -1617,7 +1652,7 @@ def corner_tower(cx, cy, code=""):
                 face=(math.cos(da), math.sin(da)), ajar=0.7)
     carpet(cx, cy, CY, 7.4, 9.0, yaw=da + math.pi / 2)
     curtain(cx + math.cos(da) * 7.7, cy + math.sin(da) * 7.7, CY + 4.6, 2.4, 4.6,
-            face=(math.cos(da), math.sin(da)))
+            face=(math.cos(da), math.sin(da)), reveal=False)
     for ll in (-3.5, 3.5):
         lantern(cx + ll, cy, 2.0 + droom_h - 0.1, drop=1.9, r=0.26,
                 power=0.6, reach=9.0)
@@ -1932,10 +1967,13 @@ parts.append(make_mesh(rug, (0.72, 0.60, 0.52, 1), 0.95, 0.0,
 parts.append(make_mesh(cloth, (1, 1, 1, 1), 0.74, 0.0,
                        tex="t_curtain_d.jpg", uvs=1.0))
 # THE TILED DADO, and the carved floral bands over it
+# the repeats are at ARCHITECTURAL scale: a zellij star module is 0.45m on
+# a real dado and a carved-stucco motif spans a third of a metre - at half
+# that size both dissolved into busy wallpaper dots from across the room
 parts.append(make_mesh(tile, (1, 1, 1, 1), 0.30, 0.0,
-                       tex="t_zellij_d.jpg", uvs=0.50))
+                       tex="t_zellij_d.jpg", uvs=0.90))
 parts.append(make_mesh(flor, (1, 1, 1, 1), 0.62, 0.0,
-                       tex="t_floral_d.jpg", uvs=0.95))
+                       tex="t_floral_d.jpg", uvs=1.60))
 # THE GARLANDS: leaf and flower, the one thing in the palace that is alive
 parts.append(make_mesh(folia, (0.19, 0.33, 0.17, 1), 0.88, 0.0))
 parts.append(make_mesh(bloom, (0.90, 0.46, 0.60, 1), 0.82, 0.0,

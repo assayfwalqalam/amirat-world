@@ -1605,7 +1605,7 @@
      p_awning at random, muddying the market's trade clustering - the souk
      owns the market kit. */
   var PROPS_STREET = ['p_barrels', 'p_crates', 'p_jars', 'p_sacks', 'p_cart', 'p_bench',
-                      'p_stones', 'p_ropecoil', 'p_firewood', 'p_pergola',
+                      'p_ropecoil', 'p_firewood', 'p_pergola',
                       'p_plantpot', 'p_basket', 'p_waterjug'];
   /* A HOUSE IS NOT A STOREROOM. The first cut was chests and crates against
      every wall, because those were half the list. What actually lines the wall
@@ -1613,7 +1613,7 @@
      bedding rolled up, the books - and one chest. */
   /* what a household leaves against the outside of its own wall */
   var HOUSE_LEAN = ['p_firewood', 'p_basket', 'p_jars', 'p_waterjug', 'p_crates',
-                    'p_sacks', 'p_ropecoil', 'p_stones', 'p_barrel', 'p_broom',
+                    'p_sacks', 'p_ropecoil', 'p_barrel', 'p_broom',
                     'p_bench', 'p_plantpot'];
   var ROOM_WALL = ['p_waterjug', 'p_jars', 'p_basket', 'p_basket', 'p_pot',
                    'p_cushions', 'p_books', 'p_scrolls', 'p_stool', 'p_broom',
@@ -1777,8 +1777,11 @@
       if (clearAt(wc0[0], by + ly, wc0[1], 0.34)) {
         var seatk = hashU(ms0 ^ 0xa5) > 0.5 ? 'p_stool' : 'p_cushions';
         if (MODELS[seatk]) {
+          /* face BACK at the table: the offset ran in the (cos,sin) frame
+             but facing is (sin,cos) - ca0+PI was up to 90 degrees off */
           placeBuilt(seatk, wc0[0], sitOn(seatk, by + ly, 1), wc0[1],
-                     brot + ca0 + Math.PI + (hashU(ms0 ^ 0xa7) - 0.5) * 0.5, 1);
+                     brot + Math.atan2(-Math.cos(ca0), -Math.sin(ca0))
+                     + (hashU(ms0 ^ 0xa7) - 0.5) * 0.5, 1);
           markContact(seatk, wc0[0], by + ly, wc0[1], 1);
         }
       }
@@ -1969,7 +1972,7 @@
       mat: 'stall/mat_spice',    goods: ['p_sacks', 'p_basket', 'p_jars'] },
     { n: 'metal',   booth: 'stall/booth_metal',
       front: ['stall/trestle_metal', 'stall/rack_rope'],
-      mat: 'stall/mat_rope',     goods: ['p_barrels', 'p_crates', 'p_stones'] },
+      mat: 'stall/mat_rope',     goods: ['p_barrels', 'p_crates', 'p_ropecoil'] },
     { n: 'bread',   booth: 'stall/canopy_bread',
       front: ['stall/trestle_basket', 'stall/barrow_grain'],
       mat: 'stall/mat_basket',   goods: ['p_sacks', 'p_basket', 'p_bread'] },
@@ -2129,8 +2132,11 @@
       })
       .filter(function (o) { return o.len > 6; })
       .sort(function (a, b) {
-        var wd = b.w.half - a.w.half;
-        if (Math.abs(wd) > 0.3) return wd;
+        /* discrete width class first: a sliding 0.3 "tie window" is not
+           transitive, and Array.sort with an inconsistent comparator is
+           implementation-defined - central arteries could drop off the 30 */
+        var wa = Math.round(a.w.half / 0.3), wb = Math.round(b.w.half / 0.3);
+        if (wa !== wb) return wb - wa;
         return a.d0 - b.d0;
       })
       .slice(0, 30);
@@ -2290,8 +2296,10 @@
        their goods, and the arc toward the widest incoming way stays open so
        carts and walkers come through. Every placement asks clearGround; the
        goods stand at their own ground height, not the stall's. */
+    /* no p_stones: a heap of rocks is not merchandise - his complaint, and
+       he was right. Building stone lives at the quarry. */
     var GOODS = ['p_jars', 'p_crates', 'p_sacks', 'p_barrels', 'p_basket',
-                 'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood', 'p_stones'];
+                 'p_pot', 'p_waterjug', 'p_ropecoil', 'p_firewood'];
     for (var q = 0; q < SQUARES.length; q++) {
       var sq = SQUARES[q];
       var qs = (q * 7717) | 0;
@@ -2538,8 +2546,8 @@
        clean skirting board -- stone left over from the building of it, cut
        firewood, stores nobody has moved. It is what makes the base read as
        lived in rather than as a wall meeting a floor. */
-    var LEAN = ['p_stones', 'p_firewood', 'p_crates', 'p_barrels', 'p_sacks',
-                'p_jars', 'p_ropecoil', 'p_basket', 'p_stones', 'p_crates'];
+    var LEAN = ['p_firewood', 'p_crates', 'p_barrels', 'p_sacks',
+                'p_jars', 'p_ropecoil', 'p_basket', 'p_firewood', 'p_crates'];
     var IN = S - 8.6;
     for (var side = 0; side < 4; side++) {
       for (var n2 = 0; n2 < 16; n2++) {
@@ -2913,8 +2921,11 @@
             var wfh = wallFacing(x + fx * pr2, Y + 2.2, z + fz * pr2, 0.9);
             if (wfh) {
               if (lroll < 0.11) {
+                /* torch(rot) pushes the flame toward (-sin rot, -cos rot):
+                   the OUTWARD normal needs the negated angle, exactly as the
+                   ramparts learned */
                 torch(wfh.fx + wfh.nx * 0.3, Y + 2.9, wfh.fz + wfh.nz * 0.3,
-                      Math.atan2(wfh.nx, wfh.nz));
+                      Math.atan2(-wfh.nx, -wfh.nz));
               } else {
                 lamp(wfh.fx + wfh.nx * 0.28, Y + 3.3, wfh.fz + wfh.nz * 0.28, 1.0);
               }
@@ -2950,13 +2961,20 @@
              matched nothing. Ask the engine where the wall actually is, and
              keep the doorway's arc clear - a crate against your own door is
              not lived-in, it is locked out. */
-          var adiff = Math.atan2(Math.sin(la - facing), Math.cos(la - facing));
+          /* the door sits at POSITION angle atan2(fz, fx), not at `facing`
+             (facing is a rotation.y-style angle; la is a cos/sin position
+             angle) - comparing the two guarded a random wall while crates
+             could still pile against the door */
+          var doorA = Math.atan2(fz, fx);
+          var adiff = Math.atan2(Math.sin(la - doorA), Math.cos(la - doorA));
           if (Math.abs(adiff) < 0.55) continue;
           var wfl = wallFacing(x + Math.cos(la) * (myR * 0.9), Y + 0.6,
                                z + Math.sin(la) * (myR * 0.9), 1.4);
           if (!wfl) continue;
           var lxp = wfl.fx + wfl.nx * 0.35, lzp = wfl.fz + wfl.nz * 0.35;
-          if (!clearGround(lxp, lzp, 0.6)) continue;
+          /* the radius must not reach the wall the prop LEANS ON - at 0.6 it
+             always did, and the check vetoed every lean prop in the town */
+          if (!clearGround(lxp, lzp, 0.30)) continue;
           propOn(HOUSE_LEAN, ls, lxp, Y, lzp,
                  Math.atan2(wfl.nx, wfl.nz) + (hashU(ls ^ 0x9) - 0.5) * 0.4, 1);
         }
@@ -4560,6 +4578,9 @@
     driveLights(t, dt);
     var pp = W.getPos();
     if (lawn && (Math.abs(pp.x - lawnAt.x) > 11 || Math.abs(pp.z - lawnAt.z) > 11)) refreshLawn(pp);
+    /* ONE slice per rendered frame - updateRange holds a single span, so a
+       second call between renders would clobber the first slice's upload */
+    if (lawnSweeping) lawnSlice(pp);
     tickFires(t, dt, cp);
 
     /* Small things are only drawn near the player. A town's worth of pots and

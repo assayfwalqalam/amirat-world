@@ -473,218 +473,203 @@ def build_carpet():
 
 # =========================================================== THE WINGS
 def build_wings():
-    """Seven wings a side, and every one of them is a WING.
+    """Angel wings AS WE KNOW THEM, which the last three attempts were not.
 
-    THE FAULT IN EVERY EARLIER ATTEMPT, named so it cannot come back: the
-    feathers were placed first - rooted on an arc and fanned - and the wing
-    was whatever shape they happened to add up to. Daylight showed between
-    them, the arm showed through the daylight, and the owner called it what
-    it was: a plucked chicken.
+    The owner is right that nothing on the internet looks like what was
+    built: each "wing" was a symmetric pointed lens - a LEAF - and fourteen
+    leaves fanned through a hundred degrees is an agave plant. The faults,
+    named from his screenshot so they cannot return: (1) the silhouette was
+    a lens, when a real wing is ASYMMETRIC - a gently arched top edge and a
+    deep-bellied bottom edge that is nothing but feather tips; (2) the chord
+    was 0.4 of the span, when a swan's is over half; (3) the feathers were
+    fingernail chips, when the PRIMARIES are the single most readable thing
+    on a wing - long, parallel, round-tipped, each one visible; (4) the fan
+    spread the wings like spokes, when stacked seraph wings lie nearly
+    PARALLEL, each mostly behind the one before.
 
-    A wing "as we know it" is the other way round. The SILHOUETTE comes
-    first: one continuous curved sheet - leading edge rising from the
-    shoulder, arcing over, sweeping out and down to a point; trailing edge
-    bellying below it. Then the feathers are ROWS OF RELIEF laid on that
-    sheet, each row overlapping the next like tiles, coverts small at the
-    leading edge, flight feathers long at the trailing edge - and only the
-    flight feathers pass the sheet's edge, which is what gives the underline
-    its scallop. Nothing radiates. Nothing shows through.
-
-    Checks this build must pass (from photographs of swan wings and from
-    classical depictions):
-      1. no daylight through any wing at any angle
-      2. the trailing edge is scalloped by feather TIPS, not by gaps
-      3. mirrored left-right the render still differs (jitter is real)
-      4. feather direction turns from chordwise at the root to spanwise at
-         the tip - the primaries fan, the coverts lie down
-      5. the fan of seven reads middle-longest, like wings, not a wheel
-
-    Everything is generated as raw points in wing-local space (x out, z up,
-    y toward the viewer), then pitched and mirrored by pure math - no object
-    rotations, so both sides are built by the same path.
+    Measured from the reference (a mute swan's open wing, and the classical
+    depictions drawn from it):
+      - chord at mid-wing = 0.5-0.6 of span
+      - the top edge rises to a wrist bump at a third of the span, then
+        sweeps down to a tip that points out and DOWN
+      - 9-11 primaries fan the outer half of the underline, tips rounded,
+        overlapping half their width; secondaries fill the inner half,
+        shorter; two rows of small coverts tile the face at the top
+      - the whole underline is scalloped by feather TIPS, never by gaps
     """
     GEMS = []
     KINDS = ("rose", "sapphire", "diamond", "ruby", "amethyst")
     gi = 0
 
-    #            span   lift   pitch
-    WINGS = [(1.55, 0.06, -0.58),
-             (2.05, 0.14, -0.26),
-             (2.42, 0.24,  0.06),
-             (2.60, 0.36,  0.38),
-             (2.34, 0.50,  0.70),
-             (1.90, 0.62,  1.00),
-             (1.42, 0.72,  1.28)]
-
     def smooth(a, b, x):
         t = max(0.0, min(1.0, (x - a) / max(b - a, 1e-6)))
         return t * t * (3.0 - 2.0 * t)
 
+    # the seraph stack: seven per side, nearly PARALLEL, each behind and a
+    # little smaller than the one before - one layered mass, not a fan
+    # deepest pitch capped at 0.42: past that the far layers' tips swung
+    # under and IN, closing the silhouette into a shell instead of the
+    # dragon sweep he asked for
+    LAYERS = [(-0.06, 1.00), (0.03, 0.93), (0.11, 0.85), (0.19, 0.77),
+              (0.27, 0.68), (0.35, 0.59), (0.42, 0.50)]
+    S0 = 2.75
+
     for side in (1, -1):
-        for (wi, (S, lift, pitch)) in enumerate(WINGS):
-            rj = random.Random(wi * 977 + (7 if side > 0 else 3))
+        for (li, (pitch, sc)) in enumerate(LAYERS):
+            S = S0 * sc
+            rj = random.Random(li * 977 + (7 if side > 0 else 3))
+            # DRAGON-LIKE IN SHAPE, FEATHERS IN SUBSTANCE - his order. The
+            # dragon silhouette is: a steep rise from the shoulder to a HIGH
+            # WRIST at two-fifths of the span, then one long sweep down to a
+            # low outswept tip, with the trailing edge curving deep toward
+            # the body - and every bit of it filled with plumage.
+            hump = 0.30 * rj.uniform(0.96, 1.04)
+            # 0.80 drove the tips UNDER the wing into a closed shell; at
+            # 0.70 they point out-and-down, the dragon sweep he asked for
+            dropt = 0.70 * rj.uniform(0.95, 1.05)
 
             def xf(x, y, z):
-                """wing-local -> model space: pitch about Y, mirror, lift"""
                 x2 = x * math.cos(pitch) - z * math.sin(pitch)
                 z2 = x * math.sin(pitch) + z * math.cos(pitch)
-                return (side * (x2 + 0.04), y, z2 + 0.16 + lift)
-
-            # ---- the silhouette
-            hump = 0.170 * rj.uniform(0.90, 1.10)
-            drop = 0.230 * rj.uniform(0.92, 1.08)
+                # the stack climbs AND recedes. (Rooting deeper layers
+                # further outboard was tried against the root-cards showing
+                # at the centre - it OPENED the corridor instead; the cover
+                # is the mantle below, not spacing)
+                return (side * (x2 + 0.06), y - li * 0.075,
+                        z2 + 0.30 + li * 0.05)
 
             def lead(t):
-                """the leading edge: rises, arcs, drops to the tip - and no
-                two wings agree on exactly how (the mirror test)"""
-                x = S * (t - 0.030 * math.sin(math.pi * t))
-                z = S * (hump * math.sin(math.pi * min(1.0, t * 1.06))
-                         - drop * t * t)
-                return x, z
+                """shoulder -> high wrist at 0.42 -> long dive to a low tip"""
+                if t <= 0.42:
+                    z = hump * S * math.sin((t / 0.42) * math.pi / 2)
+                else:
+                    z = hump * S - dropt * S * ((t - 0.42) / 0.58) ** 1.25
+                return t * S, z
 
             def chord(t):
-                """front-to-back depth: widest just past the middle"""
-                c = S * (0.16 + 0.26 * math.sin(math.pi * t ** 0.85) ** 0.9)
-                return c * (1.0 - 0.55 * smooth(0.85, 1.0, t))
-
-            def fan_ang(t):
-                """which way the feathers lie: down at the root, out at
-                the tip - the primaries' fan comes free from this"""
-                return 0.14 + 1.18 * t ** 1.25
-
-            def cdir(t):
-                a = fan_ang(t)
-                return (math.sin(a), -math.cos(a))
-
-            def camber(t, u):
-                """the sheet cups toward the body, most near the root"""
-                return 0.055 * S * math.sin(math.pi * u) * (1.0 - 0.55 * t)
+                """deepest toward the BODY - the dragon's trailing curve -
+                narrowing along the sweep to the tip"""
+                c = S * (0.52 + 0.26 * (1.0 - t) ** 1.15)
+                return c * (1.0 - 0.72 * smooth(0.88, 1.0, t))
 
             def at(t, u):
                 lx, lz = lead(t)
-                dx, dz = cdir(t)
-                c = chord(t)
-                return (lx + dx * c * u, camber(t, u), lz + dz * c * u)
+                return (lx, 0.045 * S * math.sin(math.pi * u) * (1 - 0.5 * t),
+                        lz - chord(t) * u)
 
-            # ---- THE CANOPY: the wing as one sheet. This is the rule made
-            # geometry: whatever the feather rows do, no light passes.
-            NS, NU = 26, 7
+            # THE CANOPY: the whole wing as one solid sheet, so no light ever
+            # passes between feathers
+            NS, NU = 24, 6
             rows = []
             for i in range(NS + 1):
                 t = i / NS
                 ring = []
                 for k in range(NU + 1):
-                    u = (k / NU) * 0.99
-                    px, py, pz = at(t, u)
+                    px, py, pz = at(t, (k / NU) * 0.97)
                     ring.append(xf(px, py, pz))
                 rows.append(ring)
             can = loft(rows, close=False, cap_a=False, cap_b=False,
-                       name="canopy%d" % wi)
+                       name="canopy%d" % li)
             sol = can.modifiers.new("s", 'SOLIDIFY')
-            sol.thickness = 0.012
+            sol.thickness = 0.014
             bpy.context.view_layer.objects.active = can
             bpy.ops.object.modifier_apply(modifier=sol.name)
             slot(can, "feather")
 
-            # ---- THE FEATHER ROWS, as relief on the canopy.
-            # (u_root, reach past root, width, count, y proud, slot)
-            n0 = int(8 + S * 2.6)
-            # WIDTH BEATS SPACING. The leading edge is roughly 1.1*S long;
-            # n cards across it sit ~1.1*S/n apart, and a card narrower than
-            # that shows the canopy between itself and its neighbour. Every
-            # width here is ~1.6x the spacing of its own row, so the rows
-            # tile - and the flight row is denser still, because its tips
-            # are the silhouette.
-            ROWS = [
-                (0.02, 0.34, 1.55, n0 + 3, 0.020, "feather"),
-                (0.22, 0.44, 1.60, n0 + 1, 0.014, "feather_in"),
-                (0.44, 0.56, 1.65, n0,     0.008, "feather"),
-                (0.30, 0.78, 1.55, n0 + 4, 0.002, "feather"),
-            ]
-            for (ri, (u0, reach, wmul, n, proud, slname)) in enumerate(ROWS):
-                flight = (ri == 3)
-                wid = wmul * (1.10 * S / n)
-                for fi in range(n):
-                    t = (fi + 0.5) / n
-                    # THE JITTER IS THE ORGANIC LAW: no two feathers agree
-                    t += rj.uniform(-0.012, 0.012)
-                    t = max(0.01, min(0.99, t))
-                    c = chord(t)
-                    L = reach * c * rj.uniform(0.92, 1.10)
-                    w = wid * rj.uniform(0.90, 1.12) * (1.0 - 0.30 * t)
-                    if flight:
-                        # the primaries: the outer third grows and splays
-                        L *= 1.0 + 0.55 * smooth(0.62, 0.97, t)
-                        w *= 1.0 + 0.18 * smooth(0.62, 0.97, t)
-                    # NEIGHBOURS IN A ROW ALTERNATE HEIGHT. Two tents at the
-                    # same height intersect, and which one wins flickers along
-                    # the row - that is what made the pink under-row read as
-                    # moth-eaten blotches instead of a band. Alternating,
-                    # every card lies cleanly over one neighbour and under
-                    # the other, the way real feathers imbricate.
-                    proud_i = proud + (0.0035 if fi % 2 else 0.0)
-                    rx, ry, rz = at(t, u0 + rj.uniform(-0.015, 0.015))
-                    dx, dz = cdir(t)
-                    # feather direction: chordwise at root -> spanwise at tip
-                    fmix = 0.42 * smooth(0.45, 1.0, t)
-                    tx1, tz1 = lead(min(1.0, t + 0.02))
-                    tx0, tz0 = lead(max(0.0, t - 0.02))
-                    tl = math.hypot(tx1 - tx0, tz1 - tz0) or 1.0
-                    ex = dx * (1 - fmix) + (tx1 - tx0) / tl * fmix
-                    ez = dz * (1 - fmix) + (tz1 - tz0) / tl * fmix
-                    el = math.hypot(ex, ez) or 1.0
-                    ex, ez = ex / el, ez / el
-                    ex2, ez2 = ez, -ex          # across the feather
-                    ang_j = rj.uniform(-0.045, 0.045)
-                    ca_, sa_ = math.cos(ang_j), math.sin(ang_j)
-                    ex, ez, ex2, ez2 = (ex * ca_ - ez * sa_, ex * sa_ + ez * ca_,
-                                        ex2 * ca_ - ez2 * sa_, ex2 * sa_ + ez2 * ca_)
-                    # the vane: a tent-sectioned card, rounded at the tip,
-                    # sagging a little as it goes - a feather is not a ruler
-                    NR = 6
-                    rings = []
-                    for q in range(NR + 1):
-                        ft = q / NR
-                        # A FEATHER TIP IS ROUND. The first profile ran to a
-                        # point, and a row of points is a row of teeth - which
-                        # is exactly the scallop gone wrong. Full width holds
-                        # to 60% of the length, then closes on an ellipse.
-                        if ft < 0.60:
-                            hw = w * 0.5 * (0.55 + 0.45 * smooth(0.0, 0.30, ft))
-                        else:
-                            e = (ft - 0.60) / 0.40
-                            hw = w * 0.5 * math.sqrt(max(0.0, 1.0 - e * e))
-                        hw = max(hw, 0.0012)
-                        sag = 0.05 * L * ft * ft
-                        cx0 = rx + ex * L * ft
-                        cz0 = rz + ez * L * ft - sag
-                        cy0 = ry + proud_i
-                        rg = []
-                        for (mu, my) in ((1.0, 0.0), (0.28, 0.006),
-                                         (-0.28, 0.006), (-1.0, 0.0)):
-                            rg.append(xf(cx0 + ex2 * hw * mu,
-                                         cy0 + my,
-                                         cz0 + ez2 * hw * mu))
-                        rings.append(rg)
-                    slot(loft(rings, name="f"), slname)
+            def feather(t0, u0, ang, L, wid, proud, slname, sag=0.10):
+                """one feather: a tent-sectioned card, full width to 60% of
+                its length then closing on an ellipse - long, rounded, REAL"""
+                rx, ry, rz = at(t0, u0)
+                ex, ez = math.sin(ang), -math.cos(ang)    # its direction
+                px2, pz2 = ez, -ex                        # across it
+                NR = 7
+                rings = []
+                for q in range(NR + 1):
+                    ft = q / NR
+                    if ft < 0.60:
+                        hw = wid * 0.5 * (0.62 + 0.38 * smooth(0.0, 0.25, ft))
+                    else:
+                        e = (ft - 0.60) / 0.40
+                        hw = wid * 0.5 * math.sqrt(max(0.0, 1.0 - e * e))
+                    hw = max(hw, 0.0015)
+                    sg = sag * L * ft * ft
+                    cx0 = rx + ex * L * ft
+                    cz0 = rz + ez * L * ft - sg
+                    rg = []
+                    for (mu, my) in ((1.0, 0.0), (0.30, 0.007),
+                                     (-0.30, 0.007), (-1.0, 0.0)):
+                        rg.append(xf(cx0 + px2 * hw * mu, ry + proud + my,
+                                     cz0 + pz2 * hw * mu))
+                    rings.append(rg)
+                slot(loft(rings, name="f"), slname)
 
-                    # the stones: on the flight feathers, at the tips,
-                    # every third - stars, made by the engine
-                    if flight and fi % 3 == 1:
-                        gx = rx + ex * L * 0.86
-                        gz = rz + ez * L * 0.86 - 0.10 * L * 0.74
-                        mx, my, mz = xf(gx, ry, gz)
+            # THE PRIMARIES: the outer half of the underline, long and
+            # parallel, every one of them readable
+            NP = 10
+            for fi in range(NP):
+                t = 0.44 + (fi + 0.5) / NP * 0.53
+                t += rj.uniform(-0.008, 0.008)
+                fan = (t - 0.44) / 0.53
+                ang = -math.pi / 2 + 1.30 * fan ** 1.15                     + rj.uniform(-0.03, 0.03)
+                L = chord(t) * 0.55 + S * (0.30 - 0.14 * fan)
+                L *= rj.uniform(0.96, 1.05)
+                wid = L * 0.23 * rj.uniform(0.94, 1.06)
+                feather(t, 0.58, ang, L, wid, 0.004 + (fi % 2) * 0.004,
+                        "feather", sag=0.06)
+                if fi % 3 == 1:
+                    gx, gy2, gz = at(t, 0.58)
+                    mx, my, mz = xf(gx + math.sin(ang) * L * 0.8, gy2,
+                                    gz - math.cos(ang) * L * 0.8 * -1 - 0.06 * L)
+                    GEMS.append([round(mx, 4), round(mz, 4),
+                                 round(-my - 0.05, 4), KINDS[gi % 5]])
+                    gi += 1
+
+            # THE SECONDARIES: the inner half, shorter, hanging nearly down
+            NSec = 8
+            for fi in range(NSec):
+                t = 0.04 + (fi + 0.5) / NSec * 0.42
+                ang = -math.pi / 2 + 0.14 * (fi / NSec) + rj.uniform(-0.04, 0.04)
+                L = chord(t) * 0.72 * rj.uniform(0.94, 1.06)
+                wid = L * 0.24 * rj.uniform(0.92, 1.08)
+                feather(t, 0.42, ang, L, wid, 0.003 + (fi % 2) * 0.004,
+                        "feather", sag=0.05)
+
+            # THE COVERTS: two tiled rows over the roots, the inner one the
+            # palest pink - an underlayer glimpsed, never blotches
+            for (rn, (u0, lm, wm, n2, pr, sln)) in enumerate((
+                    (0.16, 0.30, 1.7, 13, 0.014, "feather"),
+                    (0.34, 0.42, 1.7, 11, 0.009, "feather_in"))):
+                for fi in range(n2):
+                    t = 0.03 + (fi + 0.5) / n2 * 0.90 + rj.uniform(-0.01, 0.01)
+                    ang = -math.pi / 2 + 0.85 * smooth(0.5, 1.0, t)                         + rj.uniform(-0.05, 0.05)
+                    L = chord(t) * lm * rj.uniform(0.92, 1.08)
+                    wid = wm * (0.95 * S / n2) * rj.uniform(0.92, 1.08)
+                    feather(t, u0, ang, L, wid,
+                            pr + (fi % 2) * 0.0035, sln, sag=0.04)
+                    if rn == 0 and fi % 4 == 2:
+                        gx, gy2, gz = at(t, u0 + 0.1)
+                        mx, my, mz = xf(gx, gy2, gz)
                         GEMS.append([round(mx, 4), round(mz, 4),
-                                     round(-my - 0.045, 4), KINDS[gi % 5]])
-                        gi += 1
-                    if ri == 2 and fi % 4 == 2:
-                        mx, my, mz = xf(rx + ex * L * 0.6, ry,
-                                        rz + ez * L * 0.6)
-                        GEMS.append([round(mx, 4), round(mz, 4),
-                                     round(-my - 0.045, 4), KINDS[gi % 5]])
+                                     round(-my - 0.05, 4), KINDS[gi % 5]])
                         gi += 1
 
-    # the clasp the fourteen root into - without it they grow out of air
+            # THE MANTLE: on the front layer only, a cape of broad feathers
+            # draped over the shoulder roots and across the centre line -
+            # the scapulars of a real bird. Without it the V between the
+            # wings was a corridor of bare root-cards, the worst thing in
+            # the front view. These root near the body, point down and
+            # INWARD past x=0, and sit proud of everything behind them.
+            if li == 0:
+                for fi in range(7):
+                    t = 0.015 + fi * 0.022
+                    ang = -math.pi / 2 - 0.34 + fi * 0.085 \
+                        + rj.uniform(-0.03, 0.03)
+                    L = S * (0.46 - 0.030 * fi) * rj.uniform(0.95, 1.05)
+                    wid = L * 0.30 * rj.uniform(0.94, 1.06)
+                    feather(t, 0.10, ang, L, wid, 0.050 + fi * 0.004,
+                            "feather", sag=0.05)
+
+    # the clasp the wings root into
     slot(lathe([(0.0, -0.16), (0.085, -0.13), (0.115, -0.02), (0.105, 0.10),
                 (0.065, 0.20), (0.0, 0.24)], segments=20, name="clasp"),
          "gold")

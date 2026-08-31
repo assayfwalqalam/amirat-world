@@ -239,54 +239,18 @@ def storey(cx, cy, w, d, z0, h, front_door, n_win, ceil_hole=None,
                 mud.append(solid(a1 - a0, b1 - b0, 0.18,
                                  ((a0 + a1) / 2, (b0 + b1) / 2, z0 + h - 0.11),
                                  False))
-    # WALLS LEAN; ONE BOX CANNOT. batter() draws the outer face inward by
-    # BAT*h at the head, but solid() had already recorded a full-thickness
-    # box - up to 15cm of invisible stone at head height, against the law's
-    # 5cm. Each wall's collision is three stacked bands now, each thinner
-    # and further in than the one below, tracking the lean to within ~2cm.
-    back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2), False)
-    left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2), False)
-    right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2), False)
-    _amt0 = BAT * h
-    # THE BANDS TELESCOPE. Three stacked thirds each exposed a flat TOP at a
-    # third of the wall's height - and the lowest one, 1.41m up, was exactly
-    # one engine-step above the plinth: the checker (and the player) climbed
-    # onto a ledge inside the wall. Each band runs from its own height to the
-    # FULL wall head instead, so the only exposed top is the wall head, and
-    # the outer profile still steps inward with the lean (error <= amt/3).
-    for _b in range(3):
-        _zlo = z0 + h * _b / 3.0
-        _t2 = max(0.10, T - _amt0 * (_b / 3.0))
-        _hy = (z0 + h - _zlo) / 2.0
-        _zc = _zlo + _hy
-        COLLIDERS.append({"c": [round(cx, 3), round(_zc, 3),
-                                round(-(cy + d / 2 - T + _t2 / 2), 3)],
-                          "h": [round(w / 2, 3), round(_hy, 3), round(_t2 / 2, 3)]})
-        COLLIDERS.append({"c": [round(cx - w / 2 + T - _t2 / 2, 3),
-                                round(_zc, 3), round(-cy, 3)],
-                          "h": [round(_t2 / 2, 3), round(_hy, 3),
-                                round((d - T * 2) / 2, 3)]})
-        COLLIDERS.append({"c": [round(cx + w / 2 - T + _t2 / 2, 3),
-                                round(_zc, 3), round(-cy, 3)],
-                          "h": [round(_t2 / 2, 3), round(_hy, 3),
-                                round((d - T * 2) / 2, 3)]})
-    # The front wall carries the doorway, so it must NOT be recorded as one
-    # solid slab: the opening would be cut from the geometry while collision
-    # still sealed it, and the house could be seen into but never entered.
-    # It is recorded below as the pier either side plus the lintel over.
-    # front_open: someone else is about to cut a doorway here and lay the
-    # collision strips themselves - one solid box would seal what they open
+    # THE WALL COLLIDER IS ONE HONEST BOX. Two attempts to make it follow
+    # the batter both failed their own checks: three stacked thirds exposed a
+    # climbable ledge inside the wall, and the telescoped version's bottom
+    # band WAS the original box, so the union changed nothing. The lean is
+    # 11-16cm at the wall HEAD - a height the player can never press against
+    # from any floor - so the single box stands, and the failure is recorded
+    # here so nobody re-fights it.
+    back = solid(w, T, h, (cx, cy + d / 2 - T / 2, z0 + h / 2))
+    left = solid(T, d - T * 2, h, (cx - w / 2 + T / 2, cy, z0 + h / 2))
+    right = solid(T, d - T * 2, h, (cx + w / 2 - T / 2, cy, z0 + h / 2))
     front = solid(w, T, h, (cx, cy - d / 2 + T / 2, z0 + h / 2),
-                  collide=False)
-    if not front_door and not front_open:
-        for _b2 in range(3):
-            _zlo2 = z0 + h * _b2 / 3.0
-            _t3 = max(0.10, T - BAT * h * (_b2 / 3.0))
-            _hy2 = (z0 + h - _zlo2) / 2.0
-            COLLIDERS.append({"c": [round(cx, 3), round(_zlo2 + _hy2, 3),
-                                    round(-(cy - d / 2 + T - _t3 / 2), 3)],
-                              "h": [round(w / 2, 3), round(_hy2, 3),
-                                    round(_t3 / 2, 3)]})
+                  collide=(not front_door and not front_open))
     amt = BAT * h
     fy = cy - d / 2 + T / 2
     by = cy + d / 2 - T / 2
@@ -446,9 +410,17 @@ def parapet(cx, cy, w, d, z, h, t):
                 timber.append(cyl(0.06, 0.72,
                                   (px + sx * 0.34, py + random.uniform(-d * 0.3, d * 0.3),
                                    z + hh - 0.16), rot=(0, math.pi / 2, 0), verts=6))
-    # the terrace itself is somewhere props may stand
-    SPOTS.append({"c": [round(cx, 2), round(z, 2), round(-cy, 2)],
-                  "r": [round(w / 2 - 0.7, 2), round(d / 2 - 0.7, 2)], "k": "roof"})
+    # the terrace itself is somewhere props may stand - but never over the
+    # open stairwell: the well has no floor, and a jar set down on the spot's
+    # say-so would hang in the air above the climb
+    _ty0, _ty1 = cy - (d / 2 - 0.7), cy + (d / 2 - 0.7)
+    if (ST_HOLE is not None and z < top_z + 0.5
+            and _ty1 > ST_HOLE[2] - 0.35 and _ty0 < ST_HOLE[3] + 0.35):
+        _ty1 = min(_ty1, ST_HOLE[2] - 0.35)
+    if _ty1 - _ty0 > 0.8:
+        SPOTS.append({"c": [round(cx, 2), round(z, 2), round(-(_ty0 + _ty1) / 2, 2)],
+                      "r": [round(w / 2 - 0.7, 2), round((_ty1 - _ty0) / 2, 2)],
+                      "k": "roof"})
     return out
 
 
@@ -497,6 +469,14 @@ if INNER:
     # The centre of a room is the one place nothing else claims.
     ST_XE = ox + ST_DIR * min(uw / 2 - T - 1.0, 1.2)
     ST_XS = ST_XE - ST_DIR * ST_RUN                          # the first tread
+    # THE FOOT STAYS IN THE ROOM. On a narrow tower the centre-anchored
+    # arrival pushed the first treads through the far side wall; clamp the
+    # foot and shorten the treads to the span that actually exists.
+    _far = -ST_DIR * (W / 2 - T - 0.35)
+    if (ST_XS - _far) * ST_DIR < 0:
+        ST_XS = _far
+        ST_TREAD = (ST_XE - ST_XS) * ST_DIR / ST_N
+        ST_RUN = ST_N * ST_TREAD
     # the open well: over the top of the flight, where a head needs air
     _headlen = min(ST_RUN - 0.4, 2.44 / (ST_RISE / ST_N) * ST_TREAD)
     ST_HX0 = min(ST_XE + ST_DIR * 0.06, ST_XE - ST_DIR * _headlen)
@@ -551,23 +531,29 @@ if INNER:
     # but the treads ARE the collision, so every one is its own true box -
     # the same rule the outside stair follows. 0.30 of rise a step: the
     # engine climbs 0.74, a person climbs 0.19; a palace climbs shallow.
+    # EVERY SOLID IS CAPTURED. A bare solid() records its collider and is
+    # then thrown away un-exported - the review caught a whole flight of
+    # ghost treads: climbable, invisible, the worst combination there is.
     _sr = ST_RISE / ST_N
     for _k in range(ST_N):
         _zt = 0.30 + _sr * (_k + 1)
         _xk = ST_XS + ST_DIR * ST_TREAD * (_k + 0.5)
-        solid(ST_TREAD * 1.05, 1.24, _zt - 0.28, (_xk, ST_YL, 0.28 + (_zt - 0.28) / 2))
+        shell.append(solid(ST_TREAD * 1.05, 1.24, _zt - 0.28,
+                           (_xk, ST_YL, 0.28 + (_zt - 0.28) / 2)))
     # the rail down the open side of the flight, segment by segment, so the
     # hand-line climbs with the treads
     for _k in range(0, ST_N, 3):
         _zt = 0.30 + _sr * (_k + 2)
         _xk = ST_XS + ST_DIR * ST_TREAD * (_k + 1.5)
-        solid(ST_TREAD * 3.2, 0.09, 0.80, (_xk, ST_YL - 0.66, _zt + 0.40))
+        timber.append(solid(ST_TREAD * 3.2, 0.09, 0.80,
+                            (_xk, ST_YL - 0.66, _zt + 0.40)))
     # THE WELL IS RAILED above: across the far end and along the room side.
     # The arrival side stays open - that is where you step off.
-    solid(0.09, 1.42, 0.85, (ST_HX0 - 0.045 if ST_DIR > 0 else ST_HX1 + 0.045,
-                             ST_YL, top_z + 0.425))
-    solid(ST_HX1 - ST_HX0 + 0.18, 0.09, 0.85,
-          ((ST_HX0 + ST_HX1) / 2, ST_YL - 0.70, top_z + 0.425))
+    timber.append(solid(0.09, 1.42, 0.85,
+                        (ST_HX0 - 0.045 if ST_DIR > 0 else ST_HX1 + 0.045,
+                         ST_YL, top_z + 0.425)))
+    timber.append(solid(ST_HX1 - ST_HX0 + 0.18, 0.09, 0.85,
+                        ((ST_HX0 + ST_HX1) / 2, ST_YL - 0.70, top_z + 0.425)))
 
 if has_upper:
     # THE UPPER ROOM IS A ROOM: it gets its own furnishing spot, kept clear
@@ -575,7 +561,10 @@ if has_upper:
     _ry1 = (ST_YL - 0.95) if INNER else (oy + ud / 2 - T - 0.6)
     _ry0 = oy - ud / 2 + T + 0.6
     if _ry1 - _ry0 > 1.6:
-        SPOTS.append({"c": [round(ox, 2), round(top_z + 0.3, 2),
+        # the spot's height IS the walking surface: upstairs that is top_z
+        # itself (the terrace slab tops there) - the copied ground-floor
+        # +0.3 floated every upper-room furnishing a step above its floor
+        SPOTS.append({"c": [round(ox, 2), round(top_z, 2),
                             round(-(_ry0 + _ry1) / 2, 2)],
                       "r": [round(uw / 2 - 1.15, 2), round((_ry1 - _ry0) / 2, 2)],
                       "k": "room"})

@@ -95,15 +95,18 @@ def bake_zellij():
 
 
 def bake_floral():
-    """The carved floral field. It used to be four stacked BANDS, which meant
-    every surface that wore it showed a fraction of a band and read as a row of
-    gold dots. It is an ALL-OVER relief now - one endless field of stem, leaf,
-    bud and rosette - so a narrow frieze and a tall panel both read as carving,
-    whatever height they happen to be. It tiles in both directions."""
-    GRND = (206, 190, 166)
-    SHADE = (150, 132, 108)
-    GOLD = (192, 156, 88)
-    GOLD_HI = (234, 204, 132)
+    """The carved STUCCO field. The gold-on-tan version was the wall he
+    condemned - "the gold on the wall is too random and the pattern as well,
+    no sense of copying from actual ancient housing". Real Andalusi wall
+    fields are carved plaster: cream on cream, the pattern read by the SHADOW
+    in the carving, and the gold kept for the one band under it. Same
+    endless stem-leaf-rosette net, but in plaster now - the motifs sit a
+    shade lighter than the ground and an emboss pass cuts the shadow under
+    every edge. It tiles in both directions."""
+    GRND = (211, 201, 182)
+    SHADE = (168, 156, 136)
+    GOLD = (222, 213, 196)      # the raised plaster, not gold any more
+    GOLD_HI = (229, 221, 205)
     im = Image.new("RGB", (W, W), GRND)
     d = ImageDraw.Draw(im)
     rnd = random.Random(77)
@@ -132,8 +135,10 @@ def bake_floral():
         dd.ellipse([x - r * 0.22, y - r * 0.22, x + r * 0.22, y + r * 0.22],
                    fill=GOLD, outline=SHADE, width=2)
 
-    # the stem lattice: a wave running each way, crossing at the rosettes
-    N = 3
+    # the stem lattice: a wave running each way, crossing at the rosettes.
+    # TWO crossings per tile, not three: with the tile laid at 1.6m the
+    # rosettes come out a third of a metre wide - carving, not dots.
+    N = 2
     cell = W / float(N)
     for gy in range(N + 1):
         for gx in range(N + 1):
@@ -167,7 +172,20 @@ def bake_floral():
 
             wrapped(draw)
 
-    out = glazed(im, 11, 0.5)
+    # THE CARVING: what makes plaster read as carved is the shadow its own
+    # relief throws. The raised motifs are found by their lightness, the mask
+    # is shifted down-right for shadow and up-left for the lit arris, and the
+    # wrap keeps it seamless.
+    a = np.asarray(im).astype(np.float32)
+    lum = a.mean(axis=2)
+    mask = (lum > (GRND[0] + GRND[1] + GRND[2]) / 3.0 + 4.0).astype(np.float32)
+    sh = max(3, W // 200)
+    shadow = np.clip(np.roll(np.roll(mask, sh, 0), sh, 1) - mask, 0, 1)
+    lit = np.clip(np.roll(np.roll(mask, -sh, 0), -sh, 1) - mask, 0, 1)
+    a -= shadow[:, :, None] * 60.0
+    a += lit[:, :, None] * 28.0
+    im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+    out = glazed(im, 11, 0.35)
     p = os.path.abspath(os.path.join(ASSETS, "t_floral_d.jpg"))
     out.save(p, quality=94)
     return p, out
