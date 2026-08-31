@@ -4111,6 +4111,186 @@
     lawnSweeping = true;
   }
 
+  /* ==================== THE ENTITY AT THE EDGE OF THE FIELD ====================
+     Walk to the far edge of the flower meadow and something is already there:
+     an upper body of space dust, hunched over the world, faintly resembling a
+     being and being none - two points of light where eyes would be, a sky of
+     green and violet behind it, stars falling past. It hangs at moon-distance
+     (carried with the player like the sky family, so it can never be walked
+     to), washed out the way the morning moon is, and it moves the way only
+     something that size can: almost not at all.
+
+     Costs nothing until approached: built lazily, hidden at zero draw calls
+     when the player leaves. If assets/audio/entity_quran.mp3 exists (the
+     owner's own recitation file), it plays muffled and far, swelling gently
+     with the approach; absent, the sky stays silent. */
+  var ENT = { x: 200, z: 305, r: 150, dx: 0.5399, dz: 0.8418 };
+  var entG = null, entFade = 0, entT0 = Math.random() * 100, entAudio = null;
+  var entMeteors = [], entNext = 0;
+
+  function entPlane(txu, w, h, op, blend) {
+    var m = new T.Mesh(new T.PlaneGeometry(w, h),
+      new T.MeshBasicMaterial({ map: W.tex(txu, true), transparent: true,
+        opacity: op, depthWrite: false, fog: false, toneMapped: false,
+        blending: blend ? T.AdditiveBlending : T.NormalBlending }));
+    m.userData.noCrunch = true;
+    m.renderOrder = 3;
+    return m;
+  }
+
+  function entBuild() {
+    entG = new T.Group();
+    /* the being, and two dust echoes behind it for slow parallax */
+    var body = entPlane('assets/entity_d.png', 2100, 2100, 0.0);
+    var w1 = entPlane('assets/entity_d.png', 2420, 2420, 0.0);
+    var w2 = entPlane('assets/entity_d.png', 2720, 2720, 0.0, true);
+    w1.material.color.setHex(0x8fa0d8);
+    w2.material.color.setHex(0x46548c);
+    /* the being stands IN FRONT of its sky: the curtains draw first. And
+       beneath the pale body lies a DARK copy of the same shape - it dims
+       the aurora glowing through the dust, which is the whole reason the
+       reference mass reads against its bright sky */
+    var shade = entPlane('assets/entity_d.png', 2100, 2100, 0.0);
+    shade.material.color.setHex(0x0b0e1a);
+    body.renderOrder = 5; shade.renderOrder = 4.6;
+    w1.renderOrder = 4; w2.renderOrder = 4;
+    entG.add(shade);
+    entG.userData.body = body; entG.userData.shade = shade;
+    entG.userData.wisps = [w1, w2];
+    entG.add(w2); entG.add(w1); entG.add(body);
+    /* the lights of the sky: green and violet curtains */
+    entG.userData.cur = [];
+    var defs = [['assets/aurora_g.png', -0.42, 0.42, 2050],
+                ['assets/aurora_p.png', 0.05, 0.55, 2150],
+                ['assets/aurora_g.png', 0.48, 0.38, 2000]];
+    for (var i = 0; i < defs.length; i++) {
+      var c = entPlane(defs[i][0], 2100, 1050, 0.0, true);
+      c.userData.az = defs[i][1]; c.userData.op = defs[i][2];
+      c.userData.rr = defs[i][3];
+      entG.add(c); entG.userData.cur.push(c);
+    }
+    /* four falling stars, reused */
+    for (var s2 = 0; s2 < 4; s2++) {
+      var mt = entPlane('assets/meteor.png', 260, 34, 0.0, true);
+      mt.userData.live = 0;
+      entG.add(mt); entMeteors.push(mt);
+    }
+    W.scene.add(entG);
+    /* the recitation, if the owner has placed his file */
+    try {
+      var au = new Audio();
+      au.src = W.bust ? W.bust('assets/audio/entity_quran.mp3')
+                      : 'assets/audio/entity_quran.mp3';
+      au.loop = true; au.volume = 0.0;
+      au.addEventListener('canplaythrough', function () {
+        entAudio = au;
+      });
+      au.addEventListener('error', function () { entAudio = null; });
+      au.load();
+    } catch (e) { entAudio = null; }
+  }
+
+  function tickEntity(t, dt, p) {
+    var ddx = p.x - ENT.x, ddz = p.z - ENT.z;
+    var d = Math.sqrt(ddx * ddx + ddz * ddz);
+    var want = Math.max(0, Math.min(1, (ENT.r - d) / 55));
+    if (!entG) {
+      if (want <= 0) return;
+      entBuild();
+    }
+    entFade += (want - entFade) * Math.min(1, dt * 0.30);
+    if (entFade < 0.01 && want <= 0) {
+      entG.visible = false;
+      if (entAudio && !entAudio.paused) entAudio.pause();
+      return;
+    }
+    entG.visible = true;
+    var tt = t * 0.001 + entT0;
+    /* the being: at sky distance along its own bearing, upper body over the
+       horizon, turned to face the one standing in the field */
+    var bx = p.x + ENT.dx * 2450, bz = p.z + ENT.dz * 2450;
+    var body = entG.userData.body;
+    var breathe = 1.0 + 0.012 * Math.sin(tt * 0.24);
+    /* low over the horizon, rising out of it - upper body only, the way
+       the reference's being leans over the world's rim */
+    var by2 = 385 + 14 * Math.sin(tt * 0.19);
+    var byaw = Math.atan2(p.x - bx, p.z - bz);
+    body.position.set(bx, by2, bz);
+    body.scale.set(breathe, breathe, 1);
+    body.rotation.set(0, byaw, 0.02 * Math.sin(tt * 0.11));
+    body.material.opacity = 0.97 * entFade;
+    var shade = entG.userData.shade;
+    shade.position.set(bx, by2, bz);
+    shade.scale.set(breathe, breathe, 1);
+    shade.rotation.set(0, byaw, 0.02 * Math.sin(tt * 0.11));
+    shade.material.opacity = 0.58 * entFade;
+    var ws = entG.userData.wisps;
+    for (var i = 0; i < ws.length; i++) {
+      var wsc = (1.13 + i * 0.16) * (1.0 + 0.010 * Math.sin(tt * 0.17 + i * 2.1));
+      ws[i].position.set(bx + Math.sin(tt * 0.05 + i * 3) * 30,
+                         385 + 24 * i + 10 * Math.cos(tt * 0.13 + i),
+                         bz + Math.cos(tt * 0.043 + i * 2) * 30);
+      ws[i].scale.set(wsc, wsc, 1);
+      ws[i].rotation.set(0, Math.atan2(p.x - bx, p.z - bz),
+                         -0.03 * Math.sin(tt * 0.09 + i * 1.7));
+      ws[i].material.opacity = (0.16 - i * 0.05) * entFade;
+    }
+    var cur = entG.userData.cur;
+    for (var c2 = 0; c2 < cur.length; c2++) {
+      var cu = cur[c2];
+      var az = Math.atan2(ENT.dx, ENT.dz) + cu.userData.az
+             + 0.02 * Math.sin(tt * 0.07 + c2 * 2.4);
+      cu.position.set(p.x + Math.sin(az) * cu.userData.rr,
+                      790 + 40 * Math.sin(tt * 0.11 + c2),
+                      p.z + Math.cos(az) * cu.userData.rr);
+      cu.rotation.set(0, az + Math.PI, 0);
+      cu.material.opacity = cu.userData.op * entFade
+        * (0.72 + 0.28 * Math.sin(tt * 0.21 + c2 * 1.9));
+    }
+    /* the falling stars */
+    if (t > entNext && entFade > 0.4) {
+      entNext = t + 2600 + Math.random() * 4200;
+      for (var m3 = 0; m3 < entMeteors.length; m3++) {
+        if (entMeteors[m3].userData.live <= 0) {
+          var mo = entMeteors[m3];
+          var maz = Math.atan2(ENT.dx, ENT.dz) + (Math.random() - 0.5) * 1.1;
+          mo.userData.az = maz;
+          mo.userData.y0 = 760 + Math.random() * 240;
+          mo.userData.live = 1.0;
+          mo.userData.spd = 260 + Math.random() * 160;
+          break;
+        }
+      }
+    }
+    for (var m4 = 0; m4 < entMeteors.length; m4++) {
+      var me = entMeteors[m4];
+      if (me.userData.live <= 0) { me.material.opacity = 0; continue; }
+      me.userData.live -= dt * 0.55;
+      var fall = (1.0 - me.userData.live) * me.userData.spd * 2.2;
+      me.position.set(p.x + Math.sin(me.userData.az) * 2300 - fall * 0.35,
+                      me.userData.y0 - fall,
+                      p.z + Math.cos(me.userData.az) * 2300);
+      me.rotation.set(0, me.userData.az + Math.PI, -0.62);
+      me.material.opacity = entFade * 0.85
+        * Math.min(1, me.userData.live * 3) * Math.min(1, (1 - me.userData.live) * 8);
+    }
+    /* the far recitation, muffled by the distance it comes from */
+    if (entAudio) {
+      var wantVol = 0.40 * entFade;
+      if (wantVol > 0.02 && entAudio.paused) {
+        var pr = entAudio.play();
+        if (pr && pr.catch) pr.catch(function () {});
+      }
+      entAudio.volume = Math.max(0, Math.min(1, wantVol));
+    }
+  }
+  W.entityAt = function (x, z, r) {
+    if (x !== undefined) { ENT.x = x; ENT.z = z; if (r) ENT.r = r; }
+    return ENT;
+  };
+  /* probe hook: force the fade for verification shots */
+  W.entityFade = function (v) { if (v !== undefined) entFade = v; return entFade; };
+
 
   /* ------------------------------------------------------------ crunching
      The town is assembled out of about seventeen hundred small meshes: six
@@ -4582,6 +4762,7 @@
        second call between renders would clobber the first slice's upload */
     if (lawnSweeping) lawnSlice(pp);
     tickFires(t, dt, cp);
+    tickEntity(t, dt, pp);
 
     /* Small things are only drawn near the player. A town's worth of pots and
        barrels is more geometry than the buildings, and none of it reads from

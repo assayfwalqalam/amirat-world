@@ -41,12 +41,12 @@ W = SIZE * SS
 random.seed(1170)
 
 # ------------------------------------------------------------------ the dyes
-GROUND = (196, 130, 154)     # rose: clearly pink, mid-toned, leaning violet
-GROUND_D = (180, 116, 142)
-FIELD_IN = (170, 106, 134)   # the medallion's own ground, a shade under
-PLUM = (124, 68, 112)        # the main border - violet, not black
-PLUM_D = (104, 55, 96)
-GUARD = (214, 168, 180)      # the pale guard stripes that lift the borders
+GROUND = (232, 180, 196)     # BABY PINK - his order; the violet lean is gone
+GROUND_D = (218, 164, 184)
+FIELD_IN = (208, 150, 172)   # the medallion's own ground, a shade under
+PLUM = (188, 120, 150)       # the main border - deep rose, not violet
+PLUM_D = (170, 104, 136)
+GUARD = (240, 214, 222)      # the pale guard stripes that lift the borders
 GOLD = (196, 158, 86)
 GOLD_HI = (232, 198, 122)
 EMER = (62, 112, 86)
@@ -55,7 +55,7 @@ SAPPH = (60, 84, 142)
 SAPPH_HI = (104, 130, 184)
 CREAM = (238, 222, 214)
 IVORY = (250, 242, 234)
-INK = (74, 40, 62)           # the outline every knotted motif carries
+INK = (150, 98, 118)         # the outline every knotted motif carries, soft
 
 
 # ------------------------------------------------------------- plant shapes
@@ -426,6 +426,16 @@ def bake_curtain():
     return p, out
 
 
+def bake_avatar():
+    """The avatar's abaya cloth: the same real jacquard, dyed nearly WHITE
+    with the baby pink living in the weave's shadows - his correction: the
+    mid-rose gown read as a grandmother's housecoat."""
+    out = _redye("jacquard_cc0.jpg", (206, 168, 180), (250, 243, 245))
+    p = os.path.abspath(os.path.join(ASSETS, "t_avatar_d.jpg"))
+    out.save(p, quality=94)
+    return p, out
+
+
 def bake_cushion():
     """The majlis cushion in the same real jacquard, a shade brighter - the
     carpet-weave version at prop scale read as mottled STONES on the floor
@@ -438,7 +448,7 @@ def bake_cushion():
 
 if __name__ == "__main__":
     from PIL import ImageStat
-    for (p, img) in (bake_carpet(), bake_curtain(), bake_cushion()):
+    for (p, img) in (bake_carpet(), bake_curtain(), bake_cushion(), bake_avatar()):
         st = ImageStat.Stat(img)
         print("WROTE", p, "mean", [round(v) for v in st.mean],
               "stddev", [round(v) for v in st.stddev])

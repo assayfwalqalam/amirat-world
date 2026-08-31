@@ -1131,20 +1131,48 @@ for _sx in (23 - WT, -(23 - WT)):
     box(0.34, 32.6, 0.14, (_sx - 0.17 * _s, 0, DADO + 0.07), gold)
     box(0.30, 32.6, 1.26, (_sx - 0.15 * _s, 0, DADO + 0.14 + 0.63), flor)
 ARC_Z = DADO + 1.40
+# EVERY ARCH IS A SCREENED WINDOW, NOT A BRICKED-UP ONE. Filled with a flat
+# plaster panel the arcade read as a row of blocked windows - "stones for no
+# reason", his words. Each bay now holds a turned-wood lattice with darkness
+# behind it: the depth of a night window, and the wall stays solid where it
+# matters (the colliders never changed).
+def lattice(cx, cy, z0, w, h, face, inset=0.34):
+    fl2 = math.hypot(face[0], face[1]) or 1.0
+    fx2, fy2 = face[0] / fl2, face[1] / fl2
+    nx2, ny2 = cx - fx2 * (inset + 0.30), cy - fy2 * (inset + 0.30)
+    if abs(fx2) > abs(fy2):
+        box(0.06, w - 0.15, h - 0.15, (nx2, ny2, z0 + h / 2), iron)
+    else:
+        box(w - 0.15, 0.06, h - 0.15, (nx2, ny2, z0 + h / 2), iron)
+    lx2, ly2 = cx - fx2 * inset, cy - fy2 * inset
+    nv = max(3, int(w / 0.44))
+    for iv in range(1, nv):
+        o = (iv / float(nv) - 0.5) * (w - 0.3)
+        cyl(0.032, h - 0.24, (lx2 - fy2 * o, ly2 + fx2 * o, z0 + h / 2),
+            wood, verts=6, smooth=False)
+    nh2 = max(3, int(h / 0.52))
+    for ih in range(1, nh2):
+        zz2 = z0 + 0.12 + (h - 0.24) * ih / float(nh2)
+        if abs(fx2) > abs(fy2):
+            box(0.064, w - 0.3, 0.064, (lx2, ly2, zz2), wood)
+        else:
+            box(w - 0.3, 0.064, 0.064, (lx2, ly2, zz2), wood)
+
+
 for _i in range(7):
     _x = -19.2 + 38.4 * _i / 6.0
     for _sy2 in (1, -1):
         _yw = _sy2 * (17 - WT - 0.05)
         arch(_x, _yw, ARC_Z, 3.6, 3.40, 0.86, stone,
              frame=0.40, lit=None, face=(0, -_sy2))
-        box(2.9, 0.14, 3.0, (_x, _yw - _sy2 * 0.06, ARC_Z + 1.62), flor)
+        lattice(_x, _yw, ARC_Z + 0.10, 3.2, 2.9, (0, -_sy2))
 for _j in range(5):
     _y = -12.8 + 25.6 * _j / 4.0
     for _sx2 in (1, -1):
         _xw = _sx2 * (23 - WT - 0.05)
         arch(_xw, _y, ARC_Z, 3.6, 3.40, 0.86, stone,
              frame=0.40, lit=None, face=(-_sx2, 0))
-        box(0.14, 2.9, 3.0, (_xw - _sx2 * 0.06, _y, ARC_Z + 1.62), flor)
+        lattice(_xw, _y, ARC_Z + 0.10, 3.2, 2.9, (-_sx2, 0))
 # NO GARLANDS, NO ROSETTE PLAQUES. His verdict on the strung flowers and the
 # gold-framed bosses: "so horrible and ugly... do not fit at all with the
 # whole theme." A real hall of this school is carried by its surfaces -
@@ -1210,13 +1238,14 @@ for (_dx6, _dy6, _dr6) in ((-2.2, 12.4, 0.3), (0.0, 12.9, 0.0),
                            (1.2, 11.5, -0.5)):
     plant("p_cushions", _dx6, _dy6, CY, rot=math.pi + _dr6,
           sc=_hr.uniform(0.9, 1.05))
+# books and scrolls sit ON things - a table, a chest lid - never loose on
+# the pavement, where a pale bundle reads as a stone that wandered in
 plant("p_table", 0.0, 10.6, CY, rot=_hr.uniform(-0.1, 0.1))
 plant("p_inkset", 0.15, 10.5, CY + 0.48, rot=_hr.uniform(0, 6.28))
-plant("p_books", -3.6, 13.6, CY, rot=0.5)
-plant("p_scrolls", 3.3, 13.3, CY, rot=_hr.uniform(0, 6.28))
-plant("p_scrolls", 1.9, 10.9, CY, rot=_hr.uniform(0, 6.28))
+plant("p_books", -0.28, 10.72, CY + 0.48, rot=0.5, sc=0.8)
 plant("p_chest", -6.4, 13.7, CY, rot=math.pi + 0.08)
 plant("p_chest", 6.2, 13.6, CY, rot=math.pi - 0.15)
+plant("p_scrolls", 6.2, 13.55, CY + 0.62, rot=_hr.uniform(0, 6.28), sc=0.85)
 
 # NO CLOTH ON BLANK STONE. Fourteen curtains used to hang against the hall's
 # ground-storey walls - walls with no openings in them - and his screenshot

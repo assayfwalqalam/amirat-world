@@ -187,7 +187,11 @@ def bake_floral():
     pl = Image.open(os.path.join(ASSETS, "source", "plaster_cc0.jpg"))
     pa = np.asarray(pl.convert("RGB").resize((SIZE, SIZE),
                                              Image.LANCZOS)).astype(np.float32)
-    tgt = (209, 201, 185)
+    # soften the scan's dark weather stains - a palace wall is kept, not
+    # derelict - then tint toward the baby-pink cream he asked for
+    mean0 = pa.mean(axis=(0, 1))
+    pa = mean0 + (pa - mean0) * 0.60
+    tgt = (221, 201, 203)
     mean = pa.mean(axis=(0, 1))
     for c in range(3):
         pa[:, :, c] *= tgt[c] / max(mean[c], 1.0)

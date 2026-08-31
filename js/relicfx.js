@@ -660,8 +660,21 @@
           if (shed && gems) {
             var phase = (t * (meta.flap.rate || 0.42)) % 1.0;
             if (this.__last === undefined) this.__last = phase;
+            /* a slow trickle between beats, so stones are always falling */
+            if (Math.random() < (dt || 0.033) * 1.6) {
+              var gt = gems.st[(Math.random() * gems.st.length) | 0];
+              var gta = flapAngle(gt.x, t, meta.flap);
+              var it3 = gems.st.indexOf(gt) * 3;
+              emit(shed,
+                   gt.x * Math.cos(gta) - gt.y * Math.sin(gta),
+                   gt.x * Math.sin(gta) + gt.y * Math.cos(gta),
+                   gt.z,
+                   { life: 6.5, size: 0.022, spread: 0.12, rise: 0.02,
+                     col: { r: gems.cols[it3], g: gems.cols[it3 + 1],
+                            b: gems.cols[it3 + 2] } });
+            }
             if (phase < this.__last) {            /* the cycle turned over */
-              for (var q = 0; q < 5; q++) {
+              for (var q = 0; q < 9; q++) {
                 var g0 = gems.st[(Math.random() * gems.st.length) | 0];
                 var ga = flapAngle(g0.x, t, meta.flap);
                 var gc = Math.cos(ga), gs2 = Math.sin(ga);

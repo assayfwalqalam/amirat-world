@@ -1104,52 +1104,73 @@ def build_avatar():
 
     # THE GOWN: one loft, hem to collar. The cross-section carries the
     # gores: a sum of unequal sine folds whose depth dies toward the bodice.
-    NF = [(5, 0.050, rj.uniform(0, 6.3)), (8, 0.034, rj.uniform(0, 6.3)),
-          (11, 0.020, rj.uniform(0, 6.3)), (3, 0.028, rj.uniform(0, 6.3))]
-    PROFILE = [(0.00, 0.50), (0.06, 0.485), (0.16, 0.44), (0.30, 0.375),
-               (0.46, 0.30), (0.62, 0.225), (0.76, 0.175), (0.88, 0.158),
-               (0.97, 0.166), (1.06, 0.178), (1.16, 0.178), (1.26, 0.160),
-               (1.34, 0.128), (1.40, 0.092), (1.45, 0.070)]
-    NR = 30
-    rows = []
-    for (z, r) in PROFILE:
-        t = z / H
-        depth = (1.0 - t) ** 1.6            # folds live at the hem
-        ring = []
-        for k in range(NR):
-            a = k / float(NR) * 2 * math.pi
-            f = 1.0
-            for (nk, amp, ph) in NF:
-                f += amp * depth * math.sin(nk * a + ph)
-            # a slight train behind (-y), and the hem kicked as if mid-step
-            cy = -0.070 * (1.0 - t) ** 2
-            ring.append((math.cos(a) * r * f,
-                         cy + math.sin(a) * r * f * (1.06 if math.sin(a) < 0
-                                                    else 1.0),
-                         z))
-        rows.append(ring)
-    gown = loft(rows, close=True, cap_a=True, cap_b=False, name="gown")
-    sol = gown.modifiers.new("s", 'SOLIDIFY')
-    sol.thickness = 0.012
-    bpy.context.view_layer.objects.active = gown
-    bpy.ops.object.modifier_apply(modifier=sol.name)
-    slot(gown, "cloth")
+    # AN ABAYA FALLS, IT DOES NOT BALLOON. The first gown bellied out like a
+    # tea-cosy and he named it: "too round... looks almost like granny."
+    # This one drops nearly straight from the shoulder, and the fullness is
+    # LAYERS, not width: a white underdress to the floor, the pale pink
+    # jacquard over it ending higher, and a short over-tier from the chest -
+    # three hems, the way a layered abaya actually reads.
+    NF = [(5, 0.040, rj.uniform(0, 6.3)), (8, 0.027, rj.uniform(0, 6.3)),
+          (11, 0.016, rj.uniform(0, 6.3)), (3, 0.022, rj.uniform(0, 6.3))]
+
+    def gown_layer(zlo, zhi, r_of, seedoff, slname, th=0.011):
+        rows = []
+        NZ = 10
+        for iz in range(NZ + 1):
+            z = zlo + (zhi - zlo) * iz / NZ
+            t = min(1.0, z / H)
+            r = r_of(z)
+            depth = max(0.0, 1.0 - t) ** 1.6
+            ring = []
+            for k in range(30):
+                a = k / 30.0 * 2 * math.pi
+                f = 1.0
+                for (nk, amp, ph) in NF:
+                    f += amp * depth * math.sin(nk * a + ph + seedoff)
+                cy = -0.055 * (1.0 - t) ** 2
+                ring.append((math.cos(a) * r * f,
+                             cy + math.sin(a) * r * f
+                             * (1.05 if math.sin(a) < 0 else 1.0), z))
+            rows.append(ring)
+        ob = loft(rows, close=True, cap_a=True, cap_b=False,
+                  name="g" + slname + str(int(zlo * 10)))
+        so_ = ob.modifiers.new("s", 'SOLIDIFY')
+        so_.thickness = th
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.modifier_apply(modifier=so_.name)
+        slot(ob, slname)
+
+    def rbase(z):
+        """the abaya line: straight fall, a soft shoulder, a narrow collar"""
+        # clamp: a float hair past 1.0 makes (negative)**1.35 COMPLEX and
+        # kills the whole build
+        t = min(1.0, z / H)
+        body = 0.155 + 0.245 * max(0.0, 1.0 - t) ** 1.35
+        if t <= 0.84:
+            return body
+        u = min(1.0, (t - 0.84) / 0.15)
+        u = u * u * (3 - 2 * u)
+        return body * (1.0 - u) + 0.072 * u
+
+    gown_layer(0.00, H, lambda z: rbase(z) - 0.016, 0.0, "feather")  # white under
+    gown_layer(0.14, H, lambda z: rbase(z) + 0.006, 1.7, "cloth")    # the jacquard
+    gown_layer(0.58, 1.30, lambda z: rbase(z) + 0.019, 3.9, "cloth") # the over-tier
 
     # THE SLEEVES: hollow tubes arcing out and down from the shoulders,
     # nothing inside them, cuffs open and flared
     for sd in (1, -1):
-        pts = [(0.135, 1.335, 0.050), (0.205, 1.290, 0.052),
-               (0.265, 1.175, 0.056), (0.300, 1.020, 0.060),
-               (0.318, 0.840, 0.070), (0.326, 0.660, 0.086),
-               (0.330, 0.560, 0.104)]
+        pts = [(0.130, 1.335, 0.042), (0.190, 1.285, 0.044),
+               (0.238, 1.170, 0.047), (0.268, 1.020, 0.050),
+               (0.284, 0.840, 0.058), (0.292, 0.660, 0.072),
+               (0.296, 0.560, 0.088)]
         srows = []
         for (px, pz, pr) in pts:
             ring = []
             for k in range(10):
                 a = k / 10.0 * 2 * math.pi
-                ring.append((sd * (px + math.cos(a) * pr * 0.9),
+                ring.append((sd * (px + math.cos(a) * pr * 0.75),
                              math.sin(a) * pr,
-                             pz + math.cos(a) * pr * 0.35))
+                             pz + math.cos(a) * pr * 0.28))
             srows.append(ring)
         sl = loft(srows, close=True, cap_a=True, cap_b=False,
                   name="slv%d" % (sd > 0))
@@ -1161,12 +1182,6 @@ def build_avatar():
 
     # THE COLLAR: a slim gold band round the empty neck
     slot(torus(0.082, 0.012, (0, 0, H), seg=20, minor=8), "gold")
-
-    # THE SASH: a gold band at the waist with a pearl knot. (It had falling
-    # ribbon tails; single-sided lofts, they rendered as a black cravat and
-    # are gone - the band and the knot say everything.)
-    slot(torus(0.168, 0.020, (0, 0, 0.90), seg=20, minor=8), "gold")
-    slot(sphere(0.038, (0.10, -0.155, 0.875), seg=10, ring=8), "gold")
 
     def star4(x, y, z, s, tilt):
         """the approved star shape: two long thin bipyramids crossed - the
@@ -1187,6 +1202,48 @@ def build_avatar():
                 rows2.append(ring)
             slot(loft(rows2, close=True, cap_a=False, cap_b=False,
                       name="st"), "gold")
+
+    # JEWELRY HANGS - his correction: no strict round belt. A necklace of
+    # three draped chains falls from the collar down the chest, each carrying
+    # a star pendant; a loose chain rides the hips, lower at one side, with
+    # droplets hanging from it. Chains are thin lofted tubes in a catenary.
+    def chain(pts, r=0.0065):
+        rows3 = []
+        for (px, py, pz) in pts:
+            rows3.append([(px + math.cos(q) * r, py + math.sin(q) * r * 0.7,
+                           pz + math.sin(q) * r)
+                          for q in (0.0, 1.05, 2.09, 3.14, 4.19, 5.24)])
+        slot(loft(rows3, close=True, cap_a=True, cap_b=True, name="ch"),
+             "gold")
+
+    for (drop, wide) in ((0.14, 0.052), (0.22, 0.060), (0.31, 0.066)):
+        pts = []
+        for i in range(9):
+            u = i / 8.0 - 0.5
+            px = u * 2 * wide
+            sag2 = drop * (1.0 - (2 * u) ** 2)
+            pts.append((px, -0.185 - 0.5 * sag2, H - 0.045 - sag2))
+        chain(pts)
+        GEMS.append([0.0, round(H - 0.045 - drop - 0.028, 4),
+                     round(0.185 + 0.5 * drop, 4), KINDS[int(drop * 100) % 5]])
+        star4(0.0, -0.185 - 0.5 * drop, H - 0.045 - drop - 0.02, 0.020, 0.0)
+
+    # the hip chain: a full loop, swung low at the front-left
+    hpts = []
+    for i in range(25):
+        a = i / 24.0 * 2 * math.pi
+        low = 0.11 * max(0.0, math.cos(a - 2.4)) ** 2
+        rr = rbase(0.88) + 0.030
+        hpts.append((math.cos(a) * rr, math.sin(a) * rr, 0.88 - low))
+    chain(hpts, r=0.0075)
+    for ad in (2.4, 1.6, 3.1):
+        rr = rbase(0.88) + 0.030
+        hx2, hy2 = math.cos(ad) * rr, math.sin(ad) * rr
+        hz2 = 0.88 - 0.11 * max(0.0, math.cos(0.0)) ** 2 - 0.055
+        chain([(hx2, hy2, 0.86), (hx2 * 1.01, hy2 * 1.01, hz2)], r=0.004)
+        star4(hx2 * 1.02, hy2 * 1.02, hz2 - 0.02, 0.017, ad)
+        GEMS.append([round(hx2 * 1.04, 4), round(hz2 - 0.045, 4),
+                     round(-hy2 * 1.04, 4), KINDS[int(ad * 10) % 5]])
 
     # gold stars embroidered down the skirt, unevenly, as the relics wear
     for i in range(9):
@@ -1239,6 +1296,9 @@ def build_avatar():
             "motes": {"n": 34, "r": 0.85, "h": 2.05, "y": 0.10},
             "gems": GEMS,
             "gemScale": 0.65,
+            # a zero-amplitude beat: the cloth never bends, but the beat's
+            # clock drives the SHED - her gems fall, as ordered
+            "flap": {"amp": 0.0, "rate": 0.22, "span": 2.0},
             "up": 0.0}
 
 
@@ -1361,8 +1421,9 @@ SLOT_LOOK = {
 SLOT_TEX = {
     ("carpet", "cloth"): "t_rug_d.jpg",
     ("wand", "wood"): "t_woodp_d.jpg",
-    # the avatar's gown wears the real rose jacquard, the bright cut
-    ("avatar", "cloth"): "t_cushion_d.jpg",
+    # the avatar's gown wears the jacquard dyed nearly white - baby pink
+    # living in the weave's shadows
+    ("avatar", "cloth"): "t_avatar_d.jpg",
 }
 
 for name in SLOTS:
