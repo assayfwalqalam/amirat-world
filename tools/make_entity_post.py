@@ -200,8 +200,8 @@ def planet_big():
         n += gi * amp; tot += amp; amp *= 0.55
     n = (n - n.min()) / (np.ptp(n) + 1e-6)
     land = np.clip((n - 0.52) * 6.0, 0, 1)
-    SEA = np.array([84, 108, 146], np.float32)
-    LAND = np.array([168, 158, 138], np.float32)
+    SEA = np.array([92, 138, 210], np.float32)
+    LAND = np.array([206, 186, 148], np.float32)
     ICE = np.array([228, 234, 240], np.float32)
     img = np.zeros((W6, W6, 4), np.float32)
     for c in range(3):
@@ -220,20 +220,41 @@ def planet_big():
     for c in range(3):
         img[:, :, c] = img[:, :, c] * (1 - cl) + 235 * cl
     # light, limb darkening, and the crescent shadow
+    # the lit side outshines the sky; the night side is nearly BLACK and
+    # SOLID - a world occludes the glow behind it, which is what finally
+    # separates 'far planet' from 'soap bubble'
     limb = np.clip(nz, 0, 1) ** 0.35
-    shade_f = np.clip(lit * 1.15 + 0.045, 0, 1) * limb
+    shade_f = np.clip(lit * 1.45 + 0.02, 0, 1) ** 0.85 * limb
+    DARK = np.array([14, 12, 22], np.float32)
     for c in range(3):
-        img[:, :, c] *= shade_f
+        img[:, :, c] = img[:, :, c] * shade_f + DARK[c] * (1 - shade_f)             * (nz > 0)
     img[:, :, 3] = disc * 255
     # the atmosphere rim: a thin lit haze past the limb, strongest sunward
-    rim = np.exp(-((r - R) / 7.0) ** 2) * (r > R * 0.97)
-    rimlit = np.clip(nx * -0.62 + ny * 0.46 + 0.45, 0.1, 1)
-    RIMC = np.array([170, 200, 255], np.float32)
+    # the rim hugs only the SUNWARD limb, faint - a full bright ring read
+    # as the edge of a glass bauble
+    rim = np.exp(-((r - R) / 5.5) ** 2) * (r > R * 0.97)
+    rimlit = np.clip(nx * -0.62 + ny * 0.46 + 0.18, 0.0, 1) ** 2
+    RIMC = np.array([150, 185, 245], np.float32)
     for c in range(3):
-        img[:, :, c] = np.maximum(img[:, :, c], rim * rimlit * RIMC[c])
-    img[:, :, 3] = np.maximum(img[:, :, 3], rim * rimlit * 210)
+        img[:, :, c] = np.maximum(img[:, :, c], rim * rimlit * RIMC[c] * 0.7)
+    img[:, :, 3] = np.maximum(img[:, :, 3], rim * rimlit * 130)
+    # ATMOSPHERIC DISTANCE: the world is seen through the whole depth of
+    # the sky, so it is washed toward the sky's own colours - hard contrast
+    # is what made it read as pasted ON the horizon instead of far beyond it
+    HAZE = np.array([214, 128, 130], np.float32)
+    disc_v = np.clip((yy - (cy - R)) / (2 * R), 0, 1)     # 0 top .. 1 bottom
+    # ONLY THE LIT SIDE breathes atmosphere: hazing the night side washed
+    # it to the sky's own pink and the world read as a transparent bubble.
+    # A black limb against a glowing sky says SOLID and FAR at once.
+    # ...and BARELY: at 0.36 haze the lit face landed on the exact pink of
+    # the sky behind it and the world camouflaged itself into a "bubble".
+    # A far planet keeps its OWN colours - blue seas, white cloud - the
+    # distance is told by softness, not by wearing the sky's paint.
+    hz = ((0.05 + 0.09 * disc_v) * (0.15 + 0.85 * shade_f))[..., None]
+    img[:, :, :3] = img[:, :, :3] * (1 - hz) + HAZE[None, None, :] * hz         * (img[:, :, 3:4] / 255.0)
+    # the disc stays SOLID - a ghost planet reads as a bubble, not a world
     out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
-    out = out.filter(ImageFilter.GaussianBlur(0.7))
+    out = out.filter(ImageFilter.GaussianBlur(1.1))
     out.save(os.path.join(ASSETS, "planet_big.png"))
     print("WROTE planet_big.png")
 

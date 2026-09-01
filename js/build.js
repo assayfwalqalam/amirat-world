@@ -4140,13 +4140,27 @@
 
   function entBuild() {
     entG = new T.Group();
-    /* THE NEBULA - his final ruling: no being, a massive nebula, and the
-       whole sky of that region dressed to match. Two dust echoes behind
-       it give parallax; a dark under-veil of its own shape dims the
-       aurora glowing through it so the dust lanes read. */
-    var body = entPlane('assets/entity_d.png', 2600, 2600, 0.0);
-    var w1 = entPlane('assets/entity_d.png', 3000, 3000, 0.0);
-    var w2 = entPlane('assets/entity_d.png', 3400, 3400, 0.0, true);
+    /* ONE WHOLE SKY. His ruling: no patches in different spots - the whole
+       quarter becomes one painting. A curved VISTA DOME (a cylinder arc,
+       so it bends around the watcher and can never show a flat edge)
+       carries the purple-pink-sunset gradient, the river of dust, three
+       nebula hearts and seven hundred stars as a single sky; everything
+       else - near nebulas, worlds, star sheets, aurora - hangs IN it. */
+    var vgeo = new T.CylinderGeometry(2780, 2780, 2700, 56, 1, true,
+                                      -1.8, 3.6);
+    var vmat = new T.MeshBasicMaterial({
+      map: W.tex('assets/skyvista.png', true), transparent: true,
+      opacity: 0.0, depthWrite: false, fog: false, toneMapped: false,
+      side: T.BackSide });
+    var vista = new T.Mesh(vgeo, vmat);
+    vista.userData.noCrunch = true;
+    vista.renderOrder = 2.5;
+    entG.add(vista);
+    entG.userData.vista = vista;
+    /* the near nebulas ride over the vista's own hearts for depth */
+    var body = entPlane('assets/entity_d.png', 3200, 3200, 0.0, true);
+    var w1 = entPlane('assets/entity_d.png', 3600, 3600, 0.0);
+    var w2 = entPlane('assets/entity_d.png', 4000, 4000, 0.0, true);
     w1.material.color.setHex(0x8fa0d8);
     w2.material.color.setHex(0x46548c);
     var shade = entPlane('assets/entity_d.png', 2600, 2600, 0.0);
@@ -4160,10 +4174,10 @@
        off and fainter than the main cloud - the sky goes deeply far. Each
        carries its own slow pulse so the lights dim in and out, faintly. */
     entG.userData.nebs = [];
-    var ndefs = [['assets/nebula_b.png', -0.62, 2600, 940, 1500, 0.62, 0.9, 0.047],
-                 ['assets/nebula_c.png', 0.66, 2700, 1060, 1050, 0.55, 2.7, 0.061]];
+    var ndefs = [['assets/nebula_b.png', 0.80, 2600, 980, 2100, 0.80, 0.9, 0.047],
+                 ['assets/nebula_c.png', 0.42, 2700, 1120, 1600, 0.48, 2.7, 0.061]];
     for (var ni = 0; ni < ndefs.length; ni++) {
-      var nb = entPlane(ndefs[ni][0], ndefs[ni][4], ndefs[ni][4], 0.0);
+      var nb = entPlane(ndefs[ni][0], ndefs[ni][4], ndefs[ni][4], 0.0, true);
       nb.userData.az = ndefs[ni][1]; nb.userData.rr = ndefs[ni][2];
       nb.userData.hy = ndefs[ni][3]; nb.userData.op = ndefs[ni][5];
       nb.userData.ph = ndefs[ni][6]; nb.userData.rate = ndefs[ni][7];
@@ -4172,9 +4186,9 @@
     }
     /* TWO SHEETS OF LOOSE STARS, counter-phased - the region shimmers */
     entG.userData.clus = [];
-    var cdefs = [[-0.30, 2250, 780], [0.30, 2400, 900]];
+    var cdefs = [[-0.05, 2250, 820], [0.52, 2400, 950]];
     for (var ci = 0; ci < 2; ci++) {
-      var cl = entPlane('assets/cluster.png', 2400, 2400, 0.0, true);
+      var cl = entPlane('assets/cluster.png', 3300, 3300, 0.0, true);
       cl.userData.az = cdefs[ci][0]; cl.userData.rr = cdefs[ci][1];
       cl.userData.hy = cdefs[ci][2]; cl.userData.ph = ci * 2.1;
       cl.renderOrder = 3.5;
@@ -4185,31 +4199,51 @@
        space, the way his references have it. The small ones hang high,
        tiny and faint: unmistakably farther still. */
     entG.userData.pls = [];
-    var pdefs = [['assets/planet_big.png', -0.34, 2350, 360, 980, 0.92],
-                 ['assets/planet_a.png', 0.55, 2450, 1090, 130, 0.60],
-                 ['assets/planet_b.png', -0.72, 2500, 1180, 100, 0.52],
-                 ['assets/planet_c.png', 0.20, 2550, 1260, 74, 0.48]];
+    var pdefs = [['assets/planet_big.png', -0.78, 2350, 470, 900, 1.0],
+                 ['assets/planet_a.png', 0.55, 2450, 1130, 130, 0.85],
+                 ['assets/planet_b.png', -0.60, 2500, 1220, 100, 0.75],
+                 ['assets/planet_c.png', 0.34, 2550, 1300, 74, 0.70]];
     for (var pi2 = 0; pi2 < pdefs.length; pi2++) {
       var pl2 = entPlane(pdefs[pi2][0], pdefs[pi2][4], pdefs[pi2][4], 0.0);
+      /* a world writes DEPTH: every glow behind it is occluded by geometry,
+         not by draw-order luck - that is what makes it a solid thing in a
+         sky full of light (alphaTest keeps the disc's edge crisp) */
+      /* NO alphaTest: in r147 it re-compiled the material into nothing
+         and the world vanished outright; depth alone does the occluding,
+         and everything drawn after a planet is nearer anyway */
+      pl2.material.depthWrite = true;
       pl2.userData.az = pdefs[pi2][1]; pl2.userData.rr = pdefs[pi2][2];
       pl2.userData.hy = pdefs[pi2][3]; pl2.userData.op = pdefs[pi2][5];
-      pl2.renderOrder = 3.1 + pi2 * 0.02;
+      /* a world is nearer than the dust: it draws OVER every additive
+         space-glow (which kept washing it into a bubble), under only the
+         atmospheric aurora and the falling stars */
+      pl2.renderOrder = 6.0 + pi2 * 0.02;
       entG.add(pl2); entG.userData.pls.push(pl2);
     }
     entG.add(w2); entG.add(w1); entG.add(body);
     /* the northern lights: green, purple, PINK - and NEARER than anything
-       cosmic. An aurora is weather, not space: it hangs closer to the
-       player and draws OVER the nebulas and planets (renderOrder above
-       them), which is exactly what his crop caught being wrong. */
+       cosmic, drawn OVER the space behind them. Each curtain is a CURVED
+       BAND (a cylinder arc round the watcher), because a flat plane seen
+       from underneath reads as a square - his exact complaint. */
     entG.userData.cur = [];
-    var defs = [['assets/aurora_g.png', -0.46, 0.42, 1650],
-                ['assets/aurora_p.png', 0.02, 0.52, 1720],
-                ['assets/aurora_k.png', 0.30, 0.46, 1600],
-                ['assets/aurora_g.png', 0.58, 0.36, 1680]];
-    for (var i = 0; i < defs.length; i++) {
-      var c = entPlane(defs[i][0], 1750, 900, 0.0, true);
-      c.userData.az = defs[i][1]; c.userData.op = defs[i][2];
-      c.userData.rr = defs[i][3];
+    /* the curtains sweep the centre and right of the quarter; the far
+       left is left OPEN so the great world hangs in clear sky - additive
+       light crossing the dark limb was what kept dissolving it */
+    var adefs = [['assets/aurora_g.png', -0.08, 0.62, 1560, 1.05],
+                 ['assets/aurora_p.png', 0.38, 0.74, 1680, 1.40],
+                 ['assets/aurora_k.png', 0.74, 0.70, 1520, 1.05],
+                 ['assets/aurora_g.png', 1.04, 0.55, 1620, 1.10]];
+    for (var i = 0; i < adefs.length; i++) {
+      var ag = new T.CylinderGeometry(adefs[i][3], adefs[i][3], 1250,
+                                      32, 1, true,
+                                      -adefs[i][4] / 2, adefs[i][4]);
+      var am = new T.MeshBasicMaterial({
+        map: W.tex(adefs[i][0], true), transparent: true, opacity: 0.0,
+        depthWrite: false, fog: false, toneMapped: false,
+        blending: T.AdditiveBlending, side: T.BackSide });
+      var c = new T.Mesh(ag, am);
+      c.userData.noCrunch = true;
+      c.userData.az = adefs[i][1]; c.userData.op = adefs[i][2];
       c.renderOrder = 7;
       entG.add(c); entG.userData.cur.push(c);
     }
@@ -4261,12 +4295,20 @@
        slower lean, and a light that dims in and out almost too faintly
        to be sure of (that faint pulse is what makes the sky ALIVE) */
     var baseAz = Math.atan2(ENT.dx, ENT.dz);
-    var mAz = baseAz + 0.24;
+    /* the vista dome wraps the whole quarter, carried with the watcher */
+    var vista = entG.userData.vista;
+    /* centred HIGH: the horizon then cuts the painting near its warm
+       bottom band, so the sunset glow sits ON the horizon as in his
+       references, and the violet deep is straight overhead */
+    vista.position.set(p.x, 1000, p.z);
+    vista.rotation.y = baseAz + 0.008 * Math.sin(tt * 0.03);
+    vista.material.opacity = 0.95 * entFade;
+    var mAz = baseAz + 0.30;
     var mx2 = p.x + Math.sin(mAz) * 2450, mz2 = p.z + Math.cos(mAz) * 2450;
-    var by2 = 680 + 16 * Math.sin(tt * 0.17);
+    var by2 = 780 + 16 * Math.sin(tt * 0.17);
     var byaw = Math.atan2(p.x - mx2, p.z - mz2);
     var blean = 0.03 * Math.sin(tt * 0.07);
-    var bpulse = 0.86 + 0.11 * Math.sin(tt * 0.09);
+    var bpulse = 0.58 + 0.08 * Math.sin(tt * 0.09);
     body.position.set(mx2, by2, mz2);
     body.scale.set(breathe, breathe, 1);
     body.rotation.set(0, byaw, blean);
@@ -4275,7 +4317,7 @@
     shade.position.set(mx2, by2, mz2);
     shade.scale.set(breathe, breathe, 1);
     shade.rotation.set(0, byaw, blean);
-    shade.material.opacity = 0.18 * entFade;
+    shade.material.opacity = 0.10 * entFade;
     /* the far nebulas, each pulsing on its own slow clock */
     var nebs = entG.userData.nebs;
     for (var n2 = 0; n2 < nebs.length; n2++) {
@@ -4298,7 +4340,7 @@
                        p.z + Math.cos(caz) * cl2.userData.rr);
       cl2.rotation.set(0, caz + Math.PI, 0);
       cl2.material.opacity = entFade
-        * (0.55 + 0.40 * Math.sin(tt * 0.5 + cl2.userData.ph));
+        * (0.50 + 0.36 * Math.sin(tt * 0.5 + cl2.userData.ph));
     }
     /* the planets hold STILL - worlds do not flicker; their distance is
        told by their steadiness, their haze, and the dark of their limbs */
@@ -4321,17 +4363,16 @@
       ws[i].scale.set(wsc, wsc, 1);
       ws[i].rotation.set(0, Math.atan2(p.x - bx, p.z - bz),
                          -0.03 * Math.sin(tt * 0.09 + i * 1.7));
-      ws[i].material.opacity = (0.16 - i * 0.05) * entFade;
+      ws[i].material.opacity = (0.16 - i * 0.06) * entFade;
     }
+    /* the curtains are arcs round the watcher: positioned AT the player,
+       swung by rotation - curved overhead, never a square from below */
     var cur = entG.userData.cur;
     for (var c2 = 0; c2 < cur.length; c2++) {
       var cu = cur[c2];
-      var az = Math.atan2(ENT.dx, ENT.dz) + cu.userData.az
-             + 0.02 * Math.sin(tt * 0.07 + c2 * 2.4);
-      cu.position.set(p.x + Math.sin(az) * cu.userData.rr,
-                      700 + 40 * Math.sin(tt * 0.11 + c2),
-                      p.z + Math.cos(az) * cu.userData.rr);
-      cu.rotation.set(0, az + Math.PI, 0);
+      cu.position.set(p.x, 740 + 40 * Math.sin(tt * 0.11 + c2), p.z);
+      cu.rotation.y = baseAz + cu.userData.az
+        + 0.03 * Math.sin(tt * 0.07 + c2 * 2.4);
       cu.material.opacity = cu.userData.op * entFade
         * (0.72 + 0.28 * Math.sin(tt * 0.21 + c2 * 1.9));
     }
