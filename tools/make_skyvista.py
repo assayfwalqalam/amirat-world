@@ -76,9 +76,15 @@ def skyvista():
     v = yy / float(H7)
 
     # ---- the ground of the sky: violet zenith to a sunset-orange horizon
-    STOPS = [(0.00, (26, 16, 52)), (0.28, (74, 34, 96)),
-             (0.52, (150, 56, 122)), (0.72, (216, 96, 124)),
-             (0.88, (246, 140, 112)), (1.00, (255, 190, 122))]
+    # THE WARM BAND MUST LAND ON THE SKYLINE. On the dome the plate's last
+    # rows fall BELOW the horizon, where the ground hides them - the sunset
+    # was being buried and the horizon came out a pale lilac. Every stop is
+    # lifted so the orange sits at four fifths of the way down, which is
+    # exactly where the eye meets the earth.
+    STOPS = [(0.00, (26, 16, 52)), (0.24, (74, 34, 96)),
+             (0.46, (152, 58, 124)), (0.64, (218, 98, 126)),
+             (0.78, (248, 142, 112)), (0.90, (255, 190, 122)),
+             (1.00, (255, 208, 142))]
     rgb = np.zeros((H7, W7, 3), np.float32)
     for i in range(len(STOPS) - 1):
         (t0, c0), (t1, c1) = STOPS[i], STOPS[i + 1]
@@ -101,13 +107,17 @@ def skyvista():
     # seven hearts of different kinds, spread through the whole width:
     # rose, violet, ember, a cold cyan knot, a small blue one, a deep
     # magenta and a pale gold - each with its own core and halo colour
-    HEARTS = [(0.10, 0.44, (255, 214, 232), (236, 126, 190)),
-              (0.24, 0.33, (232, 244, 255), (96, 176, 236)),
-              (0.38, 0.47, (255, 232, 250), (198, 116, 238)),
-              (0.52, 0.30, (255, 240, 252), (150, 120, 246)),
-              (0.66, 0.44, (214, 255, 250), (86, 206, 208)),
-              (0.79, 0.33, (255, 238, 214), (240, 162, 104)),
-              (0.92, 0.46, (255, 220, 238), (226, 108, 168))]
+    # ORDERED FOR THE WALKER. The plate's middle is what faces whoever
+    # stands in the meadow, so the two most beautiful hearts - the rose and
+    # the gold ember - are set there, with the cooler blue and cyan ones
+    # carried out to the flanks where the sky is quieter anyway.
+    HEARTS = [(0.06, 0.44, (232, 244, 255), (96, 176, 236)),
+              (0.19, 0.32, (255, 240, 252), (150, 120, 246)),
+              (0.34, 0.46, (255, 214, 232), (238, 118, 186)),
+              (0.47, 0.31, (255, 236, 250), (206, 110, 240)),
+              (0.61, 0.45, (255, 238, 214), (242, 158, 96)),
+              (0.76, 0.33, (255, 220, 238), (226, 108, 168)),
+              (0.91, 0.45, (214, 255, 250), (86, 206, 208))]
     hglow = np.zeros((H7, W7), np.float32)
     hcol = np.zeros((H7, W7, 3), np.float32)
     hnear = np.zeros((H7, W7), np.float32)
@@ -141,7 +151,7 @@ def skyvista():
         * (0.42 + 0.58 * fine)
     MIDC = np.array([176, 132, 226], np.float32)
     for c in range(3):
-        rgb[:, :, c] += mid * MIDC[c] * 0.62
+        rgb[:, :, c] += mid * MIDC[c] * 0.74
         rgb[:, :, c] += hcol[:, :, c] * mid * 0.85
 
     # ---- THE DARK LANES: foreground dust cutting across the bright.
@@ -159,7 +169,7 @@ def skyvista():
         * (0.35 + 0.65 * fine)
     NEARC = np.array([255, 214, 240], np.float32)
     for c in range(3):
-        rgb[:, :, c] += near * NEARC[c] * 0.55
+        rgb[:, :, c] += near * NEARC[c] * 0.62
         rgb[:, :, c] += hcol[:, :, c] * near * 0.45
     # the hearts' own light, unoccluded - they are the light SOURCE
     for c in range(3):
@@ -235,11 +245,39 @@ def skyvista():
     # of hitting it, and the colour survives all the way up.
     rgb = 255.0 * (1.0 - np.exp(-1.386 * (np.clip(rgb, 0, None) / 255.0)))
 
+    # ---- THE GRADE. The roll-off saves the cores from clipping but it
+    # pulls every highlight toward grey with them, and spread across
+    # sixty-seven degrees of sky that reads as pastel. Measured in the
+    # render, the horizon was coming out (182,135,123) - a colour with no
+    # conviction. Saturation is pushed back out from luminance and a gentle
+    # S-curve returns the contrast, which is the difference between a sky
+    # that glows and a sky that is merely lit.
+    lum = rgb.mean(axis=2, keepdims=True)
+    rgb = lum + (rgb - lum) * 1.52
+    x = np.clip(rgb / 255.0, 0, 1)
+    x = np.clip(x * x * (3.0 - 2.0 * x) * 0.42 + x * 0.58, 0, 1)
+    rgb = np.clip(x * 255.0, 0, 255)
+
     # ---- the veil: full through the heart, melting at every edge
+    # THE VEIL, cut for a HEMISPHERE (the plate is now 360 x 90 degrees):
+    #   - across: full through the heart, gone at both ends, and since the
+    #     ends meet behind the watcher the seam is two transparent edges
+    #     laid on each other - no join to see;
+    #   - the top quarter melts away, so the nebula gives out gently into
+    #     the ordinary starry night at the zenith instead of ending on a
+    #     line (his "does not blend with the top");
+    #   - the bottom row IS the horizon now, so it stays nearly full - the
+    #     old cut faded the sunset band away just where it should be
+    #     strongest.
     alpha = np.full((H7, W7), 0.94, np.float32)
-    alpha *= np.clip(np.sin(math.pi * u) * 2.2, 0, 1) ** 0.6
-    alpha *= np.clip(v * 5.5, 0, 1) ** 0.8
-    alpha *= np.clip((1.03 - v) * 9.0, 0, 1)
+    # a WIDE, gentle fall to nothing: sin(pi*u) still had a third of its
+    # strength two degrees from the seam, and that edge read as a stripe.
+    # Full through the central third, gone well before the join, so the
+    # two transparent edges meet behind the watcher invisibly.
+    env = np.clip((1.0 - np.abs(u - 0.5) / 0.46) / 0.62, 0, 1)
+    alpha *= env * env * (3.0 - 2.0 * env)
+    alpha *= np.clip(v * 3.6, 0, 1) ** 0.9
+    alpha *= np.clip((1.08 - v) * 14.0, 0, 1)
     alpha = np.clip(alpha + stars * 0.4, 0, 1)
 
     out = np.dstack([np.clip(rgb, 0, 255),

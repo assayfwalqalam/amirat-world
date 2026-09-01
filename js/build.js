@@ -4125,7 +4125,14 @@
      when the player leaves. If assets/audio/entity_quran.mp3 exists (the
      owner's own recitation file), it plays muffled and far, swelling gently
      with the approach; absent, the sky stays silent. */
-  var ENT = { x: 200, z: 305, r: 150, dx: 0.5399, dz: 0.8418 };
+  /* WHERE THE SKY LIVES. It used to be a circle 150 wide: walk toward
+     the nebula and you came out the far side of it and the whole sky
+     faded away, which is exactly what he saw. It is a DIRECTION now - how
+     far you have gone along the region's own bearing, past the edge of
+     the settled land - so walking toward it only ever brings it up, and
+     it never returns once you are out there. */
+  var ENT = { x: 60, z: 90, r: 150, dx: 0.5399, dz: 0.8418,
+              start: 40, feather: 150 };
   var entG = null, entFade = 0, entT0 = Math.random() * 100, entAudio = null;
   var entMeteors = [], entNext = 0;
 
@@ -4147,14 +4154,38 @@
        carries the purple-pink-sunset gradient, the river of dust, three
        nebula hearts and seven hundred stars as a single sky; everything
        else - near nebulas, worlds, star sheets, aurora - hangs IN it. */
-    /* the dome reaches nearly all the way round (5.0rad) and up to ~48
-       degrees of elevation - the old one stopped at 26 and the sky ran
-       out overhead. Arc 2780*5.0 = 13900 against 3480 tall is 4:1, which
-       is exactly the painting's aspect: nothing is stretched. */
-    var vgeo = new T.CylinderGeometry(2780, 2780, 3480, 64, 1, true,
-                                      -2.5, 5.0);
+    /* A HEMISPHERE, not a curved wall. The cylinder arc stopped dead at
+       287 degrees - turn round and the sky ended - and its top edge cut a
+       line across the heavens with nothing to blend into. This is the
+       whole upper half of the sky: all the way round, all the way to the
+       zenith. The painting is 4:1, which is exactly 360 degrees wide by 90
+       tall, so it maps onto the hemisphere as an equirectangular plate
+       with no stretch anywhere: the orange band lands on the horizon and
+       the violet deep converges overhead. Its own alpha fades the ends
+       and the top out, so the nebula belongs to ONE quarter of the sky and
+       melts into the ordinary night everywhere else. */
+    /* a shade PAST the equator (0.22rad below), because the ground falls
+       away from the eye and a hemisphere cut exactly at eye level leaves a
+       thin strip of ordinary night showing between its rim and the
+       skyline. The painting's 90 degrees then covers 103, a stretch of a
+       sixth that no cloud edge betrays. And it starts 35 degrees BELOW
+       the zenith: stretched over the whole 103 degrees the painting lost
+       a quarter of its density per degree of sky and went pale and thin.
+       Across 67 degrees it has its weight back, and the ordinary starry
+       night takes the crown of the sky, which the plate's own top fade
+       melts into. */
+    var vgeo = new T.SphereGeometry(2780, 96, 48, 0, Math.PI * 2,
+                                    0.62, Math.PI / 2 + 0.22 - 0.62);
+    /* the sky is seen at a grazing angle near the horizon, where a coarse
+       mip level washes all the colour out of it - full anisotropy keeps
+       the sunset band and the dust structure sharp right down to the
+       skyline */
+    var vtex = W.tex('assets/skyvista.png', true);
+    var vcap = W.renderer && W.renderer.capabilities
+      ? W.renderer.capabilities.getMaxAnisotropy() : 8;
+    vtex.anisotropy = Math.max(8, Math.min(16, vcap));
     var vmat = new T.MeshBasicMaterial({
-      map: W.tex('assets/skyvista.png', true), transparent: true,
+      map: vtex, transparent: true,
       opacity: 0.0, depthWrite: false, fog: false, toneMapped: false,
       side: T.BackSide });
     var vista = new T.Mesh(vgeo, vmat);
@@ -4349,24 +4380,28 @@
       entG.add(mt); entMeteors.push(mt);
     }
     W.scene.add(entG);
-    /* the recitation, if the owner has placed his file */
+    /* the recitation, if the owner has placed his file. ASK FIRST: loading
+       the element straight away printed a 404 in the console every session
+       until the file existed, and a console that cries wolf is a console
+       nobody reads. */
     try {
-      var au = new Audio();
-      au.src = W.bust ? W.bust('assets/audio/entity_quran.mp3')
-                      : 'assets/audio/entity_quran.mp3';
-      au.loop = true; au.volume = 0.0;
-      au.addEventListener('canplaythrough', function () {
-        entAudio = au;
-      });
-      au.addEventListener('error', function () { entAudio = null; });
-      au.load();
+      var aurl = W.bust ? W.bust('assets/audio/entity_quran.mp3')
+                        : 'assets/audio/entity_quran.mp3';
+      fetch(aurl, { method: 'HEAD' }).then(function (r) {
+        if (!r.ok) return;
+        var au = new Audio();
+        au.src = aurl;
+        au.loop = true; au.volume = 0.0;
+        au.addEventListener('canplaythrough', function () { entAudio = au; });
+        au.addEventListener('error', function () { entAudio = null; });
+        au.load();
+      }).catch(function () {});
     } catch (e) { entAudio = null; }
   }
 
   function tickEntity(t, dt, p) {
-    var ddx = p.x - ENT.x, ddz = p.z - ENT.z;
-    var d = Math.sqrt(ddx * ddx + ddz * ddz);
-    var want = Math.max(0, Math.min(1, (ENT.r - d) / 55));
+    var proj = (p.x - ENT.x) * ENT.dx + (p.z - ENT.z) * ENT.dz;
+    var want = Math.max(0, Math.min(1, (proj - ENT.start) / ENT.feather));
     if (!entG) {
       if (want <= 0) return;
       entBuild();
@@ -4394,9 +4429,18 @@
     /* centred HIGH: the horizon then cuts the painting near its warm
        bottom band, so the sunset glow sits ON the horizon as in his
        references, and the violet deep is straight overhead */
-    vista.position.set(p.x, 1390, p.z);
-    vista.rotation.y = baseAz + 0.008 * Math.sin(tt * 0.03);
-    vista.material.opacity = 0.95 * entFade;
+    /* the equator sits on the horizon, and the plate turns with the
+       region's bearing so its heart hangs where the nebula belongs */
+    /* the sphere's equator must sit at EYE level, or the painting's
+       lowest band - the sunset glow that belongs on the horizon - falls
+       below the skyline and is cut off by the ground */
+    vista.position.set(p.x, p.y + 1.7, p.z);
+    /* the plate's own middle (u=0.5) sits at +X on a three.js sphere, so
+       the turn that brings it onto the region's bearing is baseAz - 90
+       degrees. With +90 the seam - the one place the painting is
+       transparent - stood straight in front of the watcher. */
+    vista.rotation.y = baseAz - 1.5708 + 0.008 * Math.sin(tt * 0.03);
+    vista.material.opacity = 1.0 * entFade;
     var mAz = baseAz + 0.30;
     var mx2 = p.x + Math.sin(mAz) * 2450, mz2 = p.z + Math.cos(mAz) * 2450;
     var by2 = 780 + 16 * Math.sin(tt * 0.17);
