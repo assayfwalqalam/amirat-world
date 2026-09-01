@@ -4146,8 +4146,12 @@
        carries the purple-pink-sunset gradient, the river of dust, three
        nebula hearts and seven hundred stars as a single sky; everything
        else - near nebulas, worlds, star sheets, aurora - hangs IN it. */
-    var vgeo = new T.CylinderGeometry(2780, 2780, 2700, 56, 1, true,
-                                      -1.8, 3.6);
+    /* the dome reaches nearly all the way round (5.0rad) and up to ~48
+       degrees of elevation - the old one stopped at 26 and the sky ran
+       out overhead. Arc 2780*5.0 = 13900 against 3480 tall is 4:1, which
+       is exactly the painting's aspect: nothing is stretched. */
+    var vgeo = new T.CylinderGeometry(2780, 2780, 3480, 64, 1, true,
+                                      -2.5, 5.0);
     var vmat = new T.MeshBasicMaterial({
       map: W.tex('assets/skyvista.png', true), transparent: true,
       opacity: 0.0, depthWrite: false, fog: false, toneMapped: false,
@@ -4168,14 +4172,25 @@
     body.renderOrder = 5; shade.renderOrder = 4.6;
     w1.renderOrder = 4; w2.renderOrder = 4;
     entG.add(shade);
+    /* THE PAINTING CARRIES THE SKY. These four additive cards - the old
+       near-nebula, its dark veil and two dust echoes - were laid over the
+       vista and washed the whole quarter flat: the filaments, the dark
+       lanes and the world's black limb all disappeared under their glow.
+       Proved by hiding them and shooting the same frame. They stay in the
+       scene, dark, so the shape of the code (and the pulse that drives the
+       shed) is unchanged, but nothing of theirs is drawn any more. */
+    body.visible = false; shade.visible = false;
+    w1.visible = false; w2.visible = false;
     entG.userData.body = body; entG.userData.shade = shade;
     entG.userData.wisps = [w1, w2];
     /* MORE NEBULAS, AT DEPTH: the ember one and the jewel one hang further
        off and fainter than the main cloud - the sky goes deeply far. Each
        carries its own slow pulse so the lights dim in and out, faintly. */
     entG.userData.nebs = [];
-    var ndefs = [['assets/nebula_b.png', 0.80, 2600, 980, 2100, 0.80, 0.9, 0.047],
-                 ['assets/nebula_c.png', 0.42, 2700, 1120, 1600, 0.48, 2.7, 0.061]];
+    /* two faint drifts of foreground dust, well off the great world, at
+       a tenth of their old strength: parallax when you walk, never a wash */
+    var ndefs = [['assets/nebula_b.png', 1.15, 2600, 980, 2100, 0.10, 0.9, 0.047],
+                 ['assets/nebula_c.png', -1.35, 2700, 1120, 1600, 0.09, 2.7, 0.061]];
     for (var ni = 0; ni < ndefs.length; ni++) {
       var nb = entPlane(ndefs[ni][0], ndefs[ni][4], ndefs[ni][4], 0.0, true);
       nb.userData.az = ndefs[ni][1]; nb.userData.rr = ndefs[ni][2];
@@ -4229,10 +4244,12 @@
     /* the curtains sweep the centre and right of the quarter; the far
        left is left OPEN so the great world hangs in clear sky - additive
        light crossing the dark limb was what kept dissolving it */
-    var adefs = [['assets/aurora_g.png', -0.08, 0.62, 1560, 1.05],
-                 ['assets/aurora_p.png', 0.38, 0.74, 1680, 1.40],
-                 ['assets/aurora_k.png', 0.74, 0.70, 1520, 1.05],
-                 ['assets/aurora_g.png', 1.04, 0.55, 1620, 1.10]];
+    /* the curtains stand in the half of the sky AWAY from the great
+       world, so nothing of theirs crosses its dark limb */
+    var adefs = [['assets/aurora_g.png', 0.18, 0.34, 1560, 1.05],
+                 ['assets/aurora_p.png', 0.62, 0.40, 1680, 1.30],
+                 ['assets/aurora_k.png', 1.00, 0.36, 1520, 1.05],
+                 ['assets/aurora_g.png', 1.34, 0.30, 1620, 1.10]];
     for (var i = 0; i < adefs.length; i++) {
       var ag = new T.CylinderGeometry(adefs[i][3], adefs[i][3], 1250,
                                       32, 1, true,
@@ -4300,7 +4317,7 @@
     /* centred HIGH: the horizon then cuts the painting near its warm
        bottom band, so the sunset glow sits ON the horizon as in his
        references, and the violet deep is straight overhead */
-    vista.position.set(p.x, 1000, p.z);
+    vista.position.set(p.x, 1390, p.z);
     vista.rotation.y = baseAz + 0.008 * Math.sin(tt * 0.03);
     vista.material.opacity = 0.95 * entFade;
     var mAz = baseAz + 0.30;
@@ -4308,7 +4325,7 @@
     var by2 = 780 + 16 * Math.sin(tt * 0.17);
     var byaw = Math.atan2(p.x - mx2, p.z - mz2);
     var blean = 0.03 * Math.sin(tt * 0.07);
-    var bpulse = 0.58 + 0.08 * Math.sin(tt * 0.09);
+    var bpulse = 0.24 + 0.05 * Math.sin(tt * 0.09);
     body.position.set(mx2, by2, mz2);
     body.scale.set(breathe, breathe, 1);
     body.rotation.set(0, byaw, blean);
@@ -4340,7 +4357,7 @@
                        p.z + Math.cos(caz) * cl2.userData.rr);
       cl2.rotation.set(0, caz + Math.PI, 0);
       cl2.material.opacity = entFade
-        * (0.50 + 0.36 * Math.sin(tt * 0.5 + cl2.userData.ph));
+        * (0.11 + 0.08 * Math.sin(tt * 0.5 + cl2.userData.ph));
     }
     /* the planets hold STILL - worlds do not flicker; their distance is
        told by their steadiness, their haze, and the dark of their limbs */
@@ -4363,7 +4380,7 @@
       ws[i].scale.set(wsc, wsc, 1);
       ws[i].rotation.set(0, Math.atan2(p.x - bx, p.z - bz),
                          -0.03 * Math.sin(tt * 0.09 + i * 1.7));
-      ws[i].material.opacity = (0.16 - i * 0.06) * entFade;
+      ws[i].material.opacity = (0.05 - i * 0.02) * entFade;
     }
     /* the curtains are arcs round the watcher: positioned AT the player,
        swung by rotation - curved overhead, never a square from below */

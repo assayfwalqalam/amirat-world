@@ -179,11 +179,11 @@ def planet_big():
     limb melting into the night. Continents from layered noise, a polar cap,
     limb darkening, and a thin atmosphere rim so it reads as a WORLD in
     space, not a balloon in the air."""
-    W6 = 512
+    W6 = 1024
     rng = np.random.default_rng(21)
     yy, xx = np.mgrid[0:W6, 0:W6]
     cx = cy = W6 / 2
-    R = 225.0
+    R = 450.0
     r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
     disc = np.clip((R - r) / 1.6, 0, 1)
     nx = (xx - cx) / R
@@ -194,14 +194,16 @@ def planet_big():
     # continents: layered value noise, thresholded softly
     n = np.zeros((W6, W6), np.float32)
     amp, tot = 1.0, 0.0
-    for o in (8, 16, 32, 64, 128):
+    for o in (8, 16, 32, 64, 128, 256, 512):
         g = rng.normal(0, 1, (o, o)).astype(np.float32)
         gi = np.asarray(Image.fromarray(g).resize((W6, W6), Image.BICUBIC))
         n += gi * amp; tot += amp; amp *= 0.55
     n = (n - n.min()) / (np.ptp(n) + 1e-6)
     land = np.clip((n - 0.52) * 6.0, 0, 1)
-    SEA = np.array([92, 138, 210], np.float32)
-    LAND = np.array([206, 186, 148], np.float32)
+    # a WORLD, not a pearl: deep ocean blue and warm land, with the
+    # cloud deck thinned so the colour underneath actually shows
+    SEA = np.array([58, 116, 208], np.float32)
+    LAND = np.array([208, 178, 128], np.float32)
     ICE = np.array([228, 234, 240], np.float32)
     img = np.zeros((W6, W6, 4), np.float32)
     for c in range(3):
@@ -212,11 +214,11 @@ def planet_big():
     # clouds: bright wisps of their own noise
     cl = np.zeros((W6, W6), np.float32)
     amp = 1.0
-    for o in (12, 24, 48, 96):
+    for o in (12, 24, 48, 96, 192, 384):
         g = rng.normal(0, 1, (o, o)).astype(np.float32)
         gi = np.asarray(Image.fromarray(g).resize((W6, W6), Image.BICUBIC))
         cl += gi * amp; amp *= 0.5
-    cl = np.clip((cl - cl.mean()) / (cl.std() + 1e-6) * 0.5 + 0.2, 0, 1) * 0.65
+    cl = np.clip((cl - cl.mean()) / (cl.std() + 1e-6) * 0.55 - 0.05, 0, 1) * 0.62
     for c in range(3):
         img[:, :, c] = img[:, :, c] * (1 - cl) + 235 * cl
     # light, limb darkening, and the crescent shadow
@@ -224,7 +226,7 @@ def planet_big():
     # SOLID - a world occludes the glow behind it, which is what finally
     # separates 'far planet' from 'soap bubble'
     limb = np.clip(nz, 0, 1) ** 0.35
-    shade_f = np.clip(lit * 1.45 + 0.02, 0, 1) ** 0.85 * limb
+    shade_f = np.clip(lit * 1.65 + 0.02, 0, 1) ** 0.80 * limb
     DARK = np.array([14, 12, 22], np.float32)
     for c in range(3):
         img[:, :, c] = img[:, :, c] * shade_f + DARK[c] * (1 - shade_f)             * (nz > 0)
@@ -254,7 +256,7 @@ def planet_big():
     img[:, :, :3] = img[:, :, :3] * (1 - hz) + HAZE[None, None, :] * hz         * (img[:, :, 3:4] / 255.0)
     # the disc stays SOLID - a ghost planet reads as a bubble, not a world
     out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
-    out = out.filter(ImageFilter.GaussianBlur(1.1))
+    out = out.filter(ImageFilter.GaussianBlur(0.6))
     out.save(os.path.join(ASSETS, "planet_big.png"))
     print("WROTE planet_big.png")
 
