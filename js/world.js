@@ -1432,6 +1432,18 @@
       W.SHOT_MODE = true;
       W.setIdle(1e9);
     }
+    /* ?spawn=x,z[,h]&yaw=a - STAND THERE AND PLAY. ?at= is for capture:
+       it freezes the loop once the world settles, which is right for a
+       screenshot and useless for walking about. This one only moves the
+       player: controls, idle timer and everything else stay normal. */
+    var go = q.get('spawn');
+    if (go && !at) {
+      var pg = go.split(',').map(Number);
+      pos.set(pg[0] || 0, W.heightAt(pg[0] || 0, pg[1] || 0) + (pg[2] || PH),
+              pg[1] || 0);
+      if (q.get('yaw')) yaw = Number(q.get('yaw'));
+      if (q.get('fly')) fly = true;
+    }
     var shot = q.get('shot');
     if (shot) {
       var P = W.SHOTS && W.SHOTS[shot];

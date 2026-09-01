@@ -3215,7 +3215,8 @@
         W.SPAWN = { x: x, z: z + 6 };
         /* any inspection visit (?at= or ?shot=) outranks the map's start */
         var qq = new URLSearchParams(location.search);
-        if (W.camState && !qq.get('at') && !qq.get('shot')) {
+        if (W.camState && !qq.get('at') && !qq.get('shot')
+            && !qq.get('spawn')) {
           W.camState({ x: x, y: W.heightAt(x, z + 6) + 1.9, z: z + 6 });
         }
       }
