@@ -87,8 +87,100 @@ def meteor():
     print("WROTE meteor.png")
 
 
+def cluster():
+    """A sheet of loose stars and sparkles for the nebula's region - two of
+    these at different depths, counter-phased in opacity, make the sky there
+    shimmer without a single extra draw call per star."""
+    W4 = 768
+    rng = np.random.default_rng(15)
+    img = np.zeros((W4, W4, 4), np.float32)
+    TINTS = [(255, 255, 255), (255, 238, 205), (200, 218, 255),
+             (255, 210, 230), (205, 255, 230)]
+    yy, xx = np.mgrid[0:W4, 0:W4]
+    for i in range(170):
+        px, py = rng.integers(30, W4 - 30, 2)
+        tint = TINTS[int(rng.integers(0, len(TINTS)))]
+        rr = float(rng.uniform(0.6, 2.2))
+        amp = float(rng.uniform(0.35, 1.0))
+        lo_y, hi_y = max(0, py - 10), min(W4, py + 11)
+        lo_x, hi_x = max(0, px - 10), min(W4, px + 11)
+        sy, sx = np.mgrid[lo_y:hi_y, lo_x:hi_x]
+        gg = np.exp(-(((sx - px) ** 2 + (sy - py) ** 2) / (2 * rr ** 2))) * amp
+        for c in range(3):
+            img[lo_y:hi_y, lo_x:hi_x, c] = np.maximum(
+                img[lo_y:hi_y, lo_x:hi_x, c], gg * tint[c])
+        img[lo_y:hi_y, lo_x:hi_x, 3] = np.maximum(
+            img[lo_y:hi_y, lo_x:hi_x, 3], gg * 255)
+    for i in range(12):                      # a few big sparkles, cross-flared
+        px, py = rng.integers(60, W4 - 60, 2)
+        tint = TINTS[int(rng.integers(0, len(TINTS)))]
+        r0 = float(rng.uniform(1.8, 3.0))
+        gg = np.exp(-(((xx - px) ** 2 + (yy - py) ** 2) / (2 * (r0 * 1.8) ** 2)))
+        fl = (np.exp(-np.abs(xx - px) / (r0 * 6.0))
+              * np.exp(-np.abs(yy - py) / (r0 * 0.8))
+              + np.exp(-np.abs(yy - py) / (r0 * 6.0))
+              * np.exp(-np.abs(xx - px) / (r0 * 0.8))) * 0.65
+        st = np.clip(gg + fl, 0, 1)
+        for c in range(3):
+            img[:, :, c] = np.maximum(img[:, :, c], st * tint[c])
+        img[:, :, 3] = np.maximum(img[:, :, 3], st * 255)
+    # feather the sheet edges so no rectangle ever shows
+    ex = np.sin(math.pi * np.linspace(0, 1, W4))[None, :] ** 0.5
+    ey = np.sin(math.pi * np.linspace(0, 1, W4))[:, None] ** 0.5
+    img[:, :, 3] *= ex * ey
+    Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA").save(
+        os.path.join(ASSETS, "cluster.png"))
+    print("WROTE cluster.png")
+
+
+def planet(name, radius_px, base, band, ring=None, seed=3):
+    """One far planet: a lit disc with soft latitude bands, misty with
+    distance; optionally a thin ring. Light falls from the upper-left."""
+    W5 = 256
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:W5, 0:W5]
+    cx = cy = W5 / 2
+    r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    disc = np.clip((radius_px - r) / 2.2, 0, 1)
+    # lambert light from upper-left, with a soft terminator
+    nx = (xx - cx) / radius_px
+    ny = (yy - cy) / radius_px
+    nz = np.sqrt(np.clip(1 - nx ** 2 - ny ** 2, 0, 1))
+    lit = np.clip(nx * -0.5 + ny * -0.35 + nz * 0.85, 0.06, 1)
+    # latitude bands, gently warped
+    wob = np.sin(yy / W5 * math.pi * rng.uniform(5, 8)
+                 + np.sin(xx / W5 * 6.0) * 0.7) * 0.5 + 0.5
+    img = np.zeros((W5, W5, 4), np.float32)
+    for c in range(3):
+        col = base[c] * (1 - 0.4 * wob) + band[c] * (0.4 * wob)
+        img[:, :, c] = col * lit
+    img[:, :, 3] = disc * 235                        # slightly translucent: far
+    if ring:
+        # a thin ellipse ring round the disc, in front below, behind above
+        ang = -0.5
+        rx2 = (xx - cx) * math.cos(ang) - (yy - cy) * math.sin(ang)
+        ry2 = ((xx - cx) * math.sin(ang) + (yy - cy) * math.cos(ang)) * 3.4
+        rr2 = np.sqrt(rx2 ** 2 + ry2 ** 2)
+        band_m = np.exp(-((rr2 - radius_px * 1.55) / 5.5) ** 2)
+        behind = (yy < cy) & (r < radius_px)
+        band_m[behind] = 0
+        for c in range(3):
+            img[:, :, c] = np.maximum(img[:, :, c], band_m * ring[c])
+        img[:, :, 3] = np.maximum(img[:, :, 3], band_m * 200)
+    out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
+    out = out.filter(ImageFilter.GaussianBlur(0.8))
+    out.save(os.path.join(ASSETS, name))
+    print("WROTE", name)
+
+
 if __name__ == "__main__":
-    entity()
+    # entity() is retired: the nebula matte (make_entity_paint.py) owns
+    # entity_d.png now - running the old post pass here would overwrite it
     aurora("aurora_g.png", (96, 235, 152))
     aurora("aurora_p.png", (172, 116, 240))
     meteor()
+    cluster()
+    planet("planet_a.png", 62, (214, 178, 150), (176, 132, 118),
+           ring=(226, 206, 182), seed=5)
+    planet("planet_b.png", 74, (142, 168, 212), (104, 128, 178), seed=9)
+    planet("planet_c.png", 54, (216, 168, 190), (172, 122, 152), seed=13)

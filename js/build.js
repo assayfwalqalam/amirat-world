@@ -4140,23 +4140,44 @@
 
   function entBuild() {
     entG = new T.Group();
-    /* the being, and two dust echoes behind it for slow parallax */
-    var body = entPlane('assets/entity_d.png', 2100, 2100, 0.0);
-    var w1 = entPlane('assets/entity_d.png', 2420, 2420, 0.0);
-    var w2 = entPlane('assets/entity_d.png', 2720, 2720, 0.0, true);
+    /* THE NEBULA - his final ruling: no being, a massive nebula, and the
+       whole sky of that region dressed to match. Two dust echoes behind
+       it give parallax; a dark under-veil of its own shape dims the
+       aurora glowing through it so the dust lanes read. */
+    var body = entPlane('assets/entity_d.png', 2600, 2600, 0.0);
+    var w1 = entPlane('assets/entity_d.png', 3000, 3000, 0.0);
+    var w2 = entPlane('assets/entity_d.png', 3400, 3400, 0.0, true);
     w1.material.color.setHex(0x8fa0d8);
     w2.material.color.setHex(0x46548c);
-    /* the being stands IN FRONT of its sky: the curtains draw first. And
-       beneath the pale body lies a DARK copy of the same shape - it dims
-       the aurora glowing through the dust, which is the whole reason the
-       reference mass reads against its bright sky */
-    var shade = entPlane('assets/entity_d.png', 2100, 2100, 0.0);
+    var shade = entPlane('assets/entity_d.png', 2600, 2600, 0.0);
     shade.material.color.setHex(0x0b0e1a);
     body.renderOrder = 5; shade.renderOrder = 4.6;
     w1.renderOrder = 4; w2.renderOrder = 4;
     entG.add(shade);
     entG.userData.body = body; entG.userData.shade = shade;
     entG.userData.wisps = [w1, w2];
+    /* TWO SHEETS OF LOOSE STARS, counter-phased - the region shimmers */
+    entG.userData.clus = [];
+    var cdefs = [[-0.30, 2250, 780], [0.30, 2400, 900]];
+    for (var ci = 0; ci < 2; ci++) {
+      var cl = entPlane('assets/cluster.png', 2400, 2400, 0.0, true);
+      cl.userData.az = cdefs[ci][0]; cl.userData.rr = cdefs[ci][1];
+      cl.userData.hy = cdefs[ci][2]; cl.userData.ph = ci * 2.1;
+      cl.renderOrder = 3.5;
+      entG.add(cl); entG.userData.clus.push(cl);
+    }
+    /* THE PLANETS: three far worlds hung in the same sky - one ringed */
+    entG.userData.pls = [];
+    var pdefs = [['assets/planet_a.png', 0.55, 2350, 860, 220],
+                 ['assets/planet_b.png', -0.50, 2450, 980, 170],
+                 ['assets/planet_c.png', 0.16, 2500, 1060, 120]];
+    for (var pi2 = 0; pi2 < pdefs.length; pi2++) {
+      var pl2 = entPlane(pdefs[pi2][0], pdefs[pi2][4], pdefs[pi2][4], 0.0);
+      pl2.userData.az = pdefs[pi2][1]; pl2.userData.rr = pdefs[pi2][2];
+      pl2.userData.hy = pdefs[pi2][3];
+      pl2.renderOrder = 3.6;
+      entG.add(pl2); entG.userData.pls.push(pl2);
+    }
     entG.add(w2); entG.add(w1); entG.add(body);
     /* the lights of the sky: green and violet curtains */
     entG.userData.cur = [];
@@ -4211,24 +4232,48 @@
     var bx = p.x + ENT.dx * 2450, bz = p.z + ENT.dz * 2450;
     var body = entG.userData.body;
     var breathe = 1.0 + 0.012 * Math.sin(tt * 0.24);
-    /* low over the horizon, rising out of it - upper body only, the way
-       the reference's being leans over the world's rim */
-    var by2 = 385 + 14 * Math.sin(tt * 0.19);
+    /* the nebula stands high in that sky, drifting the way only something
+       that size can - a slow breath, a slower lean */
+    var by2 = 660 + 16 * Math.sin(tt * 0.17);
     var byaw = Math.atan2(p.x - bx, p.z - bz);
+    var blean = 0.03 * Math.sin(tt * 0.07);
     body.position.set(bx, by2, bz);
     body.scale.set(breathe, breathe, 1);
-    body.rotation.set(0, byaw, 0.02 * Math.sin(tt * 0.11));
+    body.rotation.set(0, byaw, blean);
     body.material.opacity = 0.97 * entFade;
     var shade = entG.userData.shade;
     shade.position.set(bx, by2, bz);
     shade.scale.set(breathe, breathe, 1);
-    shade.rotation.set(0, byaw, 0.02 * Math.sin(tt * 0.11));
-    shade.material.opacity = 0.58 * entFade;
+    shade.rotation.set(0, byaw, blean);
+    shade.material.opacity = 0.18 * entFade;
+    /* the star sheets shimmer, counter-phased; the planets hold still */
+    var clus = entG.userData.clus;
+    for (var c3 = 0; c3 < clus.length; c3++) {
+      var cl2 = clus[c3];
+      var caz = Math.atan2(ENT.dx, ENT.dz) + cl2.userData.az;
+      cl2.position.set(p.x + Math.sin(caz) * cl2.userData.rr,
+                       cl2.userData.hy + 12 * Math.sin(tt * 0.09 + c3 * 2),
+                       p.z + Math.cos(caz) * cl2.userData.rr);
+      cl2.rotation.set(0, caz + Math.PI, 0);
+      cl2.material.opacity = entFade
+        * (0.55 + 0.40 * Math.sin(tt * 0.5 + cl2.userData.ph));
+    }
+    var pls = entG.userData.pls;
+    for (var p3 = 0; p3 < pls.length; p3++) {
+      var pl3 = pls[p3];
+      var paz = Math.atan2(ENT.dx, ENT.dz) + pl3.userData.az
+              + 0.004 * Math.sin(tt * 0.05 + p3 * 2.7);
+      pl3.position.set(p.x + Math.sin(paz) * pl3.userData.rr,
+                       pl3.userData.hy,
+                       p.z + Math.cos(paz) * pl3.userData.rr);
+      pl3.rotation.set(0, paz + Math.PI, 0);
+      pl3.material.opacity = 0.92 * entFade;
+    }
     var ws = entG.userData.wisps;
     for (var i = 0; i < ws.length; i++) {
       var wsc = (1.13 + i * 0.16) * (1.0 + 0.010 * Math.sin(tt * 0.17 + i * 2.1));
       ws[i].position.set(bx + Math.sin(tt * 0.05 + i * 3) * 30,
-                         385 + 24 * i + 10 * Math.cos(tt * 0.13 + i),
+                         660 + 24 * i + 10 * Math.cos(tt * 0.13 + i),
                          bz + Math.cos(tt * 0.043 + i * 2) * 30);
       ws[i].scale.set(wsc, wsc, 1);
       ws[i].rotation.set(0, Math.atan2(p.x - bx, p.z - bz),

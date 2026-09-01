@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-# THE ENTITY, painted the way the reference itself was made - as a matte:
+# THE NEBULA over the edge of the field:
 #   python tools/make_entity_paint.py  ->  assets/entity_d.png
 #
-# The volumetric route (make_entity_tex.py) was tried three times: eight
-# minutes a render, and the noise either fused the mass into pudding or tore
-# it into bands. A matte gives exact control of the one thing that matters
-# here - the SILHOUETTE: a hunched upper body, head lowered toward the
-# watcher, the cowled back rising above it, a dust trail streaming away -
-# filled with warped nebula filaments so it only faintly resembles a being.
+# His final ruling replaced the dust-being with a MASSIVE NEBULA, and the
+# sky of that region dressed to match - stars, sparkles, planets. This is
+# the nebula itself: a broad diagonal band of curdled dust, a hot rose core
+# going blue then violet at the rim, dark lanes cut across it, and its own
+# stars burning inside the cloud. Painted as a matte - the same craft as
+# the reference imagery - with every element placed deliberately.
 import math
 import os
 
@@ -17,7 +17,6 @@ from PIL import Image, ImageDraw, ImageFilter
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "..", "assets")
 S = 1024
-rng = np.random.default_rng(77)
 
 
 def fbm(size, octaves=(8, 16, 32, 64, 128), seed=1):
@@ -49,115 +48,135 @@ def blur(a, r):
         ImageFilter.GaussianBlur(r))).astype(np.float32) / 255.0
 
 
-# ---------------------------------------------------------------- the mask
-# Image space: the being faces RIGHT (toward the far light and the watcher).
+# ------------------------------------------------------------- the cloud
+# a broad band running lower-left to upper-right, its heart right of centre
 mimg = Image.new("L", (S, S), 0)
 d = ImageDraw.Draw(mimg)
 
 
-def blob(cx, cy, rx, ry, v=255):
+def blob(cx, cy, rx, ry):
     d.ellipse([S * cx - S * rx, S * cy - S * ry,
-               S * cx + S * rx, S * cy + S * ry], fill=v)
+               S * cx + S * rx, S * cy + S * ry], fill=255)
 
 
-blob(0.640, 0.400, 0.075, 0.088)     # the head, lowered, forward
-blob(0.560, 0.330, 0.105, 0.095)     # the cowl behind it
-blob(0.440, 0.300, 0.130, 0.115)     # the hunched back, ABOVE the head line
-blob(0.330, 0.345, 0.130, 0.110)     # the back mass
-blob(0.220, 0.420, 0.115, 0.090)     # the trail
-blob(0.130, 0.490, 0.085, 0.062)     # the trail thinning
-blob(0.600, 0.520, 0.105, 0.110)     # the chest under the head
-blob(0.620, 0.665, 0.085, 0.075)     # the near arm, folded under
-blob(0.480, 0.520, 0.130, 0.120)     # the core
-blob(0.390, 0.640, 0.120, 0.105)     # the lower drift
-blob(0.500, 0.760, 0.110, 0.095)     # the fade-out below
+CORE = (0.60, 0.42)
+blob(0.60, 0.42, 0.200, 0.150)      # the heart
+blob(0.42, 0.52, 0.180, 0.130)
+blob(0.26, 0.62, 0.150, 0.110)      # the band falling to the lower-left
+blob(0.13, 0.72, 0.110, 0.080)
+blob(0.74, 0.32, 0.150, 0.110)      # the band rising to the upper-right
+blob(0.86, 0.24, 0.110, 0.080)
+blob(0.52, 0.30, 0.130, 0.100)      # a shoulder of dust above the heart
+blob(0.68, 0.55, 0.130, 0.095)      # and one below
 
 M = np.asarray(mimg).astype(np.float32) / 255.0
-M = blur(M, 26)
+M = blur(M, 30)
 
-# a vertical fade: the being dissolves downward into the sky
-ys = np.linspace(0, 1, S)[:, None]
-M *= np.clip(1.35 - 1.3 * np.clip((ys - 0.55) / 0.38, 0, 1), 0, 1)
-
-# ------------------------------------------------------------- the nebula
+# ------------------------------------------------------------- the dust
 W1 = fbm(S, seed=11)
 W2 = fbm(S, seed=23)
-F = fbm(S, seed=5)
-F = warp(F, W1, W2, 90.0)                       # curdled filaments
+F = warp(fbm(S, seed=5), W1, W2, 100.0)          # curdled billows
 FINE = fbm(S, octaves=(64, 128, 256), seed=31)
 
-body = M * (0.30 + 0.70 * F ** 1.35) * (0.55 + 0.45 * FINE)
+body = M * (0.28 + 0.72 * F ** 1.25) * (0.60 + 0.40 * FINE)
 
-# directional drift: the dust streams up-left, like the reference
-drift = body
-for (dx, dy, w) in ((-3, -1, 0.55), (-7, -3, 0.32), (-12, -5, 0.20)):
-    drift = np.maximum(drift, np.roll(np.roll(body, dy, 0), dx, 1) * w)
-body = np.clip(drift, 0, 1)
+# DARK LANES: cold dust cut across the bright heart, like the real ones
+LANE = warp(fbm(S, octaves=(6, 12, 24), seed=47), W2, W1, 130.0)
+lanes = np.clip((LANE - 0.52) * 4.0, 0, 1) * np.clip((M - 0.1) * 2, 0, 1)
+body *= (1.0 - 0.72 * lanes)
 
-# the edges break into wisps: eat the rim with noise
-rim = np.clip((M - 0.12) * 3.0, 0, 1)
-body *= np.clip(rim + 0.55 * (F - 0.35), 0, 1)
+# the rim wisps away
+body *= np.clip((M - 0.06) * 3.2, 0, 1) * 0.7 + 0.3 * np.clip(F - 0.2, 0, 1)
 body = np.clip(body, 0, 1)
 
-# ------------------------------------------------------- light and colour
-# The reference is nearly monochrome and lives on CONTRAST: a mass dark as
-# the sky it hangs in, rim-lit on the side that faces the horizon glow.
+# ------------------------------------------------------------- the colour
 v = blur(body, 1.2)
-interior = blur(M, 34)
-# rim: edges that face down-right, where the world's glow comes from
-Msoft = blur(M, 8)
-rim = np.clip(np.roll(np.roll(Msoft, 6, 0), 8, 1) - Msoft, 0, 1)
-rim = blur(rim * (0.4 + 0.6 * F), 3) * 3.2
-# the body value: dark in the core, filament texture carrying the light
-# PALE, not dark: against this world's luminous night sky a dark mass
-# vanishes. The morning-moon look he named is bright mist - the being is
-# LIGHTER than the sky, its structure carried by the filaments and hollow.
-val = 0.30 + v * (0.95 - 0.30 * interior) + np.clip(rim, 0, 1) * 0.55
-val = np.clip(val, 0, 1)
+yy, xx = np.mgrid[0:S, 0:S]
+dcore = np.sqrt(((xx / S - CORE[0]) * 1.1) ** 2
+                + ((yy / S - CORE[1]) * 1.5) ** 2)
+zone = np.clip(dcore / 0.55, 0, 1)               # 0 at the heart, 1 far out
 
-# the cowl's shadow: a hollow of darkness where the face would be, so the
-# two stars burn out of a cavity - the reference's exact read
-yyh, xxh = np.mgrid[0:S, 0:S]
-hollow = np.exp(-(((xxh - S * 0.648) / (S * 0.062)) ** 2
-                  + ((yyh - S * 0.408) / (S * 0.048)) ** 2))
-val = np.clip(val * (1.0 - 0.60 * hollow), 0, 1)
+# heart: hot rose-white; mid: magenta-rose to blue; rim: deep violet;
+# and a teal pocket breathing in from the lower-left
+C_CORE = np.array([255, 222, 238], np.float32)
+C_ROSE = np.array([226, 148, 198], np.float32)
+C_BLUE = np.array([118, 158, 224], np.float32)
+C_VIOL = np.array([96, 82, 158], np.float32)
+C_TEAL = np.array([96, 208, 190], np.float32)
 
+w_core = np.clip(1 - zone * 3.2, 0, 1)
+w_rose = np.clip(1 - np.abs(zone - 0.28) * 3.4, 0, 1)
+w_blue = np.clip(1 - np.abs(zone - 0.60) * 3.0, 0, 1)
+w_viol = np.clip((zone - 0.72) * 2.6, 0, 1)
+wsum = np.maximum(w_core + w_rose + w_blue + w_viol, 0.35)
 rgb = np.zeros((S, S, 3), np.float32)
-base = np.array([104, 114, 152], np.float32)
-high = np.array([228, 236, 254], np.float32)
-viol = np.array([140, 118, 188], np.float32)
 for c in range(3):
-    rgb[:, :, c] = base[c] + (high[c] - base[c]) * (val ** 1.05)
-mid = np.clip(1.0 - np.abs(val - 0.40) * 3.4, 0, 1) * 0.16
+    rgb[:, :, c] = (C_CORE[c] * w_core + C_ROSE[c] * w_rose
+                    + C_BLUE[c] * w_blue + C_VIOL[c] * w_viol) / wsum
+# the teal pocket
+tpock = np.exp(-(((xx / S - 0.30) / 0.16) ** 2 + ((yy / S - 0.60) / 0.13) ** 2))
 for c in range(3):
-    rgb[:, :, c] = rgb[:, :, c] * (1 - mid) + viol[c] * mid
+    rgb[:, :, c] = rgb[:, :, c] * (1 - 0.55 * tpock) + C_TEAL[c] * 0.55 * tpock
 
-# alpha: a DENSE core, wisping only at the rim - even the dark parts stand
-# against the stars, exactly like the reference mass
-# the core is SOLID: the morning moon is misty at its edge, never through
-# its heart - at mean alpha 0.45 the whole being was fog
-alpha = np.clip(M * 2.3, 0, 1) * (0.66 + 0.34 * np.clip(v * 1.8, 0, 1))
-alpha = np.clip(alpha, 0, 1) * 0.97
+# the dust carries the light: brightness from the filaments, lit heart
+glow = np.exp(-(dcore / 0.20) ** 2)
+lum = np.clip(0.30 + 0.85 * v + 0.65 * glow, 0, 1.6)
+rgb = rgb * lum[:, :, None]
 
-# the two points of light - stars where eyes would be, nothing more
-for (ex, ey, r0, s0) in ((0.615, 0.402, 3.2, 1.0), (0.665, 0.408, 2.8, 0.9)):
-    yy, xx = np.mgrid[0:S, 0:S]
-    dd = ((xx - S * ex) ** 2 + (yy - S * ey) ** 2)
-    g = np.exp(-dd / (2 * (r0 * 2.2) ** 2)) * s0
-    flare = (np.exp(-np.abs(xx - S * ex) / (r0 * 5.0))
-             * np.exp(-np.abs(yy - S * ey) / (r0 * 0.9)) * 0.5
-             + np.exp(-np.abs(yy - S * ey) / (r0 * 5.0))
-             * np.exp(-np.abs(xx - S * ex) / (r0 * 0.9)) * 0.5) * s0 * 0.55
-    star = np.clip(g + flare, 0, 1)
+alpha = np.clip(M * 2.1, 0, 1) * (0.52 + 0.48 * np.clip(v * 1.7, 0, 1))
+alpha = np.clip(alpha + glow * 0.35, 0, 1) * 0.96
+
+# ------------------------------------------------------- its own stars
+r3 = np.random.default_rng(9)
+star_layer = np.zeros((S, S), np.float32)
+starcol = np.zeros((S, S, 3), np.float32)
+TINTS = [(255, 255, 255), (255, 236, 200), (196, 216, 255), (255, 208, 228)]
+tries = 0
+placed = 0
+while placed < 240 and tries < 4000:
+    tries += 1
+    px = int(r3.integers(40, S - 40))
+    py = int(r3.integers(40, S - 40))
+    if M[py, px] < r3.uniform(0.1, 0.8):
+        continue
+    tint = TINTS[int(r3.integers(0, len(TINTS)))]
+    rr = float(r3.uniform(0.5, 1.4))
+    lo_y, hi_y = max(0, py - 6), min(S, py + 7)
+    lo_x, hi_x = max(0, px - 6), min(S, px + 7)
+    sy, sx = np.mgrid[lo_y:hi_y, lo_x:hi_x]
+    gg = np.exp(-(((sx - px) ** 2 + (sy - py) ** 2) / (2 * rr ** 2)))
+    amp = float(r3.uniform(0.5, 1.0))
+    star_layer[lo_y:hi_y, lo_x:hi_x] = np.maximum(
+        star_layer[lo_y:hi_y, lo_x:hi_x], gg * amp)
     for c in range(3):
-        rgb[:, :, c] = np.clip(rgb[:, :, c] + star * 235, 0, 255)
-    alpha = np.clip(alpha + star * 0.9, 0, 1)
+        starcol[lo_y:hi_y, lo_x:hi_x, c] = np.maximum(
+            starcol[lo_y:hi_y, lo_x:hi_x, c], gg * amp * tint[c])
+    placed += 1
+for _ in range(9):                                   # the bright ones, flared
+    px = int(r3.integers(80, S - 80))
+    py = int(r3.integers(80, S - 80))
+    if M[py, px] < 0.25:
+        continue
+    tint = TINTS[int(r3.integers(0, len(TINTS)))]
+    r0 = float(r3.uniform(2.0, 3.4))
+    gg = np.exp(-(((xx - px) ** 2 + (yy - py) ** 2) / (2 * (r0 * 1.8) ** 2)))
+    fl = (np.exp(-np.abs(xx - px) / (r0 * 5.5))
+          * np.exp(-np.abs(yy - py) / (r0 * 0.8))
+          + np.exp(-np.abs(yy - py) / (r0 * 5.5))
+          * np.exp(-np.abs(xx - px) / (r0 * 0.8))) * 0.6
+    st = np.clip(gg + fl, 0, 1)
+    star_layer = np.maximum(star_layer, st)
+    for c in range(3):
+        starcol[:, :, c] = np.maximum(starcol[:, :, c], st * tint[c])
 
-# the halo of its own scattered dust
-halo = blur(alpha, 30) * 0.30
+rgb = np.clip(rgb + starcol * 0.9, 0, 255)
+alpha = np.clip(alpha + star_layer * 0.9, 0, 1)
+
+# the halo of scattered light
+halo = blur(alpha, 32) * 0.32
 alpha = np.maximum(alpha, halo)
 
 out = np.dstack([np.clip(rgb, 0, 255),
                  (alpha * 255)[:, :, None]]).astype(np.uint8)
 Image.fromarray(out, "RGBA").save(os.path.join(ASSETS, "entity_d.png"))
-print("WROTE entity_d.png (matte)")
+print("WROTE entity_d.png (nebula)")
