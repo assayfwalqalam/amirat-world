@@ -173,6 +173,71 @@ def planet(name, radius_px, base, band, ring=None, seed=3):
     print("WROTE", name)
 
 
+def planet_big():
+    """THE GREAT WORLD of his references: a planet that dominates its part
+    of the sky - big, detailed, crescent-lit from the horizon glow, its dark
+    limb melting into the night. Continents from layered noise, a polar cap,
+    limb darkening, and a thin atmosphere rim so it reads as a WORLD in
+    space, not a balloon in the air."""
+    W6 = 512
+    rng = np.random.default_rng(21)
+    yy, xx = np.mgrid[0:W6, 0:W6]
+    cx = cy = W6 / 2
+    R = 225.0
+    r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    disc = np.clip((R - r) / 1.6, 0, 1)
+    nx = (xx - cx) / R
+    ny = (yy - cy) / R
+    nz = np.sqrt(np.clip(1 - nx ** 2 - ny ** 2, 0, 1))
+    # the sun is low to the lower-left, where the world's horizon glow sits
+    lit = np.clip(nx * -0.62 + ny * 0.46 + nz * 0.30, 0.0, 1.0) ** 0.8
+    # continents: layered value noise, thresholded softly
+    n = np.zeros((W6, W6), np.float32)
+    amp, tot = 1.0, 0.0
+    for o in (8, 16, 32, 64, 128):
+        g = rng.normal(0, 1, (o, o)).astype(np.float32)
+        gi = np.asarray(Image.fromarray(g).resize((W6, W6), Image.BICUBIC))
+        n += gi * amp; tot += amp; amp *= 0.55
+    n = (n - n.min()) / (np.ptp(n) + 1e-6)
+    land = np.clip((n - 0.52) * 6.0, 0, 1)
+    SEA = np.array([84, 108, 146], np.float32)
+    LAND = np.array([168, 158, 138], np.float32)
+    ICE = np.array([228, 234, 240], np.float32)
+    img = np.zeros((W6, W6, 4), np.float32)
+    for c in range(3):
+        img[:, :, c] = SEA[c] * (1 - land) + LAND[c] * land
+    cap = np.clip((np.abs(ny) - 0.72) * 5.0, 0, 1) * (nz > 0)
+    for c in range(3):
+        img[:, :, c] = img[:, :, c] * (1 - cap) + ICE[c] * cap
+    # clouds: bright wisps of their own noise
+    cl = np.zeros((W6, W6), np.float32)
+    amp = 1.0
+    for o in (12, 24, 48, 96):
+        g = rng.normal(0, 1, (o, o)).astype(np.float32)
+        gi = np.asarray(Image.fromarray(g).resize((W6, W6), Image.BICUBIC))
+        cl += gi * amp; amp *= 0.5
+    cl = np.clip((cl - cl.mean()) / (cl.std() + 1e-6) * 0.5 + 0.2, 0, 1) * 0.65
+    for c in range(3):
+        img[:, :, c] = img[:, :, c] * (1 - cl) + 235 * cl
+    # light, limb darkening, and the crescent shadow
+    limb = np.clip(nz, 0, 1) ** 0.35
+    shade_f = np.clip(lit * 1.15 + 0.045, 0, 1) * limb
+    for c in range(3):
+        img[:, :, c] *= shade_f
+    img[:, :, 3] = disc * 255
+    # the atmosphere rim: a thin lit haze past the limb, strongest sunward
+    rim = np.exp(-((r - R) / 7.0) ** 2) * (r > R * 0.97)
+    rimlit = np.clip(nx * -0.62 + ny * 0.46 + 0.45, 0.1, 1)
+    RIMC = np.array([170, 200, 255], np.float32)
+    for c in range(3):
+        img[:, :, c] = np.maximum(img[:, :, c], rim * rimlit * RIMC[c])
+    img[:, :, 3] = np.maximum(img[:, :, 3], rim * rimlit * 210)
+    out = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGBA")
+    out = out.filter(ImageFilter.GaussianBlur(0.7))
+    out.save(os.path.join(ASSETS, "planet_big.png"))
+    print("WROTE planet_big.png")
+
+
 if __name__ == "__main__":
     # entity() is retired: the nebula matte (make_entity_paint.py) owns
     # entity_d.png now - running the old post pass here would overwrite it
@@ -184,3 +249,5 @@ if __name__ == "__main__":
            ring=(226, 206, 182), seed=5)
     planet("planet_b.png", 74, (142, 168, 212), (104, 128, 178), seed=9)
     planet("planet_c.png", 54, (216, 168, 190), (172, 122, 152), seed=13)
+    planet_big()
+    aurora("aurora_k.png", (255, 130, 205))     # the pink curtain

@@ -4156,6 +4156,20 @@
     entG.add(shade);
     entG.userData.body = body; entG.userData.shade = shade;
     entG.userData.wisps = [w1, w2];
+    /* MORE NEBULAS, AT DEPTH: the ember one and the jewel one hang further
+       off and fainter than the main cloud - the sky goes deeply far. Each
+       carries its own slow pulse so the lights dim in and out, faintly. */
+    entG.userData.nebs = [];
+    var ndefs = [['assets/nebula_b.png', -0.62, 2600, 940, 1500, 0.62, 0.9, 0.047],
+                 ['assets/nebula_c.png', 0.66, 2700, 1060, 1050, 0.55, 2.7, 0.061]];
+    for (var ni = 0; ni < ndefs.length; ni++) {
+      var nb = entPlane(ndefs[ni][0], ndefs[ni][4], ndefs[ni][4], 0.0);
+      nb.userData.az = ndefs[ni][1]; nb.userData.rr = ndefs[ni][2];
+      nb.userData.hy = ndefs[ni][3]; nb.userData.op = ndefs[ni][5];
+      nb.userData.ph = ndefs[ni][6]; nb.userData.rate = ndefs[ni][7];
+      nb.renderOrder = 3.3 + ni * 0.1;
+      entG.add(nb); entG.userData.nebs.push(nb);
+    }
     /* TWO SHEETS OF LOOSE STARS, counter-phased - the region shimmers */
     entG.userData.clus = [];
     var cdefs = [[-0.30, 2250, 780], [0.30, 2400, 900]];
@@ -4166,34 +4180,44 @@
       cl.renderOrder = 3.5;
       entG.add(cl); entG.userData.clus.push(cl);
     }
-    /* THE PLANETS: three far worlds hung in the same sky - one ringed */
+    /* THE PLANETS. The great one dominates its quarter low over the
+       horizon, crescent-lit, its dark limb lost in the night - a WORLD in
+       space, the way his references have it. The small ones hang high,
+       tiny and faint: unmistakably farther still. */
     entG.userData.pls = [];
-    var pdefs = [['assets/planet_a.png', 0.55, 2350, 860, 220],
-                 ['assets/planet_b.png', -0.50, 2450, 980, 170],
-                 ['assets/planet_c.png', 0.16, 2500, 1060, 120]];
+    var pdefs = [['assets/planet_big.png', -0.34, 2350, 360, 980, 0.92],
+                 ['assets/planet_a.png', 0.55, 2450, 1090, 130, 0.60],
+                 ['assets/planet_b.png', -0.72, 2500, 1180, 100, 0.52],
+                 ['assets/planet_c.png', 0.20, 2550, 1260, 74, 0.48]];
     for (var pi2 = 0; pi2 < pdefs.length; pi2++) {
       var pl2 = entPlane(pdefs[pi2][0], pdefs[pi2][4], pdefs[pi2][4], 0.0);
       pl2.userData.az = pdefs[pi2][1]; pl2.userData.rr = pdefs[pi2][2];
-      pl2.userData.hy = pdefs[pi2][3];
-      pl2.renderOrder = 3.6;
+      pl2.userData.hy = pdefs[pi2][3]; pl2.userData.op = pdefs[pi2][5];
+      pl2.renderOrder = 3.1 + pi2 * 0.02;
       entG.add(pl2); entG.userData.pls.push(pl2);
     }
     entG.add(w2); entG.add(w1); entG.add(body);
-    /* the lights of the sky: green and violet curtains */
+    /* the northern lights: green, purple, PINK - and NEARER than anything
+       cosmic. An aurora is weather, not space: it hangs closer to the
+       player and draws OVER the nebulas and planets (renderOrder above
+       them), which is exactly what his crop caught being wrong. */
     entG.userData.cur = [];
-    var defs = [['assets/aurora_g.png', -0.42, 0.42, 2050],
-                ['assets/aurora_p.png', 0.05, 0.55, 2150],
-                ['assets/aurora_g.png', 0.48, 0.38, 2000]];
+    var defs = [['assets/aurora_g.png', -0.46, 0.42, 1650],
+                ['assets/aurora_p.png', 0.02, 0.52, 1720],
+                ['assets/aurora_k.png', 0.30, 0.46, 1600],
+                ['assets/aurora_g.png', 0.58, 0.36, 1680]];
     for (var i = 0; i < defs.length; i++) {
-      var c = entPlane(defs[i][0], 2100, 1050, 0.0, true);
+      var c = entPlane(defs[i][0], 1750, 900, 0.0, true);
       c.userData.az = defs[i][1]; c.userData.op = defs[i][2];
       c.userData.rr = defs[i][3];
+      c.renderOrder = 7;
       entG.add(c); entG.userData.cur.push(c);
     }
     /* four falling stars, reused */
     for (var s2 = 0; s2 < 4; s2++) {
       var mt = entPlane('assets/meteor.png', 260, 34, 0.0, true);
       mt.userData.live = 0;
+      mt.renderOrder = 7.5;             /* a falling star burns in the AIR */
       entG.add(mt); entMeteors.push(mt);
     }
     W.scene.add(entG);
@@ -4232,20 +4256,38 @@
     var bx = p.x + ENT.dx * 2450, bz = p.z + ENT.dz * 2450;
     var body = entG.userData.body;
     var breathe = 1.0 + 0.012 * Math.sin(tt * 0.24);
-    /* the nebula stands high in that sky, drifting the way only something
-       that size can - a slow breath, a slower lean */
-    var by2 = 660 + 16 * Math.sin(tt * 0.17);
-    var byaw = Math.atan2(p.x - bx, p.z - bz);
+    /* the main nebula stands high, a little right of the great planet,
+       drifting the way only something that size can - a slow breath, a
+       slower lean, and a light that dims in and out almost too faintly
+       to be sure of (that faint pulse is what makes the sky ALIVE) */
+    var baseAz = Math.atan2(ENT.dx, ENT.dz);
+    var mAz = baseAz + 0.24;
+    var mx2 = p.x + Math.sin(mAz) * 2450, mz2 = p.z + Math.cos(mAz) * 2450;
+    var by2 = 680 + 16 * Math.sin(tt * 0.17);
+    var byaw = Math.atan2(p.x - mx2, p.z - mz2);
     var blean = 0.03 * Math.sin(tt * 0.07);
-    body.position.set(bx, by2, bz);
+    var bpulse = 0.86 + 0.11 * Math.sin(tt * 0.09);
+    body.position.set(mx2, by2, mz2);
     body.scale.set(breathe, breathe, 1);
     body.rotation.set(0, byaw, blean);
-    body.material.opacity = 0.97 * entFade;
+    body.material.opacity = bpulse * entFade;
     var shade = entG.userData.shade;
-    shade.position.set(bx, by2, bz);
+    shade.position.set(mx2, by2, mz2);
     shade.scale.set(breathe, breathe, 1);
     shade.rotation.set(0, byaw, blean);
     shade.material.opacity = 0.18 * entFade;
+    /* the far nebulas, each pulsing on its own slow clock */
+    var nebs = entG.userData.nebs;
+    for (var n2 = 0; n2 < nebs.length; n2++) {
+      var nb2 = nebs[n2];
+      var naz = baseAz + nb2.userData.az + 0.006 * Math.sin(tt * 0.04 + n2);
+      nb2.position.set(p.x + Math.sin(naz) * nb2.userData.rr,
+                       nb2.userData.hy + 10 * Math.sin(tt * 0.06 + n2 * 3),
+                       p.z + Math.cos(naz) * nb2.userData.rr);
+      nb2.rotation.set(0, naz + Math.PI, 0.02 * Math.sin(tt * 0.05 + n2));
+      nb2.material.opacity = nb2.userData.op * entFade
+        * (0.80 + 0.20 * Math.sin(tt * nb2.userData.rate + nb2.userData.ph));
+    }
     /* the star sheets shimmer, counter-phased; the planets hold still */
     var clus = entG.userData.clus;
     for (var c3 = 0; c3 < clus.length; c3++) {
@@ -4258,16 +4300,17 @@
       cl2.material.opacity = entFade
         * (0.55 + 0.40 * Math.sin(tt * 0.5 + cl2.userData.ph));
     }
+    /* the planets hold STILL - worlds do not flicker; their distance is
+       told by their steadiness, their haze, and the dark of their limbs */
     var pls = entG.userData.pls;
     for (var p3 = 0; p3 < pls.length; p3++) {
       var pl3 = pls[p3];
-      var paz = Math.atan2(ENT.dx, ENT.dz) + pl3.userData.az
-              + 0.004 * Math.sin(tt * 0.05 + p3 * 2.7);
+      var paz = baseAz + pl3.userData.az;
       pl3.position.set(p.x + Math.sin(paz) * pl3.userData.rr,
                        pl3.userData.hy,
                        p.z + Math.cos(paz) * pl3.userData.rr);
       pl3.rotation.set(0, paz + Math.PI, 0);
-      pl3.material.opacity = 0.92 * entFade;
+      pl3.material.opacity = pl3.userData.op * entFade;
     }
     var ws = entG.userData.wisps;
     for (var i = 0; i < ws.length; i++) {
@@ -4286,7 +4329,7 @@
       var az = Math.atan2(ENT.dx, ENT.dz) + cu.userData.az
              + 0.02 * Math.sin(tt * 0.07 + c2 * 2.4);
       cu.position.set(p.x + Math.sin(az) * cu.userData.rr,
-                      790 + 40 * Math.sin(tt * 0.11 + c2),
+                      700 + 40 * Math.sin(tt * 0.11 + c2),
                       p.z + Math.cos(az) * cu.userData.rr);
       cu.rotation.set(0, az + Math.PI, 0);
       cu.material.opacity = cu.userData.op * entFade
