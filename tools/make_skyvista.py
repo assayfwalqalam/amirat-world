@@ -89,23 +89,41 @@ def skyvista():
                                     rgb[:, :, c])
 
     # ---- the dust river and its three hearts
+    # TWO rivers, crossing: the great band, and a fainter branch that
+    # leaves it and climbs. One sky, not a row of separate clouds - every
+    # heart below sits ON this structure, so they merge instead of
+    # floating as patches.
     spine = 0.40 + 0.13 * np.sin(u * math.pi * 1.7 + 0.5)
-    band = np.exp(-(((v - spine) / 0.19) ** 2))
-    HEARTS = [(0.20, 0.40, (255, 216, 236), (232, 132, 196)),
-              (0.52, 0.31, (255, 236, 250), (196, 122, 236)),
-              (0.83, 0.45, (255, 238, 208), (240, 158, 96))]
+    band = np.exp(-(((v - spine) / 0.20) ** 2))
+    spine2 = 0.30 + 0.20 * np.sin(u * math.pi * 1.1 - 1.3)
+    band2 = np.exp(-(((v - spine2) / 0.11) ** 2))         * np.clip(np.sin(math.pi * np.clip((u - 0.05) / 0.75, 0, 1)), 0, 1)
+    band = np.clip(band + 0.62 * band2, 0, 1.25)
+    # seven hearts of different kinds, spread through the whole width:
+    # rose, violet, ember, a cold cyan knot, a small blue one, a deep
+    # magenta and a pale gold - each with its own core and halo colour
+    HEARTS = [(0.10, 0.44, (255, 214, 232), (236, 126, 190)),
+              (0.24, 0.33, (232, 244, 255), (96, 176, 236)),
+              (0.38, 0.47, (255, 232, 250), (198, 116, 238)),
+              (0.52, 0.30, (255, 240, 252), (150, 120, 246)),
+              (0.66, 0.44, (214, 255, 250), (86, 206, 208)),
+              (0.79, 0.33, (255, 238, 214), (240, 162, 104)),
+              (0.92, 0.46, (255, 220, 238), (226, 108, 168))]
     hglow = np.zeros((H7, W7), np.float32)
     hcol = np.zeros((H7, W7, 3), np.float32)
     hnear = np.zeros((H7, W7), np.float32)
     for (hx, hy, ccore, cmid) in HEARTS:
+        # each heart its own size: near ones broad, far ones tight - the
+        # sky then has scale as well as depth
+        sc = 0.72 + 0.62 * ((hx * 7.3) % 1.0)
         dd = np.sqrt(((u - hx) * 3.4) ** 2 + ((v - hy) * 1.15) ** 2)
-        core = np.exp(-(dd / 0.055) ** 2)
-        halo = np.exp(-(dd / 0.19) ** 2)
+        core = np.exp(-(dd / (0.042 * sc)) ** 2)
+        halo = np.exp(-(dd / (0.155 * sc)) ** 2)
         hglow = np.maximum(hglow, core + halo * 0.5)
         hnear = np.maximum(hnear, halo)
         for c in range(3):
             hcol[:, :, c] = np.maximum(hcol[:, :, c],
-                                       core * ccore[c] + halo * 0.5 * cmid[c])
+                                       core * ccore[c] * 0.80
+                                       + halo * 0.5 * cmid[c])
 
     # ---- LAYER 1, FAR: a flat cool haze, almost no contrast
     fw1 = fbm2(H7, W7, base=4, octaves=5, seed=301)
@@ -148,8 +166,9 @@ def skyvista():
         rgb[:, :, c] += hcol[:, :, c] * 0.42
 
     # ---- STARS AT THREE DEPTHS
-    TINTS = [(255, 255, 255), (255, 238, 208), (198, 216, 255),
-             (255, 212, 232), (208, 244, 255)]
+    TINTS = [(255, 255, 255), (255, 244, 226), (255, 226, 172),
+             (255, 196, 150), (206, 222, 255), (168, 198, 255),
+             (255, 206, 232), (216, 250, 255), (236, 214, 255)]
     r5 = np.random.default_rng(59)
     occl = np.clip(1.0 - (mid * 1.5 + near * 2.0 + lanes * 1.2), 0.05, 1)
 
@@ -180,14 +199,14 @@ def skyvista():
             col = col * occl[:, :, None]
         return lay, col
 
-    l1, c1 = sow(2600, 0.35, 0.75, 0.16, 0.55, 1)   # the deep field
-    l2, c2 = sow(900, 0.55, 1.15, 0.35, 0.85, 1)    # the middle scatter
-    l3, c3 = sow(260, 0.80, 1.70, 0.60, 1.00, 0)    # near, in front of all
+    l1, c1 = sow(11000, 0.30, 0.62, 0.12, 0.48, 1)  # the deep field
+    l2, c2 = sow(3400, 0.50, 1.00, 0.30, 0.80, 1)   # the middle scatter
+    l3, c3 = sow(800, 0.75, 1.60, 0.55, 1.00, 0)    # near, in front of all
     stars = np.maximum(np.maximum(l1, l2), l3)
     scol = np.maximum(np.maximum(c1, c2), c3)
 
     # a few great foreground stars with diffraction spikes, for SCALE
-    for _ in range(22):
+    for _ in range(46):
         px = int(r5.integers(60, W7 - 60))
         py = int(r5.integers(30, H7 - 120))
         tint = TINTS[int(r5.integers(0, len(TINTS)))]
@@ -208,6 +227,13 @@ def skyvista():
             scol[ly:hy2, lx:hx2, c] = np.maximum(scol[ly:hy2, lx:hx2, c],
                                                  st * tint[c])
     rgb = rgb + scol * 0.95
+
+    # ---- HIGHLIGHT ROLL-OFF. Straight addition drove the hearts past
+    # 255 and they came out as flat white blobs - the one thing in the sky
+    # with no colour and no structure. This is the film curve: mid-tones
+    # keep their place, the brightest cores bend under the ceiling instead
+    # of hitting it, and the colour survives all the way up.
+    rgb = 255.0 * (1.0 - np.exp(-1.386 * (np.clip(rgb, 0, None) / 255.0)))
 
     # ---- the veil: full through the heart, melting at every edge
     alpha = np.full((H7, W7), 0.94, np.float32)
@@ -267,7 +293,29 @@ def aurora_band(name, col, seed):
     print("WROTE", name)
 
 
+def star_sprite():
+    """One star, for the engine's living field: a tight core, a soft bloom
+    and a four-point flare. The painted stars in the vista cannot twinkle -
+    a painting is fixed - so the sky gets a real animated field on top of
+    it, and this is the sprite it is drawn with."""
+    N = 64
+    yy, xx = np.mgrid[0:N, 0:N]
+    cx = cy = (N - 1) / 2.0
+    r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    core = np.exp(-(r / 1.7) ** 2)
+    bloom = np.exp(-(r / 6.5) ** 2) * 0.42
+    flare = (np.exp(-np.abs(xx - cx) / 1.4) * np.exp(-np.abs(yy - cy) / 11.0)
+             + np.exp(-np.abs(yy - cy) / 1.4) * np.exp(-np.abs(xx - cx) / 11.0))
+    a = np.clip(core + bloom + flare * 0.30, 0, 1)
+    img = np.zeros((N, N, 4), np.uint8)
+    img[:, :, 0] = img[:, :, 1] = img[:, :, 2] = 255
+    img[:, :, 3] = (a * 255).astype(np.uint8)
+    Image.fromarray(img, "RGBA").save(os.path.join(ASSETS, "star_sprite.png"))
+    print("WROTE star_sprite.png")
+
+
 if __name__ == "__main__":
+    star_sprite()
     skyvista()
     aurora_band("aurora_g.png", (96, 235, 152), 11)
     aurora_band("aurora_p.png", (172, 116, 240), 23)

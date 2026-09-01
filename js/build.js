@@ -4214,10 +4214,13 @@
        space, the way his references have it. The small ones hang high,
        tiny and faint: unmistakably farther still. */
     entG.userData.pls = [];
-    var pdefs = [['assets/planet_big.png', -0.78, 2350, 470, 900, 1.0],
-                 ['assets/planet_a.png', 0.55, 2450, 1130, 130, 0.85],
-                 ['assets/planet_b.png', -0.60, 2500, 1220, 100, 0.75],
-                 ['assets/planet_c.png', 0.34, 2550, 1300, 74, 0.70]];
+    /* THE GREAT GLOBE IS GONE - his ruling: however solid its limb
+       measured, a disc that size never read as a thing in space. What is
+       left are three far worlds, small and steady, the size real planets
+       are from a field at night. */
+    var pdefs = [['assets/planet_a.png', 0.55, 2450, 1130, 96, 0.80],
+                 ['assets/planet_b.png', -0.60, 2500, 1220, 74, 0.70],
+                 ['assets/planet_c.png', 0.34, 2550, 1300, 56, 0.66]];
     for (var pi2 = 0; pi2 < pdefs.length; pi2++) {
       var pl2 = entPlane(pdefs[pi2][0], pdefs[pi2][4], pdefs[pi2][4], 0.0);
       /* a world writes DEPTH: every glow behind it is occluded by geometry,
@@ -4264,6 +4267,79 @@
       c.renderOrder = 7;
       entG.add(c); entG.userData.cur.push(c);
     }
+    /* THE LIVING STARS. The painted ones cannot twinkle - a painting is
+       fixed - so a real field stands in front of it: thousands of points,
+       each with its own colour, size, phase and rate. Some sparkle fast,
+       some breathe slowly, some hold steady; the big ones carry a flare.
+       All of it is ONE draw call, and it costs nothing when the region is
+       behind you. */
+    var SN = 4600;
+    var spos = new Float32Array(SN * 3), scl = new Float32Array(SN * 3);
+    var sph = new Float32Array(SN), ssz = new Float32Array(SN);
+    var srt = new Float32Array(SN);
+    var TN = [[1, 1, 1], [1, 0.96, 0.88], [1, 0.88, 0.68], [1, 0.78, 0.60],
+              [0.82, 0.88, 1], [0.68, 0.80, 1], [1, 0.82, 0.92],
+              [0.86, 0.98, 1], [0.94, 0.86, 1]];
+    for (var si = 0; si < SN; si++) {
+      var saz = (Math.random() - 0.5) * 3.6;
+      var sel = 0.015 + Math.pow(Math.random(), 0.8) * 1.30;
+      var sr = 2480 + Math.random() * 60;
+      spos[si * 3] = Math.sin(saz) * Math.cos(sel) * sr;
+      spos[si * 3 + 1] = Math.sin(sel) * sr;
+      spos[si * 3 + 2] = Math.cos(saz) * Math.cos(sel) * sr;
+      var tn = TN[(Math.random() * TN.length) | 0];
+      var bri = 0.35 + Math.random() * 0.65;
+      scl[si * 3] = tn[0] * bri;
+      scl[si * 3 + 1] = tn[1] * bri;
+      scl[si * 3 + 2] = tn[2] * bri;
+      sph[si] = Math.random() * 6.283;
+      /* a few are giants, most are pinpricks */
+      var g = Math.random();
+      ssz[si] = g > 0.988 ? (13 + Math.random() * 10)
+                          : (g > 0.92 ? (6 + Math.random() * 5)
+                                      : (1.6 + Math.random() * 3.2));
+      /* rate 0 = steady; the rest sparkle at their own speed */
+      srt[si] = Math.random() < 0.28 ? 0.0 : (0.5 + Math.random() * 3.4);
+    }
+    var sgeo = new T.BufferGeometry();
+    sgeo.setAttribute('position', new T.BufferAttribute(spos, 3));
+    sgeo.setAttribute('aColor', new T.BufferAttribute(scl, 3));
+    sgeo.setAttribute('aPhase', new T.BufferAttribute(sph, 1));
+    sgeo.setAttribute('aSize', new T.BufferAttribute(ssz, 1));
+    sgeo.setAttribute('aRate', new T.BufferAttribute(srt, 1));
+    var smat = new T.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uFade: { value: 0 },
+                  uMap: { value: W.tex('assets/star_sprite.png', true) } },
+      vertexShader: [
+        'attribute vec3 aColor; attribute float aPhase;',
+        'attribute float aSize; attribute float aRate;',
+        'uniform float uTime; varying vec3 vCol; varying float vA;',
+        'void main() {',
+        '  float tw = aRate < 0.01 ? 0.92',
+        '    : 0.42 + 0.58 * (0.5 + 0.5 * sin(uTime * aRate + aPhase))',
+        '      * (0.75 + 0.25 * sin(uTime * aRate * 2.7 + aPhase * 1.7));',
+        '  vCol = aColor; vA = tw;',
+        '  gl_PointSize = aSize * (0.80 + 0.42 * tw);',
+        '  gl_Position = projectionMatrix * modelViewMatrix'
+        + '    * vec4(position, 1.0);',
+        '}'].join(' '),
+      fragmentShader: [
+        'uniform sampler2D uMap; uniform float uFade;',
+        'varying vec3 vCol; varying float vA;',
+        'void main() {',
+        '  vec4 t = texture2D(uMap, gl_PointCoord);',
+        '  gl_FragColor = vec4(vCol * t.rgb, t.a * vA * uFade);',
+        '}'].join(' '),
+      transparent: true, depthWrite: false, fog: false,
+      blending: T.AdditiveBlending
+    });
+    var stars = new T.Points(sgeo, smat);
+    stars.userData.noCrunch = true;
+    stars.frustumCulled = false;
+    stars.renderOrder = 5.5;
+    entG.add(stars);
+    entG.userData.stars = stars;
+
     /* four falling stars, reused */
     for (var s2 = 0; s2 < 4; s2++) {
       var mt = entPlane('assets/meteor.png', 260, 34, 0.0, true);
@@ -4361,6 +4437,12 @@
     }
     /* the planets hold STILL - worlds do not flicker; their distance is
        told by their steadiness, their haze, and the dark of their limbs */
+    var sf = entG.userData.stars;
+    sf.position.set(p.x, 0, p.z);
+    sf.rotation.y = baseAz;
+    sf.material.uniforms.uTime.value = tt;
+    sf.material.uniforms.uFade.value = entFade;
+
     var pls = entG.userData.pls;
     for (var p3 = 0; p3 < pls.length; p3++) {
       var pl3 = pls[p3];
